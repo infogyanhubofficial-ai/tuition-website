@@ -4,13 +4,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation"; 
-// FIX: Use the new secure SSR-compatible client
 import { createClient } from "@/lib/supabase/client"; 
 import { motion, AnimatePresence, useScroll, useSpring, easeIn, easeOut } from "framer-motion";
 import { 
   Menu, X, House, Users, BriefcaseBusiness, 
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
-  LogOut, Settings, BookOpen, ChevronDown
+  LogOut, Settings, BookOpen, ChevronDown, Sparkles
 } from "lucide-react";
 
 const navItems = [
@@ -33,7 +32,6 @@ export default function Navbar() {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Initialize the secure client inside the component
   const supabase = createClient();
 
   const { scrollYProgress } = useScroll();
@@ -49,12 +47,10 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // --- IMPROVED AUTH & TUTOR CHECK LOGIC ---
   useEffect(() => {
     let mounted = true;
 
     const fetchSessionAndTutorStatus = async () => {
-      // FIX: Use getUser() for strict validation against the server cookie
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
@@ -68,7 +64,6 @@ export default function Navbar() {
 
       if (mounted) setUser(user);
 
-      // 2. Query the tutors table directly using the exact uuid
       try {
         const { data, error } = await supabase
           .from('tutors')
@@ -76,14 +71,8 @@ export default function Navbar() {
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (error) {
-          console.error("Supabase Error checking tutor status:", error.message);
-        }
-
-        if (mounted) {
-          // If data exists, they are a tutor. If null, they are not.
-          setIsTutor(!!data);
-        }
+        if (error) console.error("Supabase Error checking tutor status:", error.message);
+        if (mounted) setIsTutor(!!data);
       } catch (err) {
         console.error("Unexpected error:", err);
       } finally {
@@ -91,14 +80,11 @@ export default function Navbar() {
       }
     };
 
-    // Initial check on mount
     fetchSessionAndTutorStatus();
 
-    // Listen for logins/logouts globally
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) {
         if (session?.user) {
-          // If a new user logs in, re-run the whole check
           fetchSessionAndTutorStatus();
         } else {
           setUser(null);
@@ -112,7 +98,7 @@ export default function Navbar() {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [supabase]); // Added supabase to dependency array
+  }, [supabase]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -124,7 +110,6 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // --- UNIFIED LOGIN ROUTING ---
   const handleLogin = () => {
     setMobileOpen(false); 
     router.push(`/login?next=${pathname}`); 
@@ -133,7 +118,7 @@ export default function Navbar() {
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setProfileDropdownOpen(false);
-    // Refresh the router to update server components instantly
+    setMobileOpen(false);
     router.refresh(); 
   };
 
@@ -142,52 +127,60 @@ export default function Navbar() {
   }, [pathname]);
 
   const mobileMenuVars = {
-    initial: { opacity: 0, x: "100%" },
+    initial: { opacity: 0, y: "-100%" },
     animate: { 
       opacity: 1, 
-      x: 0, 
-      transition: { duration: 0.3, ease: easeOut }
+      y: 0, 
+      transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } 
     },
     exit: { 
       opacity: 0, 
-      x: "100%", 
+      y: "-100%", 
       transition: { duration: 0.3, ease: easeIn }
     }
   };
 
   const mobileLinkContainerVars = {
-    initial: { transition: { staggerChildren: 0.09, staggerDirection: -1 } },
-    animate: { transition: { delayChildren: 0.1, staggerChildren: 0.09, staggerDirection: 1 } }
+    initial: { transition: { staggerChildren: 0.05, staggerDirection: -1 } },
+    animate: { transition: { delayChildren: 0.15, staggerChildren: 0.07, staggerDirection: 1 } }
   };
 
   const mobileLinkVars = {
-    initial: { opacity: 0, y: 20 },
+    initial: { opacity: 0, y: -20 },
     animate: { 
       opacity: 1, 
       y: 0, 
       transition: { duration: 0.3, ease: easeOut }
     },
-    exit: { opacity: 0, y: 20, transition: { duration: 0.2 } }
+    exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
   };
 
   return (
     <>
       <motion.div 
-        className="fixed top-0 left-0 right-0 h-[2px] bg-[#2D9CDB] origin-left z-[60]" 
+        className="fixed top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-[#2D9CDB] to-[#FF6B35] origin-left z-[60]" 
         style={{ scaleX }} 
       />
 
       <header 
         className={`sticky top-0 z-50 w-full transition-all duration-300 ${
           scrolled 
-            ? "py-3 bg-white/90 shadow-[0_4px_20px_rgba(0,0,0,0.04)] backdrop-blur-xl" 
-            : `py-5 bg-[#f8f9fb]/80 backdrop-blur-md border-b border-transparent`
+            ? "py-3 bg-white/95 shadow-[0_4px_20px_rgba(0,0,0,0.06)] backdrop-blur-xl" 
+            : "py-4 md:py-5 bg-[#f8f9fb]/90 backdrop-blur-md border-b border-transparent"
         }`}
       >
         <div className="mx-auto flex max-w-[90rem] items-center justify-between px-6 lg:px-8">
           
           <Link href="/" className="flex-shrink-0 outline-none rounded-lg focus-visible:ring-2 focus-visible:ring-[#2D9CDB]">
-            <div className={`relative transition-all duration-300 ${scrolled ? 'w-[110px] h-[35px]' : 'w-[130px] h-[42px]'}`}>
+            <motion.div 
+              animate={{ scale: scrolled ? 0.95 : 1 }}
+              className={`relative transition-all duration-300 ${
+                // UPDATED: 3X larger on desktop (lg:w-[330px] lg:h-[105px])
+                scrolled 
+                  ? 'w-[140px] h-[45px] lg:w-[260px] lg:h-[84px]' 
+                  : 'w-[160px] h-[52px] lg:w-[330px] lg:h-[105px]'
+              }`}
+            >
               <Image 
                 src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" 
                 alt="GyanHub Logo" 
@@ -195,7 +188,7 @@ export default function Navbar() {
                 className="object-contain" 
                 priority 
               />
-            </div>
+            </motion.div>
           </Link>
 
           <nav className="hidden items-center gap-1 xl:flex ml-8">
@@ -207,7 +200,7 @@ export default function Navbar() {
                   key={item.href} 
                   href={item.href} 
                   className={`group relative flex items-center gap-2 px-4 py-2.5 rounded-full text-[14px] font-bold transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB] ${
-                    active ? "bg-blue-50 text-[#2D9CDB]" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    active ? "bg-[#2D9CDB]/10 text-[#2D9CDB]" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                   }`}
                 >
                   <Icon className={`h-[18px] w-[18px] transition-transform duration-200 group-hover:-translate-y-[1px]`} strokeWidth={2.5} />
@@ -220,7 +213,6 @@ export default function Navbar() {
           <div className="flex-1" />
 
           <div className="hidden items-center gap-4 lg:flex">
-            {/* ONLY SHOW IF NOT A TUTOR AND DONE LOADING */}
             {!loadingUser && !isTutor && (
               <>
                 <Link 
@@ -293,7 +285,6 @@ export default function Navbar() {
                           <p className="text-xs text-slate-500 truncate">{user?.email}</p>
                         </div>
                         
-                        {/* DESKTOP ROUTE FIX HERE */}
                         <Link href="/profile" onClick={() => setProfileDropdownOpen(false)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
                           <Settings className="h-4 w-4" strokeWidth={2.5} /> Dashboard
                         </Link>
@@ -317,7 +308,7 @@ export default function Navbar() {
           <button 
             onClick={() => setMobileOpen(true)} 
             aria-label="Open Mobile Menu"
-            className="lg:hidden p-2 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
+            className="lg:hidden p-2.5 -mr-2 rounded-xl text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
           >
             <Menu className="h-7 w-7" strokeWidth={2.5} />
           </button>
@@ -326,13 +317,13 @@ export default function Navbar() {
 
       <AnimatePresence>
         {mobileOpen && (
-          <div className="fixed inset-0 z-[100] flex">
+          <div className="fixed inset-0 z-[100] flex flex-col">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setMobileOpen(false)}
-              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/30 backdrop-blur-md"
             />
             
             <motion.div 
@@ -343,16 +334,16 @@ export default function Navbar() {
               role="dialog"
               aria-modal="true"
               aria-label="Mobile Navigation"
-              className="absolute right-0 top-0 bottom-0 w-[85%] max-w-sm bg-white p-8 shadow-2xl overflow-y-auto flex flex-col"
+              className="relative w-full bg-white bg-gradient-to-b from-[#2D9CDB]/5 to-white rounded-b-3xl p-6 sm:p-8 shadow-2xl flex flex-col max-h-[90vh] overflow-y-auto"
             >
-              <div className="flex justify-between items-center mb-10">
-                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="Logo" width={110} height={35} />
+              <div className="flex justify-between items-center mb-8">
+                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="Logo" width={130} height={42} />
                 <button 
                   onClick={() => setMobileOpen(false)} 
                   aria-label="Close menu"
-                  className="p-2 bg-slate-100 rounded-full text-slate-600 hover:bg-slate-200 transition-colors"
+                  className="p-2.5 bg-slate-100/80 rounded-full text-slate-600 hover:bg-slate-200 transition-colors min-h-[48px] min-w-[48px] flex items-center justify-center"
                 >
-                  <X className="h-5 w-5" strokeWidth={2.5} />
+                  <X className="h-6 w-6" strokeWidth={2.5} />
                 </button>
               </div>
 
@@ -361,7 +352,7 @@ export default function Navbar() {
                 initial="initial"
                 animate="animate"
                 exit="initial"
-                className="flex flex-col gap-2 mb-8"
+                className="flex flex-col gap-3 mb-8"
               >
                 {navItems.map((item) => {
                   const active = isActive(item.href);
@@ -370,8 +361,10 @@ export default function Navbar() {
                       <Link 
                         href={item.href} 
                         onClick={() => setMobileOpen(false)} 
-                        className={`flex items-center gap-4 px-4 py-3.5 rounded-2xl text-lg font-bold transition-colors ${
-                          active ? "bg-blue-50 text-[#2D9CDB]" : "text-slate-700 hover:bg-slate-50"
+                        className={`flex items-center gap-4 px-5 py-4 min-h-[48px] rounded-2xl text-lg font-bold transition-all duration-200 border ${
+                          active 
+                            ? "bg-[#2D9CDB]/10 text-[#2D9CDB] border-[#2D9CDB]/20 shadow-sm" 
+                            : "bg-white text-slate-700 border-slate-100 hover:bg-slate-50 hover:border-slate-200 hover:shadow-md hover:scale-[1.02]"
                         }`}
                       >
                         <item.icon className={`h-6 w-6 ${active ? "text-[#2D9CDB]" : "text-slate-400"}`} strokeWidth={2.5} />
@@ -383,45 +376,62 @@ export default function Navbar() {
               </motion.nav>
 
               <div className="mt-auto flex flex-col gap-4">
-                <hr className="border-slate-100 mb-2" />
+                <hr className="border-slate-100" />
                 
                 {loadingUser ? (
-                  <div className="h-14 w-full animate-pulse rounded-2xl bg-slate-100" />
+                  <div className="h-16 w-full animate-pulse rounded-2xl bg-slate-100" />
                 ) : !user ? (
-                  <button onClick={handleLogin} className="w-full flex items-center justify-center rounded-2xl bg-slate-100 py-4 text-[15px] font-bold text-slate-800 transition-colors hover:bg-slate-200">
+                  <motion.button 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={handleLogin} 
+                    className="w-full flex items-center justify-center rounded-2xl bg-slate-100 min-h-[56px] py-4 text-[16px] font-bold text-slate-800 transition-colors hover:bg-slate-200"
+                  >
                     Log In / Sign Up
-                  </button>
+                  </motion.button>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {/* MOBILE ROUTE FIX HERE */}
-                    <Link href="/profile" onClick={() => setMobileOpen(false)} className="flex w-full items-center gap-4 rounded-2xl bg-slate-50 p-3 hover:bg-slate-100 transition-colors">
-                      <div className="relative h-12 w-12 rounded-full overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-200">
-                        <Image src={user?.user_metadata?.avatar_url || "/images/default-avatar.png"} alt="User" fill sizes="48px" className="object-cover" />
+                  <div className="flex flex-col gap-3">
+                    <Link 
+                      href="/profile" 
+                      onClick={() => setMobileOpen(false)} 
+                      className="group flex w-full items-center gap-4 rounded-2xl bg-white border border-slate-100 p-4 shadow-sm hover:shadow-md hover:border-blue-100 transition-all duration-200"
+                    >
+                      <div className="relative h-14 w-14 shrink-0 rounded-full overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-200 group-hover:ring-[#2D9CDB]/30 transition-all">
+                        <Image src={user?.user_metadata?.avatar_url || "/images/default-avatar.png"} alt="User" fill sizes="56px" className="object-cover" />
                       </div>
                       <div className="text-left flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-900 truncate">{user?.user_metadata?.full_name || 'My Profile'}</p>
-                        <p className="text-xs text-slate-500 truncate">Dashboard & Settings</p>
+                        <p className="text-[15px] font-black text-slate-900 truncate group-hover:text-[#2D9CDB] transition-colors">{user?.user_metadata?.full_name || 'My Profile'}</p>
+                        <p className="text-xs text-slate-500 font-medium truncate mt-0.5 flex items-center gap-1">
+                          <Settings className="w-3 h-3" /> Dashboard & Settings
+                        </p>
                       </div>
                     </Link>
-                    <button onClick={handleLogout} className="w-full text-center rounded-2xl bg-red-50 py-3 text-sm font-bold text-red-600 transition-colors hover:bg-red-100">
+                    
+                    <button 
+                      onClick={handleLogout} 
+                      className="w-full text-center rounded-2xl bg-red-50/50 min-h-[48px] py-3 text-sm font-bold text-red-600 transition-colors hover:bg-red-100"
+                    >
                       Log Out
                     </button>
                   </div>
                 )}
                 
-                {/* HIDE MOBILE BUTTONS IF THEY ARE A TUTOR */}
                 {!loadingUser && (
                   <div className={`grid ${!isTutor ? 'grid-cols-2' : 'grid-cols-1'} gap-3 mt-2`}>
                     {!isTutor && (
-                      <Link href="/become-a-tutor" onClick={() => setMobileOpen(false)} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-blue-50/50 border border-blue-100 p-4 font-bold text-[#2D9CDB] transition-colors hover:bg-blue-50">
-                        <UserPlus className="h-6 w-6" strokeWidth={2.5} />
-                        <span className="text-sm">Teach</span>
-                      </Link>
+                      <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                        <Link href="/become-a-tutor" onClick={() => setMobileOpen(false)} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-[#2D9CDB]/10 border border-[#2D9CDB]/20 p-5 font-bold text-[#2D9CDB] transition-all hover:bg-[#2D9CDB]/20 hover:shadow-sm min-h-[90px]">
+                          <UserPlus className="h-6 w-6" strokeWidth={2.5} />
+                          <span className="text-sm">Teach</span>
+                        </Link>
+                      </motion.div>
                     )}
-                    <Link href="/online-courses" onClick={() => setMobileOpen(false)} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-orange-50/50 border border-orange-100 p-4 font-bold text-[#FF6B35] transition-colors hover:bg-orange-50">
-                      <MonitorPlay className="h-6 w-6" strokeWidth={2.5} />
-                      <span className="text-sm">Learn</span>
-                    </Link>
+                    <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}>
+                      <Link href="/online-courses" onClick={() => setMobileOpen(false)} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-[#FF6B35]/10 border border-[#FF6B35]/20 p-5 font-bold text-[#FF6B35] transition-all hover:bg-[#FF6B35]/20 hover:shadow-sm min-h-[90px]">
+                        <MonitorPlay className="h-6 w-6" strokeWidth={2.5} />
+                        <span className="text-sm">Learn</span>
+                      </Link>
+                    </motion.div>
                   </div>
                 )}
               </div>

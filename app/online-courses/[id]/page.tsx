@@ -409,7 +409,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 
                 {course.syllabus_url && (
                     <a 
-                      href={`https://docs.google.com/viewer?url=${course.syllabus_url}`}
+                      href={`https://docs.google.com/viewer?url=${encodeURIComponent(course.syllabus_url)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-8 py-5 bg-white/5 text-white font-black rounded-2xl border border-white/10 hover:bg-white/10 transition-all text-center flex items-center justify-center gap-3 flex-1 sm:flex-none group"
