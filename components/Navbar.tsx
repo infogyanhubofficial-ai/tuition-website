@@ -346,7 +346,7 @@ export default function Navbar() {
               className="absolute right-0 top-0 bottom-0 w-[85%] max-w-sm bg-white p-8 shadow-2xl overflow-y-auto flex flex-col"
             >
               <div className="flex justify-between items-center mb-10">
-                <Image src="/images/logo.png" alt="Logo" width={110} height={35} />
+                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="Logo" width={110} height={35} />
                 <button 
                   onClick={() => setMobileOpen(false)} 
                   aria-label="Close menu"
