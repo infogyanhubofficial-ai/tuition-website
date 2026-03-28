@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { Clock, Calendar, FileText, ArrowRight, RefreshCcw, ChevronRight, Search, SlidersHorizontal, AlertCircle, BookOpen } from "lucide-react";
+import { Clock, Calendar, FileText, ArrowRight, RefreshCcw, ChevronRight, Search, SlidersHorizontal, AlertCircle, BookOpen, Users } from "lucide-react";
 // 13. Nepali Date Converter
 import NepaliDate from "nepali-date-converter";
 
@@ -101,7 +101,6 @@ export default function OnlineCoursesPage() {
   }, [courses, debouncedSearch, selectedCategory, sortBy]);
 
   const categories = ["All", ...Array.from(new Set(courses.map(c => c.category).filter(Boolean)))];
-  const featuredCourses = useMemo(() => courses.slice(0, 2), [courses]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -236,11 +235,9 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
   const countdown = getCountdown();
 
   return (
-    // 8 & 9. Add Hover Elevation Depth & Consistent Border Radius
     <div className="group flex flex-col bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 hover:border-orange-500/50 hover:shadow-2xl hover:-translate-y-1 transition-all duration-300 overflow-hidden relative">
       
       {/* --- TOP IMAGE SECTION --- */}
-      {/* 1. Fix Image Quality: aspect-ratio, object-fit */}
       <div className="relative w-full aspect-[16/9] overflow-hidden bg-gray-100 dark:bg-gray-800">
         <Image
           src={course.cover_pic || '/placeholder-course.jpg'}
@@ -249,12 +246,9 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           className="object-cover group-hover:scale-[1.05] transition-transform duration-500"
         />
-        {/* 2. Gradient Overlay on Images */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
         
-        {/* Top Badges */}
         <div className="absolute top-4 left-4 flex gap-2 z-10">
-          {/* 4. Reduce Badge Noise - 1 Primary Badge */}
           {course.category && (
             <span className="bg-orange-600 text-white px-3 py-1 rounded-lg text-[11px] font-black uppercase tracking-wider shadow-lg">
               {course.category}
@@ -262,7 +256,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           )}
         </div>
 
-        {/* 5. Make Price the Hero Element */}
         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end z-10">
           <div className="flex flex-col">
             {discountPercent > 0 && (
@@ -286,7 +279,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
 
       {/* --- CONTENT SECTION --- */}
       <div className="p-6 flex flex-col flex-grow">
-        {/* 4. Secondary Row for extra labels */}
         <div className="flex items-center justify-between gap-3 mb-4">
           <span className={`px-3 py-1 rounded-lg text-xs font-bold ring-1 inset-ring ${DIFFICULTY_COLORS[course.difficulty_level] || DIFFICULTY_COLORS.Professional}`}>
             {course.difficulty_level || 'General'}
@@ -304,7 +296,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           )}
         </div>
 
-        {/* 3. Typography Hierarchy */}
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2 leading-tight line-clamp-2 group-hover:text-orange-600 dark:group-hover:text-orange-500 transition-colors">
           {course.title || 'Untitled Course'}
         </h2>
@@ -322,7 +313,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           </div>
         </div>
 
-        {/* 7. Improve Countdown Design */}
         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 mb-6 border border-gray-100 dark:border-gray-800">
           <p className="text-[11px] text-gray-500 font-bold uppercase tracking-wider mb-2">
             Starts: {nepaliStartDate}
@@ -351,20 +341,41 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           )}
         </div>
 
-        {/* 6. Add CTA Button (Very Important) */}
-        <div className="flex items-center gap-3 mt-auto">
-          <Link 
-            href={`/online-courses/${course.id || '#'}`}
-            className="flex-1 text-center py-3 px-4 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 dark:text-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
-          >
-            Details
-          </Link>
-          <Link 
-            href={`/online-courses/${course.id || '#'}/enroll`}
-            className="flex-[2] flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-white bg-orange-600 hover:bg-orange-700 shadow-lg shadow-orange-600/20 hover:shadow-orange-600/40 transition-all active:scale-95"
-          >
-            Enroll Now <ArrowRight size={18} />
-          </Link>
+        {/* --- BOTTOM SECTION (With Mobile Specific Addition) --- */}
+        <div className="mt-auto flex flex-col gap-4">
+          
+          {/* 🌟 MOBILE ONLY: Booking & Seats Indicator (Hidden on sm screens and up) */}
+          <div className="flex sm:hidden items-center justify-between bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800/50 rounded-xl p-3">
+             <div className="flex items-center gap-2">
+                <div className="relative flex h-2.5 w-2.5">
+                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-orange-500"></span>
+                </div>
+                <span className="text-xs font-black text-orange-800 dark:text-orange-300 uppercase tracking-wide">
+                   20 Seats Remaining
+                </span>
+             </div>
+             <span className="text-[10px] font-black uppercase text-white bg-orange-500 px-2 py-1 rounded-md shadow-sm">
+                Book Fast
+             </span>
+          </div>
+
+          {/* CTA Buttons (Desktop and Mobile) */}
+          <div className="flex items-center gap-3">
+            <Link 
+              href={`/online-courses/${course.id || '#'}`}
+              className="flex-1 text-center py-3 px-4 rounded-xl font-bold text-gray-700 bg-gray-100 hover:bg-gray-200 dark:text-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors"
+            >
+              Details
+            </Link>
+            <Link 
+              href={`/online-courses/${course.id || '#'}/enroll`}
+              className="flex-[2] flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-white bg-orange-600 hover:bg-orange-700 shadow-lg shadow-orange-600/20 hover:shadow-orange-600/40 transition-all active:scale-95"
+            >
+              Enroll Now <ArrowRight size={18} />
+            </Link>
+          </div>
+
         </div>
       </div>
     </div>
