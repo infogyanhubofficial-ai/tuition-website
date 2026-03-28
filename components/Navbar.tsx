@@ -5,11 +5,11 @@ import Image from "next/image";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation"; 
 import { createClient } from "@/lib/supabase/client"; 
-import { motion, AnimatePresence, useScroll, useSpring, easeIn, easeOut } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useSpring } from "framer-motion";
 import { 
   Menu, X, House, Users, BriefcaseBusiness, 
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
-  LogOut, Settings, BookOpen, ChevronDown, Sparkles
+  LogOut, Settings, BookOpen, ChevronDown
 } from "lucide-react";
 
 const navItems = [
@@ -126,10 +126,11 @@ export default function Navbar() {
     return (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
   }, [pathname]);
 
+  // FIXED: Added "as const" to "easeIn" 
   const mobileMenuVars = {
     initial: { opacity: 0, y: "-100%" },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] } },
-    exit: { opacity: 0, y: "-100%", transition: { duration: 0.3, ease: easeIn } }
+    animate: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 1, 0.36, 1] as const } },
+    exit: { opacity: 0, y: "-100%", transition: { duration: 0.3, ease: "easeIn" as const } }
   };
 
   const mobileLinkContainerVars = {
@@ -137,9 +138,10 @@ export default function Navbar() {
     animate: { transition: { delayChildren: 0.15, staggerChildren: 0.07, staggerDirection: 1 } }
   };
 
+  // FIXED: Added "as const" to "easeOut"
   const mobileLinkVars = {
     initial: { opacity: 0, y: -20 },
-    animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: easeOut } },
+    animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" as const } },
     exit: { opacity: 0, y: -10, transition: { duration: 0.2 } }
   };
 
@@ -153,11 +155,9 @@ export default function Navbar() {
       <div className={`fixed top-0 left-0 right-0 z-50 flex justify-center transition-all duration-500 ${scrolled ? 'pt-0 md:pt-1 px-2 md:px-6' : 'pt-2 md:pt-4 px-4 md:px-8'}`}>
         <header 
           className={`w-full transition-all duration-500 ease-in-out bg-white/95 backdrop-blur-xl border border-slate-200/60 shadow-[0_8px_30px_rgb(0,0,0,0.06)] rounded-full ${
-            /* FIXED: 72rem perfectly shrinks width by 20% while allowing internal contents to fit */
             scrolled ? "max-w-[72rem] py-1.5 md:py-2 px-3 md:px-5" : "max-w-[90rem] py-2.5 md:py-3.5 px-6 md:px-8"
           }`}
         >
-          {/* FIXED: Removed flex-1 that was pushing items out. Simple justify-between safely bounds everything */}
           <div className="flex items-center justify-between w-full h-full gap-2 xl:gap-4">
             
             <Link href="/" className="flex-shrink-0 outline-none rounded-lg focus-visible:ring-2 focus-visible:ring-[#2D9CDB] z-20">
@@ -171,7 +171,6 @@ export default function Navbar() {
               </motion.div>
             </Link>
 
-            {/* FIXED: Reduced gaps to save horizontal space so it doesn't push the right side out */}
             <nav className="hidden lg:flex items-center justify-center gap-1 xl:gap-4">
               {navItems.map((item) => {
                 const Icon = item.icon;
@@ -198,7 +197,6 @@ export default function Navbar() {
               })}
             </nav>
 
-            {/* FIXED: Reduced padding (px) across all buttons to perfectly fit inside the boundary */}
             <div className="hidden lg:flex flex-shrink-0 items-center gap-1.5 xl:gap-3 z-20">
               {!loadingUser && !isTutor && (
                 <>
@@ -273,7 +271,6 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* Mobile Actions */}
             <div className="flex items-center gap-2 ml-auto lg:hidden z-20">
               {loadingUser ? (
                 <div className="h-9 w-9 rounded-full bg-slate-200 animate-pulse" />
