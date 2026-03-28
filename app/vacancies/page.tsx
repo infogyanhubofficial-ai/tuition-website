@@ -13,7 +13,6 @@ import {
   Briefcase, 
   ChevronRight, 
   Filter, 
-  Eye,
   Plus,
   Calculator,
   Languages,
@@ -148,7 +147,6 @@ function VacancySkeleton({ viewMode }: { viewMode: ViewMode }) {
           <div className={cn("h-7 w-24 bg-slate-200/80 rounded-lg", viewMode === 'list' && "ml-auto")} />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-          <div className="h-11 w-11 bg-slate-200/60 rounded-xl shrink-0" />
           <div className="h-11 flex-1 md:w-28 bg-slate-200/80 rounded-xl" />
         </div>
       </div>
@@ -198,7 +196,6 @@ export default function VacanciesPage() {
   // UX States
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [currentPage, setCurrentPage] = useState(1);
-  const [quickView, setQuickView] = useState<Vacancy | null>(null);
 
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
 
@@ -264,11 +261,6 @@ export default function VacanciesPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [search, selectedMode, urgentOnly]);
-
-  useEffect(() => {
-    if (quickView) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = 'auto';
-  }, [quickView]);
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] px-4 py-8 sm:px-6 lg:px-8 font-sans antialiased selection:bg-orange-200 selection:text-orange-900">
@@ -572,17 +564,6 @@ export default function VacanciesPage() {
                           className="flex gap-2.5 w-full md:w-auto"
                           onClick={(e) => e.stopPropagation()} 
                         >
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault();
-                              setQuickView(vacancy);
-                            }}
-                            className="flex h-12 w-12 items-center justify-center rounded-[16px] bg-slate-50/80 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all duration-300 border border-slate-200/80 shrink-0 active:scale-95 z-10"
-                            aria-label="Quick View"
-                          >
-                            <Eye className="h-5 w-5" />
-                          </button>
-
                           <Link 
                             href={`/vacancies/${vacancy.id}/apply`}
                             className="group flex flex-1 h-12 items-center justify-center gap-2 rounded-[16px] bg-gradient-to-r from-orange-500 to-orange-600 px-5 text-sm font-bold text-white transition-all duration-300 hover:shadow-[0_0_20px_rgba(249,115,22,0.4)] active:scale-95 z-10"

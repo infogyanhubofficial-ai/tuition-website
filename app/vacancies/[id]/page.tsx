@@ -1,41 +1,20 @@
 'use client';
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-// FIX: Use the secure SSR-compatible client
 import { createClient } from "@/lib/supabase/client";
+import { motion, AnimatePresence } from "framer-motion";
 import { 
-  MapPin, 
-  Clock, 
-  CalendarDays, 
-  ShieldCheck, 
-  Share2, 
-  Bookmark, 
-  ChevronRight, 
-  UserCircle2, 
-  GraduationCap, 
-  Laptop, 
-  Home, 
-  Building2, 
-  Send, 
-  Loader2, 
-  AlertCircle,
-  Calculator,
-  Languages,
-  Atom,
-  Code2,
-  FileSpreadsheet,
-  LineChart,
-  Globe2,
-  Music,
-  Palette,
-  BookOpen,
-  CheckCircle2,
-  Home as HomeIcon,
-  ChevronDown
+  MapPin, Clock, CalendarDays, ShieldCheck, Share2, 
+  UserCircle2, GraduationCap, Laptop, Home, Building2, 
+  Send, Loader2, AlertCircle, Calculator, Languages, Atom, Code2, 
+  FileSpreadsheet, LineChart, Globe2, Music, Palette, BookOpen, 
+  CheckCircle2, Home as HomeIcon, ChevronDown, ArrowRight, Flame,
+  Map as MapIcon, Link as LinkIcon
 } from "lucide-react";
 
+// --- INTERFACES ---
 interface Vacancy {
   id: number;
   subject: string;
@@ -47,23 +26,20 @@ interface Vacancy {
   days_a_week: string;
   student_gender_pref?: string;
   tuition_type?: string;
-  status?: boolean; // FIX: Changed from string to boolean
-  urgency?: boolean; // Added to match your new DB schema
+  status?: boolean; 
+  urgency?: boolean; 
   created_at?: string;
+  contact_name?: string; 
 }
 
+// --- UTILS ---
 function cn(...classes: Array<string | false | null | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-// IMPROVED: Cleans redundant "Rs", handles ranges, and adds comma formatting
 function formatSalary(salary?: string) {
   if (!salary || salary.trim() === '') return "Negotiable";
-  
-  // Remove existing "Rs", "Rs.", or "Rupees" to standardize
   let cleanStr = salary.replace(/(rs\.?|rupees)\s*/gi, '').trim();
-  
-  // Handle ranges separated by a dash
   if (cleanStr.includes('-')) {
     const parts = cleanStr.split('-').map(p => p.trim());
     const formattedParts = parts.map(p => {
@@ -77,59 +53,87 @@ function formatSalary(salary?: string) {
   }
 }
 
-function formatRelativeTime(dateString?: string) {
+function formatRelativeTime(dateString?: string, isUrgent?: boolean) {
   if (!dateString) return "Recently posted";
   const now = new Date();
   const then = new Date(dateString);
   const diffMs = now.getTime() - then.getTime();
   if (Number.isNaN(diffMs)) return "Recently posted";
 
-  const minutes = Math.floor(diffMs / 60000);
-  const hours = Math.floor(diffMs / 3600000);
   const days = Math.floor(diffMs / 86400000);
+  const urgencySuffix = isUrgent ? " → May close soon" : "";
 
-  if (minutes < 1) return "Posted just now";
-  if (minutes < 60) return `Posted ${minutes} mins ago`;
-  if (hours < 24) return hours === 1 ? "Posted 1 hour ago" : `Posted ${hours} hours ago`;
-  if (days === 1) return "Posted yesterday";
-  if (days < 7) return `Posted ${days} days ago`;
+  if (diffMs < 3600000) return `Posted just now${urgencySuffix}`;
+  if (diffMs < 86400000) return `Posted today${urgencySuffix}`;
+  if (days === 1) return `Posted yesterday${urgencySuffix}`;
+  if (days < 7) return `Posted ${days} days ago${urgencySuffix}`;
   return `Posted on ${then.toLocaleDateString()}`;
 }
 
-function getSubjectIcon(subject?: string) {
+function getSubjectConfig(subject?: string) {
   const s = (subject || "").toLowerCase();
-  if (s.includes("math") || s.includes("calc")) return <Calculator className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("science") || s.includes("physics") || s.includes("bio")) return <Atom className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("english") || s.includes("nepali") || s.includes("language")) return <Languages className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("computer") || s.includes("code") || s.includes("programming")) return <Code2 className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("excel") || s.includes("spreadsheet")) return <FileSpreadsheet className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("account") || s.includes("finance") || s.includes("business")) return <LineChart className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("geo") || s.includes("social") || s.includes("history")) return <Globe2 className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("music") || s.includes("guitar")) return <Music className="h-8 w-8" strokeWidth={1.5} />;
-  if (s.includes("art") || s.includes("design")) return <Palette className="h-8 w-8" strokeWidth={1.5} />;
-  return <BookOpen className="h-8 w-8" strokeWidth={1.5} />;
+  if (s.includes("math") || s.includes("calc")) return { icon: Calculator, color: "text-blue-600", bg: "bg-blue-100/50", border: "group-hover:border-blue-200" };
+  if (s.includes("science") || s.includes("physics") || s.includes("bio")) return { icon: Atom, color: "text-indigo-600", bg: "bg-indigo-100/50", border: "group-hover:border-indigo-200" };
+  if (s.includes("english") || s.includes("nepali")) return { icon: Languages, color: "text-emerald-600", bg: "bg-emerald-100/50", border: "group-hover:border-emerald-200" };
+  if (s.includes("computer") || s.includes("code")) return { icon: Code2, color: "text-slate-700", bg: "bg-slate-100", border: "group-hover:border-slate-300" };
+  if (s.includes("excel") || s.includes("spreadsheet")) return { icon: FileSpreadsheet, color: "text-amber-600", bg: "bg-amber-100/50", border: "group-hover:border-amber-200" };
+  if (s.includes("account") || s.includes("finance")) return { icon: LineChart, color: "text-cyan-600", bg: "bg-cyan-100/50", border: "group-hover:border-cyan-200" };
+  if (s.includes("geo") || s.includes("social")) return { icon: Globe2, color: "text-teal-600", bg: "bg-teal-100/50", border: "group-hover:border-teal-200" };
+  if (s.includes("music") || s.includes("art")) return { icon: Palette, color: "text-rose-600", bg: "bg-rose-100/50", border: "group-hover:border-rose-200" };
+  
+  return { icon: BookOpen, color: "text-orange-600", bg: "bg-orange-100/50", border: "group-hover:border-orange-200" };
 }
 
-// Custom Progressive Disclosure Component for Description
+function FormattedDescription({ text }: { text: string }) {
+  const lines = text.split('\n');
+  
+  return (
+    <div className="space-y-3 text-[15px] leading-[1.8] text-slate-600 font-medium">
+      {lines.map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) return <div key={idx} className="h-2" />;
+        
+        if (trimmed.endsWith(':') || (trimmed === trimmed.toUpperCase() && trimmed.length > 5)) {
+          return <h4 key={idx} className="font-black text-slate-900 mt-6 mb-2 text-base">{trimmed}</h4>;
+        }
+        
+        if (trimmed.startsWith('-') || trimmed.startsWith('•') || trimmed.startsWith('*')) {
+          return (
+            <div key={idx} className="flex gap-3 items-start relative pl-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-500 mt-2.5 shrink-0 absolute left-0" />
+              <span className="pl-3">{trimmed.substring(1).trim()}</span>
+            </div>
+          );
+        }
+        
+        return <p key={idx}>{trimmed}</p>;
+      })}
+    </div>
+  );
+}
+
 function ExpandableDescription({ text }: { text: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const isLong = text.length > 400;
+  const isLong = text.length > 300;
 
   return (
     <div className="relative">
-      <div className={cn(
-        "prose prose-slate max-w-none text-[15px] leading-[1.8] text-slate-600 font-medium whitespace-pre-wrap transition-all duration-500",
-        !isExpanded && isLong && "max-h-[200px] overflow-hidden"
-      )}>
-        {text}
-      </div>
+      <motion.div 
+        animate={{ maxHeight: isExpanded || !isLong ? 2000 : 250 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className="overflow-hidden"
+      >
+        <FormattedDescription text={text} />
+      </motion.div>
+      
       {!isExpanded && isLong && (
-        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
       )}
+      
       {isLong && (
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
-          className="mt-4 flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-orange-600 hover:text-orange-700 transition-colors"
+          className="relative mt-2 flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[0.15em] text-orange-600 hover:text-orange-700 transition-colors z-10"
         >
           {isExpanded ? "Show Less" : "Read Full Description"}
           <ChevronDown className={cn("h-4 w-4 transition-transform duration-300", isExpanded && "rotate-180")} />
@@ -139,7 +143,6 @@ function ExpandableDescription({ text }: { text: string }) {
   );
 }
 
-// High Fidelity Skeleton
 function VacancySkeleton() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] pb-28 lg:pb-20 animate-pulse">
@@ -158,22 +161,9 @@ function VacancySkeleton() {
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <div className="grid gap-12 lg:grid-cols-[1fr_380px] items-start">
           <div className="space-y-12">
-            <div>
-              <div className="h-6 w-40 bg-slate-200 rounded mb-4" />
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="h-28 rounded-[24px] bg-slate-200/50" />
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="h-6 w-40 bg-slate-200 rounded mb-4" />
-              <div className="h-24 rounded-[24px] bg-slate-200/50" />
-            </div>
-            <div>
-              <div className="h-6 w-40 bg-slate-200 rounded mb-4" />
-              <div className="h-48 rounded-[32px] bg-slate-200/50" />
-            </div>
+            <div><div className="h-6 w-40 bg-slate-200 rounded mb-4" /><div className="grid grid-cols-2 gap-4 sm:grid-cols-3">{[1, 2, 3].map(i => (<div key={i} className="h-28 rounded-[24px] bg-slate-200/50" />))}</div></div>
+            <div><div className="h-6 w-40 bg-slate-200 rounded mb-4" /><div className="h-24 rounded-[24px] bg-slate-200/50" /></div>
+            <div><div className="h-6 w-40 bg-slate-200 rounded mb-4" /><div className="h-48 rounded-[32px] bg-slate-200/50" /></div>
           </div>
           <div className="hidden lg:block space-y-6">
             <div className="h-64 rounded-[32px] bg-slate-200/50" />
@@ -190,17 +180,17 @@ export default function VacancyDetailPage() {
   const rawId = params?.id;
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
-
-  // FIX: Initialize the secure client inside the component
   const supabase = createClient();
 
   const [vacancy, setVacancy] = useState<Vacancy | null>(null);
+  const [similarVacancies, setSimilarVacancies] = useState<Vacancy[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isSaved, setIsSaved] = useState(false);
-  
   const [user, setUser] = useState<any>(null);
   const [hasApplied, setHasApplied] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -217,9 +207,17 @@ export default function VacancyDetailPage() {
 
       if (!vacancyError && vacancyData) {
         setVacancy(vacancyData);
+        
+        const { data: similarData } = await supabase
+          .from("vacancies")
+          .select("id, subject, location, class_level, salary_range, urgency, tuition_type")
+          .neq("id", Number(id))
+          .or(`subject.ilike.%${vacancyData.subject}%,class_level.eq.${vacancyData.class_level}`)
+          .limit(3);
+          
+        if (similarData) setSimilarVacancies(similarData as Vacancy[]);
       }
 
-      // FIX: Securely gets user from server cookies instead of local storage
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
 
@@ -231,25 +229,20 @@ export default function VacancyDetailPage() {
           .eq("user_id", user.id)
           .single();
 
-        if (applicationData) {
-          setHasApplied(true);
-        }
+        if (applicationData) setHasApplied(true);
       }
 
       setLoading(false);
       setAuthLoading(false);
-      
-      setIsSaved(window.localStorage.getItem(`gh_saved_vacancy_${id}`) === "1");
     };
 
     fetchData();
   }, [id, supabase]);
 
-  const handleSave = () => {
-    if (!id) return;
-    const next = !isSaved;
-    setIsSaved(next);
-    window.localStorage.setItem(`gh_saved_vacancy_${id}`, next ? "1" : "0");
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 3000);
   };
 
   const handleShare = async () => {
@@ -261,7 +254,7 @@ export default function VacancyDetailPage() {
         await navigator.share({ title: shareTitle, url: shareUrl });
       } else {
         await navigator.clipboard.writeText(shareUrl);
-        alert("Vacancy link copied to clipboard.");
+        triggerToast("Link copied to clipboard");
       }
     } catch (error) {
       console.error("Share failed:", error);
@@ -270,27 +263,23 @@ export default function VacancyDetailPage() {
 
   const renderActionButton = (isMobile = false) => {
     const baseClass = cn(
-      "group relative overflow-hidden flex w-full items-center justify-center gap-2 rounded-[20px] text-base font-black transition-all duration-300",
-      isMobile ? "py-4" : "py-4"
+      "group relative overflow-hidden flex items-center justify-center gap-2 text-sm sm:text-base font-black transition-all duration-300",
+      isMobile ? "w-full py-3.5 rounded-2xl" : "w-full py-4 rounded-[20px]"
     );
 
     if (authLoading) {
       return (
         <button disabled className={cn(baseClass, "bg-slate-100/50 text-slate-400 animate-pulse border border-slate-200")}>
-          <Loader2 className="h-5 w-5 animate-spin" /> Checking Status...
+          <Loader2 className="h-5 w-5 animate-spin" /> Checking...
         </button>
       );
     }
 
     if (!user) {
       return (
-        <Link 
-          href={`/login?redirect=/vacancies/${id}`} 
-          className={cn(baseClass, "bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 text-white shadow-[0_8px_20px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:shadow-[0_12px_25px_rgba(249,115,22,0.4)] active:scale-95")}
-        >
-          {/* Subtle sweep animation layer */}
-          <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%] opacity-0 group-hover:opacity-100 group-hover:animate-shimmer" />
-          <UserCircle2 className="h-5 w-5 relative z-10" /> <span className="relative z-10">Sign In to Apply</span>
+        // FIX: Added !text-white to ensure it stays white
+        <Link href={`/login?redirect=/vacancies/${id}`} className={cn(baseClass, "bg-slate-900 text-white !text-white shadow-xl hover:-translate-y-1 hover:shadow-2xl active:scale-95")}>
+          <UserCircle2 className="h-5 w-5" /> <span>Sign In to Apply</span>
         </Link>
       );
     }
@@ -304,11 +293,9 @@ export default function VacancyDetailPage() {
     }
 
     return (
-      <Link 
-        href={`/vacancies/${id}/apply`}
-        className={cn(baseClass, "bg-gradient-to-r from-orange-400 via-orange-500 to-orange-600 text-white shadow-[0_8px_20px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:shadow-[0_12px_25px_rgba(249,115,22,0.4)] active:scale-95")}
-      >
-        <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.2)_50%,transparent_75%)] bg-[length:250%_250%] opacity-0 group-hover:opacity-100 group-hover:animate-[shimmer_2s_infinite_linear]" />
+      // FIX: Added !text-white to ensure it stays white
+      <Link href={`/vacancies/${id}/apply`} className={cn(baseClass, "bg-gradient-to-r from-orange-500 to-orange-600 text-white !text-white shadow-[0_10px_25px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(249,115,22,0.4)] active:scale-95")}>
+        <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-150 rounded-full transition-transform duration-700 ease-out opacity-0 group-hover:opacity-100 origin-center" />
         <span className="relative z-10">Apply Now</span> <Send className="h-4 w-4 relative z-10 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
       </Link>
     );
@@ -329,25 +316,32 @@ export default function VacancyDetailPage() {
     );
   }
 
-  // FIX: Status is now a boolean, check directly.
   const isUrgent = vacancy.urgency === true;
-  const ModeIcon = vacancy.tuition_type?.toLowerCase().includes('online') ? Laptop : vacancy.tuition_type?.toLowerCase().includes('home') ? Home : Building2;
+  const isOnline = vacancy.tuition_type?.toLowerCase().includes('online');
+  const ModeIcon = isOnline ? Laptop : vacancy.tuition_type?.toLowerCase().includes('home') ? Home : Building2;
+  const SubConfig = getSubjectConfig(vacancy.subject);
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] pb-28 lg:pb-20">
+    <div className="min-h-screen bg-[#F8FAFC] pb-32 lg:pb-20 relative">
       
-      {/* Modern Hero Section with Subtle Mesh */}
-      <div className="bg-white border-b border-slate-200 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 via-white to-blue-50/30 pointer-events-none" />
-        
-        {/* Abstract Mesh Blobs */}
-        <div className="absolute top-0 right-0 -translate-y-1/4 translate-x-1/4 w-[500px] h-[500px] bg-orange-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 animate-blob pointer-events-none" />
-        <div className="absolute bottom-0 left-0 translate-y-1/4 -translate-x-1/4 w-[400px] h-[400px] bg-blue-200 rounded-full mix-blend-multiply filter blur-[80px] opacity-20 animate-blob animation-delay-2000 pointer-events-none" />
+      {/* Toast Notification */}
+      <AnimatePresence>
+        {showToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: -50, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 bg-slate-900 text-white px-5 py-3 rounded-full shadow-2xl font-bold text-sm"
+          >
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
+      {/* Hero Section */}
+      <div className="bg-white border-b border-slate-200 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-50 to-white pointer-events-none" />
+        
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-8 sm:px-10 lg:px-8">
-          
-          {/* Minimalist Breadcrumbs */}
-          <nav className="mb-8 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+          <nav className="mb-6 flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
             <Link href="/" className="hover:text-orange-600 transition-colors flex items-center gap-1.5"><HomeIcon className="h-3 w-3" /> Home</Link>
             <span className="text-slate-300 font-light text-sm">/</span>
             <Link href="/vacancies" className="hover:text-orange-600 transition-colors">Vacancies</Link>
@@ -355,205 +349,184 @@ export default function VacancyDetailPage() {
             <span className="text-slate-900 truncate max-w-[120px] sm:max-w-none">{vacancy.subject}</span>
           </nav>
 
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div className="flex gap-6">
-              {/* Wrapped Icon Blob */}
-              <div className="group flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-orange-100/50 text-orange-600 border border-orange-500/10 shadow-sm transition-transform duration-300 hover:scale-110">
-                 {getSubjectIcon(vacancy.subject)}
-              </div>
-              <div className="pt-1">
-                <div className="flex flex-wrap items-center gap-3 mb-3">
-                  <h1 className="text-3xl font-black text-slate-900 tracking-tight sm:text-5xl">{vacancy.subject}</h1>
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div className="flex gap-5 sm:gap-6 w-full lg:w-auto">
+              <motion.div whileHover={{ scale: 1.05, rotate: -5 }} className={cn("flex h-16 w-16 sm:h-20 sm:w-20 shrink-0 items-center justify-center rounded-[20px] sm:rounded-[24px] shadow-sm border", SubConfig.bg, SubConfig.color, SubConfig.border)}>
+                <SubConfig.icon className="h-8 w-8 sm:h-10 sm:w-10" />
+              </motion.div>
+              <div className="pt-1 flex-1">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-2">
+                  <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight leading-tight">{vacancy.subject}</h1>
                   {isUrgent && (
-                    <div className="relative flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-rose-600 border border-rose-100 shadow-sm overflow-hidden">
-                      <div className="absolute inset-0 bg-rose-400 opacity-10 animate-pulse" />
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                      </span>
-                      <span className="relative z-10">Urgent Hiring</span>
+                    <div className="inline-flex w-fit items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-rose-600 border border-rose-100">
+                      <Flame className="w-3 h-3" /> Urgent
                     </div>
                   )}
                 </div>
                 
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-sm font-bold text-slate-500">
-                  <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-slate-400" /> {vacancy.location}</div>
-                  <div className="flex items-center gap-2 text-indigo-600 bg-indigo-50/80 border border-indigo-100/50 px-3 py-1.5 rounded-lg text-xs tracking-wide shadow-sm">
-                    <Clock className="h-3.5 w-3.5" /> {formatRelativeTime(vacancy.created_at)}
-                  </div>
+                <p className="text-sm font-bold text-slate-600 mb-4 flex items-center gap-1.5">
+                  <UserCircle2 className="w-4 h-4 text-slate-400" /> 
+                  Posted by <span className="text-slate-900">{vacancy.contact_name || "Anonymous Parent/Student"}</span>
+                </p>
+                
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] sm:text-sm font-bold text-slate-500">
+                  <div className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-slate-400" /> {vacancy.location}</div>
+                  <div className="flex items-center gap-1.5"><Clock className="h-4 w-4 text-slate-400" /> {formatRelativeTime(vacancy.created_at, isUrgent)}</div>
                 </div>
               </div>
             </div>
 
-            {/* Interactive Save/Share Icons */}
-            <div className="hidden md:flex items-center gap-3">
-              <button 
-                onClick={handleSave}
-                className={cn(
-                  "flex h-12 w-12 items-center justify-center rounded-full border transition-all duration-300 active:scale-90 shadow-sm", 
-                  isSaved 
-                    ? "border-orange-200 bg-orange-50 text-orange-600 shadow-orange-500/10" 
-                    : "border-slate-200/80 bg-white/80 text-slate-400 hover:bg-orange-500 hover:text-white hover:border-orange-500 hover:shadow-orange-500/20"
-                )}
-              >
-                <Bookmark className="h-5 w-5 transition-transform" fill={isSaved ? "currentColor" : "none"} />
-              </button>
-              <button 
-                onClick={handleShare} 
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200/80 bg-white/80 text-slate-400 shadow-sm transition-all duration-300 hover:bg-blue-500 hover:text-white hover:border-blue-500 hover:shadow-blue-500/20 active:scale-90"
-              >
-                <Share2 className="h-5 w-5" />
-              </button>
+            <div className="hidden lg:flex items-center gap-3 w-72 shrink-0">
+               {renderActionButton(false)}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-        <div className="grid gap-12 lg:grid-cols-[1fr_380px] items-start">
+      <div className="mx-auto max-w-7xl px-4 py-8 sm:py-12 sm:px-6 lg:px-8">
+        <div className="grid gap-8 lg:gap-12 lg:grid-cols-[1fr_380px] items-start">
           
-          <main className="space-y-12">
+          <main className="space-y-8 sm:space-y-12">
             
-            {/* Visual Requirements Cards - Glassmorphism */}
             <section>
-              <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-orange-100/50 text-orange-500"><UserCircle2 className="h-5 w-5" /></div> 
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-5 flex items-center gap-3">
+                <div className="p-1.5 sm:p-2 rounded-xl bg-orange-100/50 text-orange-500"><UserCircle2 className="h-5 w-5" /></div> 
                 Student Profile
               </h2>
-              <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
-                <div className="group rounded-[28px] bg-white/70 backdrop-blur-md p-6 border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(59,130,246,0.08)] transition-all">
-                  <div className="h-12 w-12 rounded-2xl bg-blue-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <GraduationCap className="h-6 w-6 text-blue-500" />
+              <div className="grid grid-cols-2 gap-4 sm:gap-5 sm:grid-cols-3">
+                <motion.div whileHover={{ y: -5 }} className="group rounded-[24px] sm:rounded-[28px] bg-white p-5 sm:p-6 border border-slate-200/60 shadow-sm hover:border-blue-200 hover:shadow-lg transition-all">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-blue-50 flex items-center justify-center mb-3 sm:mb-4 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-colors">
+                    <GraduationCap className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">Class Level</p>
-                  <p className="font-black text-slate-900">{vacancy.class_level || 'Not Specified'}</p>
-                </div>
-                <div className="group rounded-[28px] bg-white/70 backdrop-blur-md p-6 border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(16,185,129,0.08)] transition-all">
-                  <div className="h-12 w-12 rounded-2xl bg-emerald-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <ModeIcon className="h-6 w-6 text-emerald-500" />
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Class Level</p>
+                  <p className="text-sm sm:text-base font-black text-slate-900 truncate">{vacancy.class_level || 'Not Specified'}</p>
+                </motion.div>
+                <motion.div whileHover={{ y: -5 }} className="group rounded-[24px] sm:rounded-[28px] bg-white p-5 sm:p-6 border border-slate-200/60 shadow-sm hover:border-emerald-200 hover:shadow-lg transition-all">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-emerald-50 flex items-center justify-center mb-3 sm:mb-4 text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                    <ModeIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">Tuition Type</p>
-                  <p className="font-black text-slate-900">{vacancy.tuition_type || 'Any Mode'}</p>
-                </div>
-                <div className="group rounded-[28px] bg-white/70 backdrop-blur-md p-6 border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] hover:shadow-[0_8px_30px_rgb(168,85,247,0.08)] transition-all col-span-2 sm:col-span-1">
-                  <div className="h-12 w-12 rounded-2xl bg-purple-50 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <UserCircle2 className="h-6 w-6 text-purple-500" />
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Tuition Type</p>
+                  <p className="text-sm sm:text-base font-black text-slate-900 truncate">{vacancy.tuition_type || 'Any Mode'}</p>
+                </motion.div>
+                <motion.div whileHover={{ y: -5 }} className="group rounded-[24px] sm:rounded-[28px] bg-white p-5 sm:p-6 border border-slate-200/60 shadow-sm hover:border-purple-200 hover:shadow-lg transition-all col-span-2 sm:col-span-1">
+                  <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl sm:rounded-2xl bg-purple-50 flex items-center justify-center mb-3 sm:mb-4 text-purple-500 group-hover:bg-purple-500 group-hover:text-white transition-colors">
+                    <UserCircle2 className="h-5 w-5 sm:h-6 sm:w-6" />
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1.5">Gender Pref.</p>
-                  <p className="font-black text-slate-900">{vacancy.student_gender_pref || 'No Preference'}</p>
-                </div>
+                  <p className="text-[9px] sm:text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Gender Pref.</p>
+                  <p className="text-sm sm:text-base font-black text-slate-900 truncate">{vacancy.student_gender_pref || 'No Preference'}</p>
+                </motion.div>
               </div>
             </section>
 
-            {/* Time & Commitment Timeline */}
             <section>
-              <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-orange-100/50 text-orange-500"><CalendarDays className="h-5 w-5" /></div>
-                Time & Commitment
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-5 flex items-center gap-3">
+                <div className="p-1.5 sm:p-2 rounded-xl bg-blue-100/50 text-blue-500"><MapIcon className="h-5 w-5" /></div>
+                Location Map
               </h2>
-              <div className="rounded-[32px] bg-white/70 backdrop-blur-md border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] overflow-hidden">
-                <div className="grid sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100/50">
-                  <div className="p-6 flex items-center gap-5">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-slate-100/50 text-slate-500 border border-white"><Clock className="h-5 w-5" /></div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Class Schedule</p>
-                      <p className="font-black text-slate-900">{vacancy.class_time || 'Flexible Schedule'}</p>
-                    </div>
+              <div className="relative w-full h-48 sm:h-64 bg-slate-100 rounded-[28px] overflow-hidden border border-slate-200 group">
+                {isOnline ? (
+                  <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-purple-600 flex flex-col items-center justify-center text-white p-6 text-center">
+                    <Globe2 className="w-16 h-16 opacity-50 mb-3" />
+                    <h3 className="font-black text-2xl tracking-tight">Online Tuition</h3>
+                    <p className="font-medium opacity-80 mt-1 text-sm">Teach from anywhere in the world.</p>
                   </div>
-                  <div className="p-6 flex items-center gap-5">
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-slate-100/50 text-slate-500 border border-white"><CalendarDays className="h-5 w-5" /></div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Days Per Week</p>
-                      <p className="font-black text-slate-900">{vacancy.days_a_week || 'To be decided'}</p>
+                ) : (
+                  <a 
+                    href={`http://maps.google.com/?q=${encodeURIComponent(vacancy.location)}`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="absolute inset-0 block cursor-pointer"
+                  >
+                    <img 
+                      src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/street%20view.jpg" 
+                      alt="Map of Nepal" 
+                      className="w-full h-full object-cover opacity-50 filter grayscale-[40%] group-hover:grayscale-0 group-hover:opacity-70 transition-all duration-300" 
+                    />
+                    <div className="absolute inset-0 bg-slate-900/5 group-hover:bg-transparent transition-colors duration-300" />
+                    
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="relative group-hover:-translate-y-2 transition-transform duration-300 flex flex-col items-center">
+                        <div className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-2xl flex items-center gap-2 mb-2">
+                          <MapPin className="w-4 h-4 text-orange-400" /> {vacancy.location}
+                        </div>
+                        <div className="w-4 h-4 bg-slate-900 rotate-45 -mt-4 shadow-xl" />
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </a>
+                )}
               </div>
             </section>
 
-            {/* Typography Polished Description with Progressive Disclosure */}
             <section>
-              <h2 className="text-xl font-black text-slate-900 mb-6 flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-orange-100/50 text-orange-500"><BookOpen className="h-5 w-5" /></div>
+              <h2 className="text-lg sm:text-xl font-black text-slate-900 mb-5 flex items-center gap-3">
+                <div className="p-1.5 sm:p-2 rounded-xl bg-emerald-100/50 text-emerald-600"><BookOpen className="h-5 w-5" /></div>
                 Job Description
               </h2>
-              <div className="rounded-[36px] bg-white/70 backdrop-blur-md p-8 sm:p-10 border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+              <div className="rounded-[32px] sm:rounded-[36px] bg-white p-6 sm:p-10 border border-slate-200/60 shadow-sm">
                 <ExpandableDescription text={vacancy.description || 'No detailed description provided.'} />
               </div>
             </section>
 
+            {similarVacancies.length > 0 && (
+              <section className="pt-8 border-t border-slate-200/60">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg sm:text-xl font-black text-slate-900">Similar Requests</h2>
+                </div>
+                <div className="flex overflow-x-auto gap-4 pb-4 snap-x no-scrollbar">
+                  {similarVacancies.map((sim) => {
+                    const Conf = getSubjectConfig(sim.subject);
+                    return (
+                      <Link key={sim.id} href={`/vacancies/${sim.id}`} className="snap-center shrink-0 w-[280px] bg-white rounded-3xl border border-slate-200/60 p-5 shadow-sm hover:shadow-md hover:border-slate-300 active:scale-95 transition-all">
+                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center mb-4", Conf.bg, Conf.color)}>
+                          <Conf.icon className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-slate-900 truncate mb-1 text-sm">{sim.subject}</h4>
+                        <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> {sim.location || 'Remote'}</p>
+                        <div className="flex items-center justify-between mt-auto">
+                          <span className="text-xs font-black text-orange-600 bg-orange-50 px-2 py-1 rounded-lg">{formatSalary(sim.salary_range)}</span>
+                          <ChevronRight className="w-4 h-4 text-slate-300" />
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
+
           </main>
 
-          {/* Sticky Sidebar with Layered Shadows */}
-          <aside className="hidden lg:block lg:sticky lg:top-8 lg:self-start space-y-8">
+          <aside className="hidden lg:block lg:sticky lg:top-8 lg:self-start space-y-6">
             
-            {/* Main Action Card */}
-            <div className="rounded-[40px] border border-white/60 bg-white/70 backdrop-blur-xl p-8 shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)]">
-              
-              {/* Highlighted Monthly Salary - FIXED WRAPPING AND PADDING */}
-              <div className="mb-8 flex flex-col items-center justify-center rounded-[24px] bg-gradient-to-b from-orange-50/80 to-orange-50/30 border border-orange-100/60 p-6 text-center shadow-inner">
+            <div className="rounded-[40px] bg-white border border-slate-200/60 p-8 shadow-sm">
+              <div className="mb-6 flex flex-col items-center justify-center rounded-[24px] bg-orange-50/50 border border-orange-100/50 p-6 text-center">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500 mb-2">Monthly Salary</p>
-                <p className="text-3xl font-black text-orange-600 tracking-tight leading-tight w-full break-words">
+                <p className="text-3xl font-black text-slate-900 tracking-tight leading-tight w-full break-words">
                   {formatSalary(vacancy.salary_range)}
                 </p>
               </div>
 
-              {/* Dynamic Auth/Status CTA */}
               {renderActionButton(false)}
               
-              {/* Feature Grid 'At a Glance' - IMPROVED LIST LAYOUT */}
-              <div className="mt-8 pt-8 border-t border-slate-100/80">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-5 text-center">At a Glance</h3>
-                <div className="flex flex-col gap-3">
-                  
-                  {/* Location Stat */}
-                  <div className="flex items-center gap-4 p-3 rounded-[20px] bg-slate-50/50 border border-slate-100/80 hover:bg-white transition-colors">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100/50 text-blue-600">
-                      <MapPin className="h-4 w-4" strokeWidth={2} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-0.5">Location</p>
-                      <p className="text-sm font-bold text-slate-700 truncate">{vacancy.location}</p>
-                    </div>
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-4 text-center">Summary</h3>
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100">
+                    <Clock className="h-4 w-4 text-indigo-500 shrink-0" />
+                    <div className="flex-1 min-w-0"><p className="text-[9px] font-black uppercase text-slate-400">Timing</p><p className="text-xs font-bold text-slate-700 truncate">{vacancy.class_time || 'Flexible'}</p></div>
                   </div>
-
-                  {/* Time Stat */}
-                  <div className="flex items-center gap-4 p-3 rounded-[20px] bg-slate-50/50 border border-slate-100/80 hover:bg-white transition-colors">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-100/50 text-indigo-600">
-                      <Clock className="h-4 w-4" strokeWidth={2} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-0.5">Timing</p>
-                      <p className="text-sm font-bold text-slate-700 truncate">{vacancy.class_time || 'Flexible'}</p>
-                    </div>
+                  <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/80 border border-slate-100">
+                    <CalendarDays className="h-4 w-4 text-purple-500 shrink-0" />
+                    <div className="flex-1 min-w-0"><p className="text-[9px] font-black uppercase text-slate-400">Days/Week</p><p className="text-xs font-bold text-slate-700 truncate">{vacancy.days_a_week || 'TBD'}</p></div>
                   </div>
-
-                  {/* Class Level Stat */}
-                  <div className="flex items-center gap-4 p-3 rounded-[20px] bg-slate-50/50 border border-slate-100/80 hover:bg-white transition-colors">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-100/50 text-purple-600">
-                      <GraduationCap className="h-4 w-4" strokeWidth={2} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] font-black uppercase text-slate-400 mb-0.5">Class</p>
-                      <p className="text-sm font-bold text-slate-700 truncate">{vacancy.class_level}</p>
-                    </div>
-                  </div>
-
                 </div>
               </div>
             </div>
 
-            {/* Elevated GyanHub Guarantee Trust Badge */}
-            <div className="rounded-[32px] bg-emerald-50/80 backdrop-blur-md border border-emerald-100/50 p-6 flex gap-5 shadow-sm relative overflow-hidden">
-               <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
-               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-emerald-100/80 text-emerald-600 drop-shadow-[0_0_15px_rgba(16,185,129,0.3)] border border-white/60 relative z-10">
-                 <ShieldCheck className="h-6 w-6" />
-               </div>
-               <div className="relative z-10">
-                 <h4 className="font-black text-emerald-900 tracking-tight">GyanHub Guarantee</h4>
-                 <p className="mt-1.5 text-xs font-bold text-emerald-700/80 leading-[1.6]">
-                   Verified Listing: This client has been pre-screened by the GyanHub team for your safety.
-                 </p>
+            <div className="rounded-[32px] bg-emerald-50/50 border border-emerald-100/50 p-6 flex gap-4 shadow-sm">
+               <ShieldCheck className="h-8 w-8 text-emerald-500 shrink-0 mt-1" />
+               <div>
+                 <h4 className="font-black text-emerald-900 text-sm tracking-tight">GyanHub Guarantee</h4>
+                 <p className="mt-1 text-[11px] font-bold text-emerald-700/80 leading-relaxed">Verified Listing. This client is pre-screened by our team.</p>
                </div>
             </div>
 
@@ -561,12 +534,14 @@ export default function VacancyDetailPage() {
         </div>
       </div>
 
-      {/* Mobile Fixed Bottom Bar - Heavy Blur & Float */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-3xl border-t border-slate-100/50 p-4 lg:hidden shadow-[0_-20px_40px_rgba(0,0,0,0.08)] pb-safe">
-         <div className="mx-auto max-w-md flex items-center justify-between gap-5">
-            <div className="flex-1 min-w-0 hidden sm:block">
-               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">Monthly Salary</p>
-               <p className="text-xl font-black text-slate-900 truncate tracking-tight">{formatSalary(vacancy.salary_range)}</p>
+      <div className="fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-3xl border-t border-slate-200 p-4 lg:hidden shadow-[0_-20px_40px_rgba(0,0,0,0.08)] pb-safe">
+         <div className="mx-auto max-w-md flex items-center justify-between gap-3">
+            <button onClick={handleShare} className="flex flex-col items-center justify-center w-14 h-12 rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 active:scale-95 transition-transform shrink-0">
+              <Share2 className="w-5 h-5" />
+            </button>
+            <div className="flex-1 min-w-0 hidden sm:block px-2">
+               <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-0.5">Salary</p>
+               <p className="text-base font-black text-slate-900 truncate tracking-tight">{formatSalary(vacancy.salary_range)}</p>
             </div>
             <div className="flex-[2] flex w-full">
               {renderActionButton(true)}
