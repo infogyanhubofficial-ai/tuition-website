@@ -11,7 +11,7 @@ import {
   Send, Loader2, AlertCircle, Calculator, Languages, Atom, Code2, 
   FileSpreadsheet, LineChart, Globe2, Music, Palette, BookOpen, 
   CheckCircle2, Home as HomeIcon, ChevronDown, ArrowRight, Flame,
-  Map as MapIcon, Link as LinkIcon
+  Map as MapIcon, Link as LinkIcon, ChevronRight
 } from "lucide-react";
 
 // --- INTERFACES ---
@@ -75,7 +75,7 @@ function getSubjectConfig(subject?: string) {
   if (s.includes("math") || s.includes("calc")) return { icon: Calculator, color: "text-blue-600", bg: "bg-blue-100/50", border: "group-hover:border-blue-200" };
   if (s.includes("science") || s.includes("physics") || s.includes("bio")) return { icon: Atom, color: "text-indigo-600", bg: "bg-indigo-100/50", border: "group-hover:border-indigo-200" };
   if (s.includes("english") || s.includes("nepali")) return { icon: Languages, color: "text-emerald-600", bg: "bg-emerald-100/50", border: "group-hover:border-emerald-200" };
-  if (s.includes("computer") || s.includes("code")) return { icon: Code2, color: "text-slate-700", bg: "bg-slate-100", border: "group-hover:border-slate-300" };
+  if (s.includes("computer") || s.includes("it ") || s.includes("code")) return { icon: Code2, color: "text-slate-700", bg: "bg-slate-100", border: "group-hover:border-slate-300" };
   if (s.includes("excel") || s.includes("spreadsheet")) return { icon: FileSpreadsheet, color: "text-amber-600", bg: "bg-amber-100/50", border: "group-hover:border-amber-200" };
   if (s.includes("account") || s.includes("finance")) return { icon: LineChart, color: "text-cyan-600", bg: "bg-cyan-100/50", border: "group-hover:border-cyan-200" };
   if (s.includes("geo") || s.includes("social")) return { icon: Globe2, color: "text-teal-600", bg: "bg-teal-100/50", border: "group-hover:border-teal-200" };
@@ -277,7 +277,6 @@ export default function VacancyDetailPage() {
 
     if (!user) {
       return (
-        // FIX: Added !text-white to ensure it stays white
         <Link href={`/login?redirect=/vacancies/${id}`} className={cn(baseClass, "bg-slate-900 text-white !text-white shadow-xl hover:-translate-y-1 hover:shadow-2xl active:scale-95")}>
           <UserCircle2 className="h-5 w-5" /> <span>Sign In to Apply</span>
         </Link>
@@ -293,7 +292,6 @@ export default function VacancyDetailPage() {
     }
 
     return (
-      // FIX: Added !text-white to ensure it stays white
       <Link href={`/vacancies/${id}/apply`} className={cn(baseClass, "bg-gradient-to-r from-orange-500 to-orange-600 text-white !text-white shadow-[0_10px_25px_rgba(249,115,22,0.3)] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(249,115,22,0.4)] active:scale-95")}>
         <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-150 rounded-full transition-transform duration-700 ease-out opacity-0 group-hover:opacity-100 origin-center" />
         <span className="relative z-10">Apply Now</span> <Send className="h-4 w-4 relative z-10 transition-transform group-hover:translate-x-1 group-hover:-translate-y-1" />
@@ -377,7 +375,7 @@ export default function VacancyDetailPage() {
             </div>
 
             <div className="hidden lg:flex items-center gap-3 w-72 shrink-0">
-               {renderActionButton(false)}
+                {renderActionButton(false)}
             </div>
           </div>
         </div>
@@ -432,7 +430,7 @@ export default function VacancyDetailPage() {
                   </div>
                 ) : (
                   <a 
-                    href={`http://maps.google.com/?q=${encodeURIComponent(vacancy.location)}`} 
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(vacancy.location)}`} 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="absolute inset-0 block cursor-pointer"

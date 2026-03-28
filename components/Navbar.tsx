@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation"; 
 import { createClient } from "@/lib/supabase/client"; 
-import { motion, AnimatePresence, useScroll, useSpring } from "framer-motion";
+import { motion, AnimatePresence, useScroll, useSpring, Variants } from "framer-motion"; // Added Variants import
 import { 
   Menu, X, House, Users, BriefcaseBusiness, 
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
@@ -188,7 +188,8 @@ export default function Navbar() {
     router.push(href);
   };
 
-  const mobileMenuVars = {
+  // Fixed by explicitly typing the Variants
+  const mobileMenuVars: Variants = {
     initial: { opacity: 0, y: "100%" },
     animate: { opacity: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 200 } },
     exit: { opacity: 0, y: "100%", transition: { duration: 0.2 } }
