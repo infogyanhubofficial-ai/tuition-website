@@ -206,75 +206,7 @@ export default function MyCoursesPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
         
-        {/* SECTION 1: Completed Courses / Certificates */}
-        <section>
-          <div className="flex items-center gap-3 mb-8">
-            <div className="p-2.5 bg-gradient-to-br from-amber-100 to-yellow-50 rounded-[14px] text-amber-600 shadow-sm border border-amber-200/50">
-              <GraduationCap className="h-6 w-6" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900">Completed Courses</h2>
-          </div>
-
-          {certificates.length === 0 ? (
-            <div className="rounded-[32px] border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
-              <Award className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-bold text-slate-700">No certificates yet</h3>
-              <p className="text-slate-500 mt-2">Finish a course to earn your first certified credential.</p>
-            </div>
-          ) : (
-            <motion.div 
-              variants={staggerContainer} initial="hidden" animate="show" 
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-              {certificates.map((cert) => (
-                <motion.div key={cert.id} variants={fadeUp}>
-                  {/* UPDATE: Redirects to /certificate/?name=...&email=... with URL encoding */}
-                  <Link 
-                    href={`/certificate/?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}`} 
-                    className="group block cursor-pointer"
-                  >
-                    <div className="relative rounded-[28px] overflow-hidden bg-white border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1 hover:border-blue-200">
-                      
-                      <div className="aspect-[4/3] w-full bg-slate-100 relative overflow-hidden">
-                        {cert.certificate_image ? (
-                          <img 
-                            src={getImageUrl(cert.certificate_image)} 
-                            alt={cert.syllabus_name} 
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="absolute inset-0 flex items-center justify-center bg-blue-50/50">
-                            <Award className="h-16 w-16 text-blue-200" />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
-                        <div className="absolute bottom-4 left-4 right-4 text-white">
-                          <p className="text-xs font-bold text-blue-300 mb-1 flex items-center gap-1.5">
-                            <Calendar className="h-3 w-3" /> 
-                            {formatDualDate(cert.issue_date)}
-                          </p>
-                          <h3 className="text-lg font-black leading-tight line-clamp-2">{cert.syllabus_name || 'Professional Course'}</h3>
-                        </div>
-                      </div>
-                      
-                      <div className="p-5 flex items-center justify-between bg-white">
-                        <div>
-                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Credential ID</p>
-                          <p className="text-sm font-bold text-slate-700 font-mono mt-0.5">{cert.certificate_code || `GH-${cert.id}XX`}</p>
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                          <ChevronRight className="h-4 w-4" />
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </section>
-
-        {/* SECTION 2: Active Bookings */}
+        {/* SECTION 1: Active Bookings (Moved to top) */}
         <section>
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2.5 bg-gradient-to-br from-emerald-100 to-teal-50 rounded-[14px] text-emerald-600 shadow-sm border border-emerald-200/50">
@@ -379,6 +311,74 @@ export default function MyCoursesPage() {
           )}
         </section>
 
+        {/* SECTION 2: Completed Courses / Certificates (Moved below Bookings) */}
+        <section>
+          <div className="flex items-center gap-3 mb-8">
+            <div className="p-2.5 bg-gradient-to-br from-amber-100 to-yellow-50 rounded-[14px] text-amber-600 shadow-sm border border-amber-200/50">
+              <GraduationCap className="h-6 w-6" />
+            </div>
+            <h2 className="text-2xl font-black text-slate-900">Completed Courses</h2>
+          </div>
+
+          {certificates.length === 0 ? (
+            <div className="rounded-[32px] border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
+              <Award className="h-12 w-12 text-slate-300 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-slate-700">No certificates yet</h3>
+              <p className="text-slate-500 mt-2">Finish a course to earn your first certified credential.</p>
+            </div>
+          ) : (
+            <motion.div 
+              variants={staggerContainer} initial="hidden" animate="show" 
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              {certificates.map((cert) => (
+                <motion.div key={cert.id} variants={fadeUp}>
+                  {/* UPDATE: Redirects to /certificate/?name=...&email=... with URL encoding */}
+                  <Link 
+                    href={`/certificate/?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}`} 
+                    className="group block cursor-pointer"
+                  >
+                    <div className="relative rounded-[28px] overflow-hidden bg-white border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-500/10 hover:-translate-y-1 hover:border-blue-200">
+                      
+                      <div className="aspect-[4/3] w-full bg-slate-100 relative overflow-hidden">
+                        {cert.certificate_image ? (
+                          <img 
+                            src={getImageUrl(cert.certificate_image)} 
+                            alt={cert.syllabus_name} 
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center bg-blue-50/50">
+                            <Award className="h-16 w-16 text-blue-200" />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-slate-900/20 to-transparent" />
+                        <div className="absolute bottom-4 left-4 right-4 text-white">
+                          <p className="text-xs font-bold text-blue-300 mb-1 flex items-center gap-1.5">
+                            <Calendar className="h-3 w-3" /> 
+                            {formatDualDate(cert.issue_date)}
+                          </p>
+                          <h3 className="text-lg font-black leading-tight line-clamp-2">{cert.syllabus_name || 'Professional Course'}</h3>
+                        </div>
+                      </div>
+                      
+                      <div className="p-5 flex items-center justify-between bg-white">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Credential ID</p>
+                          <p className="text-sm font-bold text-slate-700 font-mono mt-0.5">{cert.certificate_code || `GH-${cert.id}XX`}</p>
+                        </div>
+                        <div className="h-8 w-8 rounded-full bg-slate-50 flex items-center justify-center text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          <ChevronRight className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </section>
+
         {/* SECTION 3: Upcoming Online Courses */}
         <section>
           <div className="flex items-center justify-between mb-8">
@@ -395,8 +395,13 @@ export default function MyCoursesPage() {
 
           <motion.div variants={staggerContainer} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {upcomingCourses.map((course) => {
-              const offerPrice = course.discount > 0 
-                ? course.fee - (course.fee * (course.discount / 100)) 
+              
+              // NEW PRICING FIX: 
+              // 'course.fee' from the DB is already the discounted final price (e.g., 2500)
+              // If there's a discount (e.g., 50%), calculate the original full price backwards (e.g., 5000)
+              const offerPrice = course.fee;
+              const fullPrice = (course.discount > 0 && course.discount < 100)
+                ? Math.round(course.fee / (1 - (course.discount / 100))) 
                 : course.fee;
 
               return (
@@ -444,7 +449,7 @@ export default function MyCoursesPage() {
                         <div className="flex items-end justify-between pt-4 border-t border-slate-100 mt-auto">
                           <div>
                             {course.discount > 0 && (
-                              <p className="text-xs font-bold text-slate-400 line-through mb-0.5">Rs. {course.fee}</p>
+                              <p className="text-xs font-bold text-slate-400 line-through mb-0.5">Rs. {fullPrice}</p>
                             )}
                             <p className="text-lg font-black text-blue-600 flex items-center gap-1">
                               Rs. {offerPrice}

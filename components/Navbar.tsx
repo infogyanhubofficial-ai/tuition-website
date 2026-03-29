@@ -5,11 +5,11 @@ import Image from "next/image";
 import { useEffect, useState, useMemo, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation"; 
 import { createClient } from "@/lib/supabase/client"; 
-import { motion, AnimatePresence, useScroll, useSpring, Variants } from "framer-motion"; // Added Variants import
+import { motion, AnimatePresence, useScroll, useSpring, Variants } from "framer-motion"; 
 import { 
   Menu, X, House, Users, BriefcaseBusiness, 
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
-  LogOut, Settings, BookOpen, ChevronDown, Search, Sparkles, ChevronRight
+  LogOut, Settings, BookOpen, ChevronDown, Search, Sparkles, ChevronRight, CheckCircle2
 } from "lucide-react";
 
 // --- Configuration & Data ---
@@ -29,7 +29,7 @@ const searchData = [
   { label: "Dashboard", href: "/profile", icon: Settings },
   { label: "Post Tuition", href: "/post-tuition", icon: PlusCircle },
   { label: "Become a Tutor", href: "/become-a-tutor", icon: UserPlus },
-  { label: "Online Class", href: "/online-courses", icon: MonitorPlay },
+  { label: "Online Class", href: "/onlinecourse", icon: MonitorPlay },
   { label: "My Courses", href: "/my-courses", icon: BookOpen },
 ];
 
@@ -44,13 +44,15 @@ export default function Navbar() {
   const [loadingUser, setLoadingUser] = useState(true);
   
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  // Renamed from tutorDropdownOpen to be more accurate
   const [actionDropdownOpen, setActionDropdownOpen] = useState(false);
   
   // Search Modal State
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom Logout Toast State
+  const [showLogoutToast, setShowLogoutToast] = useState(false);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const actionDropdownRef = useRef<HTMLDivElement>(null);
@@ -135,7 +137,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle Keyboard shortcuts for Search Modal (CMD+K / ESC)
+  // Handle Keyboard shortcuts for Search Modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -162,11 +164,22 @@ export default function Navbar() {
     router.push(`/login?next=${pathname}`); 
   };
 
+  // 🔥 UPDATED LOGOUT LOGIC
   const handleLogout = async () => {
-    await supabase.auth.signOut();
     setProfileDropdownOpen(false);
     setMobileOpen(false);
-    router.refresh(); 
+    
+    // Show the thank you toast
+    setShowLogoutToast(true);
+
+    // Sign out in the background
+    await supabase.auth.signOut();
+    
+    // Wait 3 seconds for the user to read the message before refreshing the page
+    setTimeout(() => {
+      setShowLogoutToast(false);
+      router.refresh(); 
+    }, 3000);
   };
 
   const isActive = useMemo(() => {
@@ -188,7 +201,6 @@ export default function Navbar() {
     router.push(href);
   };
 
-  // Fixed by explicitly typing the Variants
   const mobileMenuVars: Variants = {
     initial: { opacity: 0, y: "100%" },
     animate: { opacity: 1, y: 0, transition: { type: "spring", damping: 25, stiffness: 200 } },
@@ -262,7 +274,7 @@ export default function Navbar() {
                 <Search className="h-3.5 w-3.5" /> Search <kbd className="font-sans font-black text-[10px] bg-white px-1.5 rounded border border-slate-200 shadow-sm ml-1">⌘K</kbd>
               </button>
 
-              {/* Grouped Action Buttons (Renamed to "Get Started") */}
+              {/* Grouped Action Buttons */}
               {!loadingUser && !isTutor && (
                 <div className="relative" ref={actionDropdownRef}>
                   <button 
@@ -300,7 +312,7 @@ export default function Navbar() {
               )}
 
               <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.95 }}>
-                <Link href="/online-courses" className="relative group flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#FF6B35] to-[#f45d24] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_10px_25px_rgba(255,107,53,0.3)] hover:shadow-[0_12px_30px_rgba(255,107,53,0.45)] transition-all duration-300">
+                <Link href="/onlinecourse" className="relative group flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#FF6B35] to-[#f45d24] px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_10px_25px_rgba(255,107,53,0.3)] hover:shadow-[0_12px_30px_rgba(255,107,53,0.45)] transition-all duration-300">
                   <MonitorPlay className="h-[15px] w-[15px] transition-transform group-hover:rotate-12" strokeWidth={2.5} />
                   Online Class
                   <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center rounded-full bg-white border border-orange-200 px-1.5 py-0.5 shadow-sm">
@@ -453,6 +465,27 @@ export default function Navbar() {
         )}
       </AnimatePresence>
 
+      {/* --- CUSTOM LOGOUT TOAST --- */}
+      <AnimatePresence>
+        {showLogoutToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 25 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-4 bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl border border-slate-700 w-[90%] max-w-sm"
+          >
+            <div className="bg-emerald-500/20 text-emerald-400 p-2 rounded-full shrink-0">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+            <div className="flex flex-col">
+              <span className="font-black text-sm">Thank you for connecting!</span>
+              <span className="text-xs text-slate-400 font-medium mt-0.5">We hope to connect soon in the future.</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* --- MOBILE MENU DRAWER --- */}
       <AnimatePresence>
         {mobileOpen && (
@@ -470,7 +503,7 @@ export default function Navbar() {
               dragConstraints={{ top: 0, bottom: 0 }}
               dragElastic={0.2}
               onDragEnd={(e, info) => {
-                if (info.offset.y > 100) setMobileOpen(false); // Swipe down to close
+                if (info.offset.y > 100) setMobileOpen(false); 
               }}
               className="relative w-full bg-white rounded-t-[2.5rem] px-5 pb-8 pt-4 shadow-[0_-20px_40px_rgba(0,0,0,0.15)] flex flex-col max-h-[90vh] overflow-y-auto"
             >
@@ -521,7 +554,6 @@ export default function Navbar() {
                 <div>
                   <h4 className="px-2 mb-3 text-[10px] font-black uppercase tracking-widest text-slate-400">Actions</h4>
                   <div className="flex flex-col gap-2.5">
-                    {/* Updated UI to distinguish Post Tuition & Become Tutor */}
                     {!loadingUser && !isTutor && (
                       <div className="grid grid-cols-2 gap-2.5">
                         <button onClick={() => { setMobileOpen(false); router.push('/post-tuition'); }} className="flex flex-col items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 py-3 text-[12px] font-black active:scale-95 transition-transform text-center px-2">
@@ -541,7 +573,7 @@ export default function Navbar() {
                       </div>
                     )}
                     
-                    <button onClick={() => { setMobileOpen(false); router.push('/online-courses'); }} className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#FF6B35] to-[#f45d24] text-white py-4 text-[14px] font-black shadow-[0_8px_20px_rgba(255,107,53,0.3)] active:scale-95 transition-transform">
+                    <button onClick={() => { setMobileOpen(false); router.push('/onlinecourse'); }} className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#FF6B35] to-[#f45d24] text-white py-4 text-[14px] font-black shadow-[0_8px_20px_rgba(255,107,53,0.3)] active:scale-95 transition-transform">
                       <MonitorPlay className="h-4 w-4" strokeWidth={2.5} /> Explore Online Classes
                     </button>
 

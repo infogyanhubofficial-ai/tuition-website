@@ -97,7 +97,7 @@ function CheckoutContent() {
           provider: fetchedTutorName || "GyanHub Courses",
           price: parseInt(urlPrice) || 0,
           icon: <GraduationCap className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
-          notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount within 24 hours.`,
+          notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for online class within 24 hours.`,
           noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
           noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
         };

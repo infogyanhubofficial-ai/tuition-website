@@ -7,7 +7,7 @@ import NepaliDate from 'nepali-date-converter';
 import { 
   Calendar, Clock, BadgeCheck, ShieldCheck,
   User, SearchX, Sparkles, Zap, HelpCircle, CheckCircle2, Users,
-  FileText, Star, Target, Briefcase, TrendingUp, MonitorPlay, BookOpen, Shield, Award
+  FileText, Star, Target, Briefcase, TrendingUp, MonitorPlay, BookOpen, Shield, Award, ChevronLeft
 } from "lucide-react";
 
 // --- Types ---
@@ -62,6 +62,15 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const resolvedParams = use(params);
   const router = useRouter();
   
+  // Safely decode the course name to handle spaces (%20) and special characters
+  const decodedCourseName = useMemo(() => {
+    try {
+      return decodeURIComponent(resolvedParams.id);
+    } catch (e) {
+      return resolvedParams.id;
+    }
+  }, [resolvedParams.id]);
+
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -78,11 +87,6 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
   // Randomized Course Tag
   const [courseTag, setCourseTag] = useState({ text: "Bestseller Course", icon: Zap });
-
-  // SEO
-  useEffect(() => {
-    if (course?.title) document.title = `${course.title} | GyanHub Online Courses`;
-  }, [course?.title]);
 
   // Set Random Tag on Mount to prevent Hydration errors
   useEffect(() => {
@@ -108,7 +112,8 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   }, []);
 
   const handleBookSeat = () => {
-    router.push(`/online-courses/${course?.id || resolvedParams.id}/enroll`);
+    // Encodes the string back to handle spaces safely in the URL
+    router.push(`/onlinecourse/${encodeURIComponent(decodedCourseName)}/enroll`);
   };
 
   const getEmbedUrl = (url: string) => {
@@ -194,14 +199,15 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   useEffect(() => {
     async function fetchCourse() {
       try {
-        const res = await fetch(`/api/online-courses/${resolvedParams.id}`);
+        // Pass the properly encoded, cleaned string to the fetch API
+        const res = await fetch(`/api/online-courses/${encodeURIComponent(decodedCourseName)}`);
         if (!res.ok) throw new Error("Course not found");
         setCourse(await res.json());
       } catch (err) { setError(true); } 
       finally { setLoading(false); }
     }
     fetchCourse();
-  }, [resolvedParams.id]);
+  }, [decodedCourseName]);
 
   useEffect(() => {
     async function fetchAvatars() {
@@ -227,7 +233,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
       <SearchX className="w-24 h-24 text-slate-300 mb-6" />
       <h2 className="text-3xl font-black text-slate-800 mb-4">Course Not Found</h2>
-      <Link href="/online-courses" className="px-8 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition">Browse Courses</Link>
+      <Link href="/onlinecourse" className="px-8 py-3 bg-emerald-500 text-white rounded-xl font-bold hover:bg-emerald-600 transition">Browse Courses</Link>
     </div>
   );
 
@@ -270,6 +276,17 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-gray-900 overflow-x-hidden relative pb-[90px] xl:pb-0">
+      
+      {/* Dynamic Link Previews (Open Graph Metadata) */}
+      <title>{`${course.title} | GyanHub Online Courses`}</title>
+      <meta property="og:title" content={`${course.title} | GyanHub`} />
+      <meta property="og:description" content={course.title} />
+      <meta property="og:image" content={course.cover_pic} />
+      <meta property="og:url" content={`https://www.gyanhub.com.np/onlinecourse/${encodeURIComponent(decodedCourseName)}`} />
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:image" content={course.cover_pic} />
+      <meta name="twitter:title" content={course.title} />
+
       {/* Progress Bar */}
       <div className="fixed top-0 left-0 h-1.5 bg-emerald-500 z-[60] transition-all duration-150 ease-out shadow-[0_0_10px_rgba(16,185,129,0.8)]" style={{ width: `${scrollProgress}%` }} />
 
@@ -289,7 +306,13 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16 items-center relative z-10">
           <div className="lg:col-span-7">
             
-            <div className="mb-6 flex gap-3">
+            <div className="mb-6 flex flex-wrap items-center gap-3">
+              <Link 
+                href="/onlinecourse" 
+                className="bg-slate-500/20 text-white hover:bg-slate-500/40 border border-slate-500/30 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-white" /> <span className="text-white">Back to Courses</span>
+              </Link>
               <span className="bg-orange-500/20 text-orange-400 border border-orange-500/30 px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-[0.2em] flex items-center gap-1.5 shadow-sm">
                 <courseTag.icon className="w-3.5 h-3.5 text-orange-400 fill-orange-400" /> {courseTag.text}
               </span>
@@ -461,7 +484,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 </div>
             </section>
 
-            {/* SYLLABUS SECTION (MOVED HERE) */}
+            {/* SYLLABUS SECTION */}
             {course.syllabus_url && (
               <section>
                 <div className="bg-gradient-to-r from-slate-900 to-slate-800 p-6 md:p-8 rounded-[2rem] border border-slate-700 flex flex-col md:flex-row items-center justify-between gap-6 group hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1">
@@ -668,7 +691,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
            onClick={handleBookSeat}
            className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black py-3.5 rounded-xl text-center shadow-lg active:scale-95 transition-transform"
          >
-            Enroll Now
+           Enroll Now
          </button>
       </div>
 

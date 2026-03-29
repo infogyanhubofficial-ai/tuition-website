@@ -26,6 +26,16 @@ export default function CourseEnrollmentPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  // Safely decode the course name
+  const decodedCourseName = useMemo(() => {
+    if (!course_id) return '';
+    try {
+      return decodeURIComponent(course_id);
+    } catch (e) {
+      return course_id;
+    }
+  }, [course_id]);
+
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [course, setCourse] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -71,15 +81,12 @@ export default function CourseEnrollmentPage() {
         }));
       }
 
-      if (course_id) {
+      if (decodedCourseName) {
         try {
-          const { data, error } = await supabase
-            .from('online-courses')
-            .select('*')
-            .eq('id', course_id)
-            .single();
-
-          if (error) throw error;
+          // UPDATED: Use the API route instead of direct Supabase call so it handles titles/UUIDs correctly
+          const res = await fetch(`/api/online-courses/${encodeURIComponent(decodedCourseName)}`);
+          if (!res.ok) throw new Error("Course not found");
+          const data = await res.json();
           setCourse(data);
         } catch (err) {
           setErrors({ general: "Could not load course details." });
@@ -89,7 +96,7 @@ export default function CourseEnrollmentPage() {
     };
     
     initData();
-  }, [course_id, supabase]);
+  }, [decodedCourseName, supabase]);
 
   // 🔥 MATHEMATICALLY CORRECT PRICING LOGIC
   const pricing = useMemo(() => {
@@ -160,7 +167,7 @@ export default function CourseEnrollmentPage() {
 
       const { error } = await supabase.from('enrollments').insert([{
         user_id: userId,
-        course_id: course?.id,
+        course_id: course?.id, // Uses the real UUID fetched from the API
         full_name: form.full_name,
         email: form.email,
         whatsapp_number: formattedWhatsapp,
@@ -232,6 +239,20 @@ export default function CourseEnrollmentPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-[100px] lg:pb-0">
       
+      {/* UPDATED: Link Previews via Open Graph Meta Tags */}
+      {course && (
+        <>
+          <title>{`Enroll in ${course.title} | GyanHub`}</title>
+          <meta property="og:title" content={`Enroll in ${course.title} | GyanHub`} />
+          <meta property="og:description" content="Secure your seat for this industry-level training course." />
+          {course.cover_pic && <meta property="og:image" content={course.cover_pic} />}
+          <meta property="og:url" content={`https://www.gyanhub.com.np/onlinecourse/${encodeURIComponent(decodedCourseName)}/enroll`} />
+          <meta name="twitter:card" content="summary_large_image" />
+          {course.cover_pic && <meta name="twitter:image" content={course.cover_pic} />}
+          <meta name="twitter:title" content={`Enroll in ${course.title}`} />
+        </>
+      )}
+
       <AnimatePresence>
         {showSuccessModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
@@ -280,7 +301,8 @@ export default function CourseEnrollmentPage() {
 
       {/* HEADER FIX: Single line Header */}
       <nav className="w-full h-16 sm:h-20 bg-white border-b flex items-center px-4 lg:px-12 justify-between shrink-0 sticky top-0 z-40 shadow-sm">
-        <Link href={`/online-courses/${course_id}`} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-xs sm:text-sm transition-colors">
+        {/* UPDATED: Link points to the new /onlinecourse/ path safely encoded */}
+        <Link href={`/onlinecourse/${encodeURIComponent(decodedCourseName)}`} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold text-xs sm:text-sm transition-colors">
           <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Back to Course</span><span className="sm:hidden">Back</span>
         </Link>
         <div className="flex items-center">

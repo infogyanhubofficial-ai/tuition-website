@@ -55,7 +55,7 @@ export default function OnlineCoursesPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [sortBy, setSortBy] = useState("newest");
+  const [sortBy, setSortBy] = useState("earliest"); // Default to earliest
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,21 +80,41 @@ export default function OnlineCoursesPage() {
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
   const filteredAndSortedCourses = useMemo(() => {
-    let result = courses.filter(course =>
-      course?.title?.toLowerCase().includes(debouncedSearch.toLowerCase())
-    );
+    // Clone courses to prevent any direct mutation of state
+    let result = [...courses];
+
+    if (debouncedSearch) {
+      result = result.filter(course =>
+        course?.title?.toLowerCase().includes(debouncedSearch.toLowerCase())
+      );
+    }
 
     if (selectedCategory !== "All") {
       result = result.filter(course => course.category === selectedCategory);
     }
 
     return result.sort((a, b) => {
-      const priceA = a.fee * (1 - (a.discount || 0) / 100);
-      const priceB = b.fee * (1 - (b.discount || 0) / 100);
+      if (sortBy === "price_low") {
+        const priceA = a.fee * (1 - (a.discount || 0) / 100);
+        const priceB = b.fee * (1 - (b.discount || 0) / 100);
+        return priceA - priceB;
+      }
       
-      if (sortBy === "price_low") return priceA - priceB;
-      if (sortBy === "price_high") return priceB - priceA;
-      return new Date(b.start_datetime).getTime() - new Date(a.start_datetime).getTime();
+      if (sortBy === "price_high") {
+        const priceA = a.fee * (1 - (a.discount || 0) / 100);
+        const priceB = b.fee * (1 - (b.discount || 0) / 100);
+        return priceB - priceA;
+      }
+      
+      // Default fallback: Earliest starting course first
+      // FIX: Use Infinity for invalid/missing dates so they always sort to the bottom
+      const timeA = a.start_datetime ? new Date(a.start_datetime).getTime() : NaN;
+      const timeB = b.start_datetime ? new Date(b.start_datetime).getTime() : NaN;
+      
+      const safeTimeA = isNaN(timeA) ? Infinity : timeA;
+      const safeTimeB = isNaN(timeB) ? Infinity : timeB;
+
+      return safeTimeA - safeTimeB;
     });
   }, [courses, debouncedSearch, selectedCategory, sortBy]);
 
@@ -111,7 +131,7 @@ export default function OnlineCoursesPage() {
       <header className="max-w-7xl mx-auto px-6 sm:px-8 pt-12 pb-10 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-8 border-b border-gray-200 dark:border-gray-800">
         <div className="w-full lg:w-auto">
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight mb-3 text-gray-900 dark:text-white">
-            Master Your Future <br />
+            Master our Upcoming <br />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-amber-500">
               Online Courses
             </span>
@@ -145,7 +165,7 @@ export default function OnlineCoursesPage() {
               onChange={e => setSortBy(e.target.value)}
               className="bg-white dark:bg-gray-900 px-4 py-3.5 text-sm font-medium border border-gray-200 dark:border-gray-800 rounded-2xl focus:ring-4 focus:ring-orange-500/20 outline-none cursor-pointer shadow-sm flex-1 sm:flex-none"
             >
-              <option value="newest">Newest First</option>
+              <option value="earliest">Earliest First</option>
               <option value="price_low">Price: Low to High</option>
               <option value="price_high">Price: High to Low</option>
             </select>
@@ -238,12 +258,15 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
 
   // Mock 'Last Updated' logic (1 to 3 weeks based on ID)
   const updatedWeeksAgo = (course.id?.charCodeAt(0) % 3) + 1;
+  
+  // Format the course title for the URL
+  const courseSlug = course.title ? encodeURIComponent(course.title) : course.id;
 
   return (
     <div className="group relative flex flex-col bg-gradient-to-b from-gray-50 to-white dark:from-gray-900/50 dark:to-gray-900 rounded-[1.5rem] border border-gray-200 dark:border-gray-800 shadow-sm hover:shadow-2xl hover:-translate-y-1.5 transition-all duration-300 overflow-hidden">
       
-      {/* 1. FULL CARD CLICKABLE (Absolute Link stretching over card) */}
-      <Link href={`/online-courses/${course.id}`} className="absolute inset-0 z-10" aria-label={`View details for ${course.title}`} />
+      {/* 🔥 1. FULL CARD CLICKABLE (Points to the new Course Name URL structure) */}
+      <Link href={`/onlinecourse/${courseSlug}`} className="absolute inset-0 z-10" aria-label={`View details for ${course.title}`} />
       
       {/* --- TOP IMAGE SECTION --- */}
       <div className="relative w-full aspect-[16/9] overflow-hidden bg-gray-100 dark:bg-gray-800">
@@ -313,7 +336,7 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           {course.title || 'Untitled Course'}
         </h2>
 
-        {/* 5. Bullet Style Preview */}
+        {/* Bullet Style Preview */}
         {descriptionBullets.length > 0 ? (
           <ul className="space-y-1.5 mb-5 flex-grow">
             {descriptionBullets.map((bullet, idx) => (
@@ -364,8 +387,9 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
         {/* --- BOTTOM CTA SECTION --- */}
         <div className="mt-auto flex flex-col gap-3 relative z-20 pointer-events-auto">
           <div className="flex items-center gap-2">
+            {/* 🔥 2. ENROLL BUTTON CLICKABLE (Points to the new Course Name URL structure) */}
             <Link 
-              href={`/online-courses/${course.id || '#'}/enroll`}
+              href={`/onlinecourse/${courseSlug}/enroll`}
               className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-black text-white bg-gradient-to-r from-orange-600 to-amber-500 hover:from-orange-500 hover:to-amber-400 shadow-[0_5px_15px_rgba(234,88,12,0.2)] hover:shadow-[0_8px_25px_rgba(234,88,12,0.4)] transition-all active:scale-95"
             >
               Enroll Now <ArrowRight size={16} />
