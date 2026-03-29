@@ -275,7 +275,8 @@ export default function ProfilePage() {
     const { data: cData } = await supabase
       .from('online-courses')
       .select('id, title, fee, start_datetime, cover_pic, discount')
-      .order('created_at', { ascending: false })
+      .gte('start_datetime', new Date().toISOString()) // Only future/upcoming courses
+      .order('start_datetime', { ascending: true }) // Earliest starting course first
       .limit(1)
       .maybeSingle();
     
@@ -509,16 +510,18 @@ export default function ProfilePage() {
         .glass-panel { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.8); box-shadow: 0 4px 30px rgba(0, 0, 0, 0.03); }
       `}</style>
 
-      {/* Floating Chat Button */}
-      <motion.button
-        onClick={scrollToChatbox}
-        animate={{ y: [0, -8, 0] }}
-        transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-        className="fixed bottom-24 lg:bottom-10 right-6 z-[60] bg-gradient-to-br from-blue-600 to-indigo-600 text-white px-5 py-3.5 rounded-full shadow-[0_10px_25px_rgba(79,70,229,0.4)] flex items-center gap-2 font-black text-sm hover:scale-105 transition-transform border border-indigo-400/50"
-        aria-label="Open GyanHub Support Chat"
-      >
-        <MessageCircle size={18} className="fill-white/20" /> GyanHub Support
-      </motion.button>
+      {/* Floating Chat Button (Moved to vertically centered on the right side) */}
+      <div className="fixed top-1/2 -translate-y-1/2 right-4 lg:right-6 z-[60]">
+        <motion.button
+          onClick={scrollToChatbox}
+          animate={{ y: [0, -8, 0] }}
+          transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+          className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white px-5 py-3.5 rounded-full shadow-[0_10px_25px_rgba(79,70,229,0.4)] flex items-center gap-2 font-black text-sm hover:scale-105 transition-transform border border-indigo-400/50"
+          aria-label="Open GyanHub Support Chat"
+        >
+          <MessageCircle size={18} className="fill-white/20" /> GyanHub Support
+        </motion.button>
+      </div>
 
       <AnimatePresence>
         {isApplicationsOpen && !isTutorMode && (
@@ -1609,7 +1612,7 @@ function LatestCourseCard({ course, isTutor }: { course: OnlineCourse; isTutor: 
 
   return (
     <div
-      onClick={() => window.location.href = `/online-courses/${course.id}`}
+      onClick={() => window.location.href = `/onlinecourse/${encodeURIComponent(course.title)}`}
       className={`glass-panel rounded-[32px] p-6 flex flex-col md:flex-row gap-6 items-center ${hoverBorder} transition-all duration-500 cursor-pointer group relative overflow-hidden`}
     >
       {course.discount > 0 && (

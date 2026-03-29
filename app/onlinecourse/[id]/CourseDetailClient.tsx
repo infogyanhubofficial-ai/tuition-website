@@ -324,7 +324,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
                 <div className="flex flex-wrap items-stretch gap-4">
                     <div className="flex items-center gap-4 bg-slate-900/50 border border-slate-700 px-5 py-4 rounded-2xl shadow-inner backdrop-blur-sm">
                         <div className="flex flex-col">
-                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Registration Closes In</span>
+                            <span className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Class Starts IN</span>
                             <span className="text-emerald-400 font-mono text-lg font-black tracking-wider flex gap-2">
                               <span className="bg-slate-800 px-2 py-1 rounded border border-slate-700">{String(courseCountdown.days).padStart(2, '0')}d</span>:
                               <span className="bg-slate-800 px-2 py-1 rounded border border-slate-700">{String(courseCountdown.hours).padStart(2, '0')}h</span>:

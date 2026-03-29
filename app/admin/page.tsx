@@ -555,9 +555,10 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const getImageUrl = (path: string) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
-    const fileName = path.split('/').pop();
-    if (!fileName) return '';
-    const { data } = supabase.storage.from('others').getPublicUrl(fileName);
+    
+    // Fix: We don't pop the filename because if the file is nested inside a folder structure
+    // passing just the filename breaks the Supabase storage URL.
+    const { data } = supabase.storage.from('others').getPublicUrl(path);
     return data.publicUrl;
   };
 
@@ -602,7 +603,10 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
             </tr>
           </thead>
           <tbody>
-            {filteredData.map(order => (
+            {filteredData.map(order => {
+              const isCourse = order.order_type.toLowerCase().includes('course');
+              
+              return (
               <tr key={order.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer" onClick={() => setSelectedOrder(order)}>
                 <td className="p-6 text-sm text-slate-500 font-bold whitespace-nowrap">
                   {new Date(order.created_at).toLocaleDateString()}
@@ -613,11 +617,16 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                 </td>
                 <td className="p-6">
                   <p className="font-bold text-slate-800 flex items-center gap-2">
-                    <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{order.order_type}</span>
+                    <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">
+                      {isCourse ? 'COURSE' : order.order_type}
+                    </span>
                     Rs. {order.price}
                   </p>
                   <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.tutor_name}>
-                    Target: {order.tutor_name}
+                    {isCourse 
+                      ? `Course: ${order.tutor_name} | Target: GyanHub Online Courses`
+                      : `Target: ${order.tutor_name}`
+                    }
                   </p>
                 </td>
                 <td className="p-6" onClick={(e) => e.stopPropagation()}>
@@ -643,7 +652,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   </div>
                 </td>
               </tr>
-            ))}
+            )})}
             {filteredData.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-slate-500">No orders found.</td></tr>}
           </tbody>
         </table>
@@ -664,8 +673,19 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
               </div>
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
                 <p className="text-[10px] font-black uppercase text-slate-400">Order Info</p>
-                <p><span className="font-bold">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
-                <p><span className="font-bold">Target:</span> {selectedOrder.tutor_name}</p>
+                
+                {selectedOrder.order_type.toLowerCase().includes('course') ? (
+                  <>
+                    <p><span className="font-bold">Course:</span> <span className="uppercase">{selectedOrder.tutor_name}</span></p>
+                    <p><span className="font-bold">Target:</span> GyanHub Online Courses</p>
+                  </>
+                ) : (
+                  <>
+                    <p><span className="font-bold">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
+                    <p><span className="font-bold">Target:</span> {selectedOrder.tutor_name}</p>
+                  </>
+                )}
+
                 <p><span className="font-bold">Price:</span> Rs. {selectedOrder.price}</p>
                 <p><span className="font-bold">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
               </div>

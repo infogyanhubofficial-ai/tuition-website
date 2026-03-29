@@ -131,11 +131,12 @@ export default function MyCoursesPage() {
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
           
-        // FIX 3: Removed `.eq('is_active', true)` in case the column doesn't exist yet
+        // FIX 3: Fetching upcoming courses only and ordering by start_datetime ascending
         const coursesPromise = supabase
           .from('online-courses')
           .select('id, title, duration, fee, discount, cover_pic, start_datetime')
-          .order('created_at', { ascending: false })
+          .gte('start_datetime', new Date().toISOString()) // Only future/upcoming courses
+          .order('start_datetime', { ascending: true }) // Earliest starting course first
           .limit(4);
 
         const [certRes, enrollRes, coursesRes] = await Promise.all([certPromise, enrollPromise, coursesPromise]);
@@ -406,7 +407,7 @@ export default function MyCoursesPage() {
 
               return (
                 <motion.div key={course.id} variants={fadeUp}>
-                  <Link href={`/online-courses/${course.id}`} className="group block h-full cursor-pointer">
+                  <Link href={`/onlinecourse/${encodeURIComponent(course.title)}`} className="group block h-full cursor-pointer">
                     <div className="relative h-full flex flex-col rounded-[28px] overflow-hidden bg-white border border-slate-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
                       
                       {course.discount > 0 && (

@@ -16,7 +16,7 @@ import {
 
 // --- INTERFACES ---
 interface Vacancy {
-  id: number;
+  id: number | string;
   subject: string | string[]; 
   location: string;
   class_level: string;
@@ -26,7 +26,7 @@ interface Vacancy {
 }
 
 interface Tutor {
-  id: number;
+  id: number | string;
   name: string;
   subject: string | string[]; 
   experience: number;
@@ -34,7 +34,7 @@ interface Tutor {
 }
 
 interface CoursePromo {
-  id: number;
+  id: number | string;
   title: string;
   fee: string | number;
   start_datetime: string;
@@ -156,7 +156,7 @@ export default function Home() {
   // States
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [topTutors, setTopTutors] = useState<Tutor[]>([]);
-  const [promoCourses, setPromoCourses] = useState<CoursePromo[]>([]); // Array for multiple courses
+  const [promoCourses, setPromoCourses] = useState<CoursePromo[]>([]); 
   const [search, setSearch] = useState("");
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [activeVacancyIndex, setActiveVacancyIndex] = useState(0);
@@ -181,7 +181,12 @@ export default function Home() {
           supabase.from("tutors").select("id, name, subject, experience, location").eq('verified', true).limit(6),
           supabase.from("tutors").select("id", { count: "exact", head: true }),
           supabase.from("vacancies").select("id", { count: "exact", head: true }),
-          supabase.from("online-courses").select("id, title, fee, start_datetime, cover_pic, discount").order("created_at", { ascending: false }).limit(2), // Fetch top 2 courses
+          // Changed order to target the soonest upcoming courses
+          supabase.from("online-courses")
+            .select("id, title, fee, start_datetime, cover_pic, discount")
+            .gte("start_datetime", new Date().toISOString()) // Added to ensure it skips past courses
+            .order("start_datetime", { ascending: true }) 
+            .limit(2), 
         ]);
 
         if (!isMounted) return;
@@ -195,7 +200,6 @@ export default function Home() {
           setActiveVacanciesCount(vacanciesCountRes.count);
         }
 
-        // Delay promo popups so they don't interrupt immediately
         if (courseRes.data && courseRes.data.length > 0) {
           setTimeout(() => { if (isMounted) setPromoCourses(courseRes.data); }, 3000); 
         }
@@ -209,12 +213,10 @@ export default function Home() {
     return () => { isMounted = false; }; 
   }, []);
 
-  // Remove individual promo course
-  const handleRemovePromo = (id: number) => {
+  const handleRemovePromo = (id: string | number) => {
     setPromoCourses((prev) => prev.filter((course) => course.id !== id));
   };
 
-  // Handle outside click for search dropdown
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
@@ -225,7 +227,6 @@ export default function Home() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Animation Intervals (Desktop sidebars)
   useEffect(() => {
     if (vacancies.length <= 1) return;
     const interval = setInterval(() => setActiveVacancyIndex((prev) => (prev + 1) % vacancies.length), 4000);
@@ -264,7 +265,7 @@ export default function Home() {
         <motion.div style={{ y: yParallax }} className="absolute top-[20%] left-[60%] w-[30vw] h-[30vw] rounded-full bg-gradient-to-tr from-sky-300/40 to-blue-500/10 blur-[60px] mix-blend-multiply opacity-60" />
       </div>
 
-      {/* Floating Promo Cards (Crossable Stack of 2) */}
+      {/* Floating Promo Cards */}
       <div className="fixed bottom-4 left-4 sm:bottom-6 sm:left-6 z-[100] w-full max-w-[320px] flex flex-col gap-3 pointer-events-none">
         <AnimatePresence>
           {promoCourses.map((course) => (
@@ -306,9 +307,9 @@ export default function Home() {
                  <div className="font-black text-slate-900 text-[13px]">Rs. {course.fee}</div>
               </div>
 
-              {/* Bug Fix: Forced !text-white so it never renders black text on the black background */}
+              {/* Updated Link to map properly to /onlinecourse/Title */}
               <Link 
-                href={`/online-courses/${course.id}`} 
+                href={`/onlinecourse/${encodeURIComponent(course.title)}`} 
                 onClick={() => handleRemovePromo(course.id)} 
                 className="flex items-center justify-center w-full bg-slate-900 text-white !text-white text-[13px] font-bold py-2.5 rounded-xl hover:bg-slate-800 transition-colors"
               >
@@ -431,7 +432,6 @@ export default function Home() {
 
                 <div className="mt-8 sm:mt-12 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
                   <motion.div whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} className="w-full sm:w-auto">
-                    {/* Bug Fix: Forced !text-white on the main CTA button too */}
                     <Link href="/post-tuition" className="group flex h-14 w-full sm:min-w-[200px] items-center justify-center gap-2 rounded-2xl bg-slate-900 px-8 text-sm font-bold text-white !text-white shadow-xl transition-all hover:bg-slate-800 hover:shadow-2xl">
                       Post Tuition Request <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                     </Link>
