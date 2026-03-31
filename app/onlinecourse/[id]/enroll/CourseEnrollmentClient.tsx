@@ -10,7 +10,7 @@ import NepaliDate from 'nepali-date-converter';
 import { createClient } from "@/lib/supabase/client";
 import { 
   CheckCircle2, ChevronLeft, ShieldCheck, 
-  Calendar, AlertCircle, Loader2, AlignLeft, Mail, User, CreditCard, Clock, Check, Users, Shield, Award, Sparkles, Phone, Lock
+  Calendar, AlertCircle, Loader2, AlignLeft, Mail, User, CreditCard, Clock, Check, Users, Shield, Award, Sparkles, Phone, Lock, Info
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -41,6 +41,11 @@ export default function CourseEnrollmentClient() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  
+  // NEW: Validation Modal States
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
+  
   const [userId, setUserId] = useState<string | null>(null);
   
   const [form, setForm] = useState({ 
@@ -125,11 +130,32 @@ export default function CourseEnrollmentClient() {
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (!form.full_name.trim()) newErrors.full_name = "Name is required";
-    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) newErrors.email = "Valid email is required";
-    if (form.whatsapp.replace(/\D/g, '').length !== 10) newErrors.whatsapp = "Valid 10-digit number required";
+    const missingFields: string[] = [];
+
+    if (!form.full_name.trim()) {
+      newErrors.full_name = "Name is required";
+      missingFields.push("Full Name");
+    }
+    
+    if (!form.email.trim() || !/^\S+@\S+\.\S+$/.test(form.email)) {
+      newErrors.email = "Valid email is required";
+      missingFields.push("Valid Email Address");
+    }
+    
+    if (form.whatsapp.replace(/\D/g, '').length !== 10) {
+      newErrors.whatsapp = "Valid 10-digit number required";
+      missingFields.push("10-Digit WhatsApp Number");
+    }
+
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+
+    if (missingFields.length > 0) {
+      setValidationMessages(missingFields);
+      setShowValidationModal(true);
+      return false;
+    }
+
+    return true;
   };
 
   const handleEnrollment = async () => {
@@ -231,6 +257,56 @@ export default function CourseEnrollmentClient() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans pb-[100px] lg:pb-0">
       <AnimatePresence>
+        {/* VALIDATION MODAL */}
+        {showValidationModal && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-white rounded-[24px] shadow-2xl max-w-md w-full overflow-hidden border border-slate-100"
+            >
+              <div className="bg-orange-50 p-6 flex flex-col items-center border-b border-orange-100">
+                <div className="w-14 h-14 bg-orange-100 rounded-full flex items-center justify-center mb-3">
+                  <AlertCircle className="w-7 h-7 text-orange-600" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 text-center">Incomplete Information</h3>
+              </div>
+              
+              <div className="p-6">
+                <p className="text-slate-600 font-medium mb-4 text-center">
+                  Please provide the following details to proceed with your enrollment:
+                </p>
+                
+                <ul className="space-y-3 mb-6 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  {validationMessages.map((msg, idx) => (
+                    <li key={idx} className="flex items-center gap-3 text-sm font-bold text-slate-700">
+                      <div className="w-2 h-2 rounded-full bg-orange-500 shadow-sm shadow-orange-500/50"></div> 
+                      {msg}
+                    </li>
+                  ))}
+                </ul>
+                
+                <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-100 mb-6 flex gap-3 items-start">
+                  <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-blue-800 font-medium leading-relaxed">
+                    <span className="font-bold block mb-1">Why do we need this?</span> 
+                    We require accurate contact information for processing your certification, issuing billing receipts, and securely sharing class links and updates.
+                  </p>
+                </div>
+                
+                <button 
+                  onClick={() => setShowValidationModal(false)}
+                  className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-black transition-colors shadow-lg shadow-slate-900/10"
+                >
+                  Got it, let me fill that out
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* SUCCESS MODAL */}
         {showSuccessModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} className="bg-white rounded-[32px] shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100">
@@ -247,16 +323,22 @@ export default function CourseEnrollmentClient() {
                 <div className="bg-slate-50 border border-slate-100 rounded-2xl p-6 text-center">
                   <h3 className="text-lg font-black text-slate-900 mb-2">Next Step: Complete Payment</h3>
                   <p className="text-slate-600 text-sm leading-relaxed">
-                    We've saved your spot and locked in your discount! To fully confirm your enrollment, please pay the 10% deposit.
+                    We've saved your spot and locked in your discount! To fully confirm your enrollment, please pay the 10% deposit from your offered fee.
                   </p>
                 </div>
                 
                 <div className="flex justify-between items-center p-4 bg-orange-50/50 rounded-xl border border-orange-100">
-                  <span className="text-slate-600 font-bold">Deposit Required</span>
+                  <span className="text-slate-600 font-bold">Deposit Required for Booking</span>
                   <span className="text-2xl font-black text-orange-600">Rs. {(pricing?.depositAmount ?? 0).toLocaleString()}</span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                  <p className="text-sm text-slate-600 font-medium">
+                    <span className="font-bold text-slate-800">Note:</span> You can track your courses, certificate and booking status on <span className="font-bold">"My Courses"</span> section of website !
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4 pt-2">
                   <button 
                     onClick={() => router.push('/my-courses')} 
                     className="flex-1 flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
@@ -316,7 +398,7 @@ export default function CourseEnrollmentClient() {
             </div>
 
             <div className="space-y-2 mb-10 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-              <h3 className="text-xs font-black uppercase text-slate-400 mb-3 tracking-widest">Batch Details</h3>
+              <h3 className="text-xs font-black uppercase text-slate-400 mb-3 tracking-widest">Course Schedule</h3>
               <div className="flex items-center gap-3 text-slate-800 font-bold text-lg">
                 <Calendar className="w-5 h-5 text-orange-600" />
                 <span>{course?.start_datetime ? format(new Date(course.start_datetime), 'MMMM do, yyyy') : 'TBD'}</span>
@@ -324,6 +406,9 @@ export default function CourseEnrollmentClient() {
               <div className="pl-8 text-slate-500 font-semibold">{getNepaliDateLine(course?.start_datetime)}</div>
               <div className="pl-8 text-slate-500 font-semibold flex items-center gap-2 mt-1">
                 <Clock className="w-4 h-4 text-slate-400" /> {course?.timing || 'To be announced'}
+              </div>
+              <div className="pl-8 text-slate-500 font-semibold flex items-center gap-2 mt-1">
+                <Calendar className="w-4 h-4 text-slate-400" /> {course?.duration || 'Duration to be announced'}
               </div>
             </div>
 
@@ -448,7 +533,7 @@ export default function CourseEnrollmentClient() {
                 <p className="text-lg font-bold text-white leading-tight mt-1">{course?.title || 'Loading...'}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-2">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-4 pt-2">
                 <div>
                   <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Starting Date</span>
                   <div className="flex items-center gap-2 mt-1">
@@ -461,6 +546,13 @@ export default function CourseEnrollmentClient() {
                   <div className="flex items-center gap-2 mt-1">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
                     <p className="text-sm font-bold">{course?.timing || 'TBD'}</p>
+                  </div>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Course Duration</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <p className="text-sm font-bold">{course?.duration || 'TBD'}</p>
                   </div>
                 </div>
               </div>

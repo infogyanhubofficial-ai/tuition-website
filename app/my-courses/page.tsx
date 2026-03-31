@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-// FIX 1: Use the SSR-compatible Supabase client for Next.js
 import { createClient } from "@/lib/supabase/client";
 import { motion, Variants } from 'framer-motion';
 import NepaliDate from 'nepali-date-converter';
@@ -19,7 +18,10 @@ import {
   PlayCircle,
   AlertCircle,
   CheckCircle2,
-  FileText
+  FileText,
+  Receipt,
+  XCircle,
+  X
 } from 'lucide-react';
 
 // --- Interfaces based on DB schema updates ---
@@ -39,6 +41,7 @@ interface Enrollment {
   locked_price: number;
   confirmed: boolean;
   course_details_url: string;
+  created_at: string;
 }
 
 interface OnlineCourse {
@@ -49,6 +52,15 @@ interface OnlineCourse {
   discount: number;
   cover_pic: string;
   start_datetime: string;
+}
+
+interface Order {
+  id: string;
+  order_type: string;
+  tutor_name: string;
+  price: number;
+  status: string;
+  created_at: string;
 }
 
 // --- Typed as Variants to resolve framer-motion TS error ---
@@ -83,17 +95,20 @@ const formatDualDate = (dateString?: string) => {
 };
 
 export default function MyCoursesPage() {
-  // Initialize secure client inside the component
   const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [upcomingCourses, setUpcomingCourses] = useState<OnlineCourse[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   
   // State for user details to build dynamic URL
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+
+  // State for login popup
+  const [showLoginPopup, setShowLoginPopup] = useState(false);
 
   // --- Helper: Supabase Image URL ---
   const getImageUrl = (path: string, bucket = 'certificates') => {
@@ -107,7 +122,9 @@ export default function MyCoursesPage() {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         
+        // Trigger login popup if no user is found
         if (!user) {
+          setShowLoginPopup(true);
           setLoading(false);
           return;
         }
@@ -119,7 +136,7 @@ export default function MyCoursesPage() {
         setUserName(fetchedName);
         setUserEmail(fetchedEmail);
 
-        // FIX 2: Separate promises so a failure in one doesn't crash the others
+        // Fetch Data Promises
         const certPromise = supabase
           .from('certificates')
           .select('id, syllabus_name, certificate_image, issue_date, certificate_code')
@@ -127,28 +144,40 @@ export default function MyCoursesPage() {
           
         const enrollPromise = supabase
           .from('enrollments')
-          .select('id, course_name, starting_date, status, locked_price, confirmed, course_details_url')
+          .select('id, course_name, starting_date, status, locked_price, confirmed, course_details_url, created_at')
           .eq('user_id', userId)
           .order('created_at', { ascending: false });
           
-        // FIX 3: Fetching upcoming courses only and ordering by start_datetime ascending
         const coursesPromise = supabase
           .from('online-courses')
           .select('id, title, duration, fee, discount, cover_pic, start_datetime')
-          .gte('start_datetime', new Date().toISOString()) // Only future/upcoming courses
-          .order('start_datetime', { ascending: true }) // Earliest starting course first
+          .gte('start_datetime', new Date().toISOString())
+          .order('start_datetime', { ascending: true })
           .limit(4);
 
-        const [certRes, enrollRes, coursesRes] = await Promise.all([certPromise, enrollPromise, coursesPromise]);
+        const ordersPromise = supabase
+          .from('orders')
+          .select('id, order_type, tutor_name, price, status, created_at')
+          .ilike('email', fetchedEmail)
+          .order('created_at', { ascending: false });
+
+        const [certRes, enrollRes, coursesRes, ordersRes] = await Promise.all([
+          certPromise, 
+          enrollPromise, 
+          coursesPromise, 
+          ordersPromise
+        ]);
 
         if (certRes.data) setCertificates(certRes.data);
         if (enrollRes.data) setEnrollments(enrollRes.data);
         if (coursesRes.data) setUpcomingCourses(coursesRes.data);
+        if (ordersRes.data) setOrders(ordersRes.data);
 
         // Optional: log errors if any specific table fails
         if (certRes.error) console.error('Certificates Error:', certRes.error.message);
         if (enrollRes.error) console.error('Enrollments Error:', enrollRes.error.message);
         if (coursesRes.error) console.error('Courses Error:', coursesRes.error.message);
+        if (ordersRes.error) console.error('Orders Error:', ordersRes.error.message);
 
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
@@ -159,6 +188,12 @@ export default function MyCoursesPage() {
 
     fetchDashboardData();
   }, [supabase]);
+
+  // Combine Enrollments and Orders into a single sorted list
+  const combinedBookings = [
+    ...enrollments.map(e => ({ ...e, _type: 'enrollment' as const })),
+    ...orders.map(o => ({ ...o, _type: 'order' as const }))
+  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   if (loading) {
     return (
@@ -198,7 +233,7 @@ export default function MyCoursesPage() {
               <BookOpen className="h-5 w-5 text-emerald-600" />
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 leading-none">Active Bookings</p>
-                <p className="text-lg font-black text-emerald-700 leading-tight">{enrollments.length}</p>
+                <p className="text-lg font-black text-emerald-700 leading-tight">{combinedBookings.length}</p>
               </div>
             </div>
           </div>
@@ -207,7 +242,7 @@ export default function MyCoursesPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
         
-        {/* SECTION 1: Active Bookings (Moved to top) */}
+        {/* SECTION 1: Active Bookings & Orders Unified */}
         <section>
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2.5 bg-gradient-to-br from-emerald-100 to-teal-50 rounded-[14px] text-emerald-600 shadow-sm border border-emerald-200/50">
@@ -216,7 +251,7 @@ export default function MyCoursesPage() {
             <h2 className="text-2xl font-black text-slate-900">My Bookings</h2>
           </div>
 
-          {enrollments.length === 0 ? (
+          {combinedBookings.length === 0 ? (
             <div className="rounded-[32px] border border-dashed border-slate-300 bg-slate-50 p-12 text-center">
               <Calendar className="h-12 w-12 text-slate-300 mx-auto mb-4" />
               <h3 className="text-lg font-bold text-slate-700">No active bookings</h3>
@@ -225,94 +260,197 @@ export default function MyCoursesPage() {
           ) : (
             <div className="bg-white rounded-[32px] border border-slate-200/60 shadow-sm overflow-hidden p-2">
               <div className="divide-y divide-slate-100">
-                {enrollments.map((booking) => (
-                  <div key={booking.id} className="p-4 sm:p-6 hover:bg-slate-50/50 transition-colors rounded-[24px]">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                      
-                      {/* Left: Course Info */}
-                      <div className="flex items-start gap-4 flex-1">
-                        <div className="hidden sm:flex h-12 w-12 rounded-[16px] bg-indigo-50 items-center justify-center text-indigo-600 shrink-0">
-                          <PlayCircle className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-black text-slate-900">{booking.course_name}</h3>
-                            {/* Conditional Enrollment Status Badge */}
-                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${
-                              booking.confirmed 
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                                : 'bg-orange-100 text-orange-800 border border-orange-200'
-                            }`}>
-                              {booking.confirmed ? 'Confirmed' : 'Pending'}
-                            </span>
+                {combinedBookings.map((item) => {
+                  
+                  if (item._type === 'enrollment') {
+                    const booking = item as Enrollment & { _type: 'enrollment' };
+                    return (
+                      <div key={`enroll-${booking.id}`} className="p-4 sm:p-6 hover:bg-slate-50/50 transition-colors rounded-[24px]">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          
+                          {/* Left: Course Info */}
+                          <div className="flex items-start gap-4 flex-1">
+                            <div className="hidden sm:flex h-12 w-12 rounded-[16px] bg-indigo-50 items-center justify-center text-indigo-600 shrink-0">
+                              <PlayCircle className="h-6 w-6" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-3">
+                                <h3 className="text-lg font-black text-slate-900">{booking.course_name}</h3>
+                                {/* Conditional Enrollment Status Badge */}
+                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${
+                                  booking.confirmed 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-orange-100 text-orange-800 border border-orange-200'
+                                }`}>
+                                  {booking.confirmed ? 'Confirmed' : 'Pending'}
+                                </span>
+                              </div>
+                              
+                              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm font-medium text-slate-500">
+                                <span className="flex items-center gap-1.5">
+                                  <Calendar className="h-4 w-4" /> Start: {formatDualDate(booking.starting_date)}
+                                </span>
+                              </div>
+
+                              {/* Syllabus Secondary Action Button */}
+                              {booking.course_details_url && (
+                                <Link 
+                                  href={booking.course_details_url} 
+                                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                >
+                                  <FileText className="h-4 w-4" /> View Course Syllabus
+                                </Link>
+                              )}
+                            </div>
                           </div>
                           
-                          <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm font-medium text-slate-500">
-                            <span className="flex items-center gap-1.5">
-                              <Calendar className="h-4 w-4" /> Start: {formatDualDate(booking.starting_date)}
-                            </span>
+                          {/* Right: Price & Status */}
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start mt-2 sm:mt-0">
+                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fee</span>
+                            <span className="text-lg font-black text-slate-700">Rs. {booking.locked_price}</span>
                           </div>
+                        </div>
 
-                          {/* Syllabus Secondary Action Button */}
-                          {booking.course_details_url && (
-                            <Link 
-                              href={booking.course_details_url} 
-                              className="mt-3 inline-flex items-center gap-1.5 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                            >
-                              <FileText className="h-4 w-4" /> View Course Syllabus
-                            </Link>
+                        {/* Conditional Logic: Payment & Notifications */}
+                        <div className="mt-5">
+                          {booking.confirmed ? (
+                            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100/60 flex items-start gap-3">
+                              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                              <p className="text-sm text-emerald-800 font-medium leading-relaxed">
+                                You are successfully booked for the online course starting <strong>{formatDualDate(booking.starting_date)}</strong>. Stay calm and be prepared for the class. For any queries, WhatsApp us for assistance.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="bg-orange-50 rounded-2xl p-5 border border-orange-200/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                              <div className="flex items-start gap-3">
+                                <AlertCircle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-sm text-orange-900 font-black mb-1">
+                                    Please pay Rs. {Math.round(booking.locked_price * 0.1)} ASAP to lock your fee and discount.
+                                  </p>
+                                  <p className="text-xs text-orange-700 font-medium">
+                                    Remember: fees are subject to change. For queries, WhatsApp us.
+                                  </p>
+                                </div>
+                              </div>
+                              <Link 
+                                href={`/order?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}&order_type=course enrollment&request_type=course&course_name=${encodeURIComponent(booking.course_name)}&price=${Math.round(booking.locked_price * 0.1)}`} 
+                                className="shrink-0 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-6 py-3 rounded-xl text-sm font-black shadow-lg shadow-orange-500/20 active:scale-95 transition-all text-center"
+                              >
+                                Pay Now
+                              </Link>
+                            </div>
                           )}
                         </div>
                       </div>
-                      
-                      {/* Right: Price & Status */}
-                      <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start mt-2 sm:mt-0">
-                        <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Fee</span>
-                        <span className="text-lg font-black text-slate-700">Rs. {booking.locked_price}</span>
-                      </div>
-                    </div>
-
-                    {/* Conditional Logic: Payment & Notifications */}
-                    <div className="mt-5">
-                      {booking.confirmed ? (
-                        <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100/60 flex items-start gap-3">
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
-                          <p className="text-sm text-emerald-800 font-medium leading-relaxed">
-                            You are successfully booked for the online course starting <strong>{formatDualDate(booking.starting_date)}</strong>. Stay calm and be prepared for the class. For any queries, WhatsApp us for assistance.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="bg-orange-50 rounded-2xl p-5 border border-orange-200/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                          <div className="flex items-start gap-3">
-                            <AlertCircle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                    );
+                  } 
+                  
+                  if (item._type === 'order') {
+                    const order = item as Order & { _type: 'order' };
+                    const isPending = order.status.toLowerCase() === 'pending';
+                    const isRejected = order.status.toLowerCase() === 'rejected';
+                    const isVerified = order.status.toLowerCase() === 'verified';
+                    
+                    return (
+                      <div key={`order-${order.id}`} className="p-4 sm:p-6 hover:bg-slate-50/50 transition-colors rounded-[24px]">
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                          
+                          {/* Left: Order Info */}
+                          <div className="flex items-start gap-4 flex-1">
+                            <div className="hidden sm:flex h-12 w-12 rounded-[16px] bg-slate-100 border border-slate-200 items-center justify-center text-slate-500 shrink-0">
+                              <FileText className="h-6 w-6" />
+                            </div>
                             <div>
-                              <p className="text-sm text-orange-900 font-black mb-1">
-                                Please pay Rs. {Math.round(booking.locked_price * 0.1)} ASAP to lock your fee and discount.
+                              <div className="flex flex-wrap items-center gap-3">
+                                <h3 className="text-lg font-black text-slate-900 capitalize">
+                                  {order.order_type.replace('_', ' ')}
+                                </h3>
+                                {/* Order Status Badge */}
+                                <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-widest ${
+                                  isVerified ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                                  isRejected ? 'bg-red-100 text-red-800 border border-red-200' :
+                                  'bg-orange-100 text-orange-800 border border-orange-200'
+                                }`}>
+                                  {order.status}
+                                </span>
+                              </div>
+                              
+                              <p className="text-sm font-bold text-slate-600 mt-1">
+                                Item/Target: <span className="font-medium text-slate-900">{order.tutor_name}</span>
                               </p>
-                              <p className="text-xs text-orange-700 font-medium">
-                                Remember: fees are subject to change. For queries, WhatsApp us.
-                              </p>
+                              
+                              <div className="flex flex-wrap items-center gap-3 mt-1.5 text-sm font-medium text-slate-500">
+                                <span className="flex items-center gap-1.5">
+                                  <Clock className="h-4 w-4" /> Ordered: {formatDualDate(order.created_at)}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                          {/* DYNAMIC PAYMENT ROUTING */}
-                          <Link 
-                            href={`/order?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}&order_type=course enrollment&request_type=course&course_name=${encodeURIComponent(booking.course_name)}&price=${Math.round(booking.locked_price * 0.1)}`} 
-                            className="shrink-0 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white px-6 py-3 rounded-xl text-sm font-black shadow-lg shadow-orange-500/20 active:scale-95 transition-all text-center"
-                          >
-                            Pay Now
-                          </Link>
+                          
+                          {/* Right: Price & Actions */}
+                          <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start mt-2 sm:mt-0 gap-3">
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block">Amount</span>
+                              <span className="text-lg font-black text-slate-700">Rs. {order.price}</span>
+                            </div>
+                          </div>
                         </div>
-                      )}
-                    </div>
 
-                  </div>
-                ))}
+                        {/* Payment Context or Retrying */}
+                        <div className="mt-5">
+                          {isVerified && (
+                            <div className="bg-emerald-50 rounded-2xl p-4 border border-emerald-100/60 flex items-start gap-3">
+                              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                              <p className="text-sm text-emerald-800 font-medium">
+                                Your order has been verified successfully. Check your email or related platform section for updates.
+                              </p>
+                            </div>
+                          )}
+                          
+                          {(isPending || isRejected) && (
+                            <div className={`rounded-2xl p-5 border flex flex-col md:flex-row md:items-center justify-between gap-4 ${isRejected ? 'bg-red-50 border-red-200/60' : 'bg-orange-50 border-orange-200/60'}`}>
+                              <div className="flex items-start gap-3">
+                                {isRejected ? (
+                                  <XCircle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                                ) : (
+                                  <AlertCircle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                                )}
+                                <div>
+                                  <p className={`text-sm font-black mb-1 ${isRejected ? 'text-red-900' : 'text-orange-900'}`}>
+                                    {isRejected ? 'Payment rejected or screenshot invalid.' : 'Payment verification is pending.'}
+                                  </p>
+                                  <p className={`text-xs font-medium ${isRejected ? 'text-red-700' : 'text-orange-700'}`}>
+                                    If the amount wasn't deducted, or you uploaded the wrong screenshot, please retry the payment below.
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <Link 
+                                href={`/order?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}&type=${encodeURIComponent(order.order_type)}&course_name=${encodeURIComponent(order.tutor_name)}&price=${order.price}`} 
+                                className={`shrink-0 text-white px-6 py-3 rounded-xl text-sm font-black active:scale-95 transition-all text-center ${
+                                  isRejected 
+                                    ? 'bg-gradient-to-r from-red-500 to-rose-500 hover:from-red-600 hover:to-rose-600 shadow-lg shadow-red-500/20' 
+                                    : 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/20'
+                                }`}
+                              >
+                                Pay Now
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })}
               </div>
             </div>
           )}
         </section>
 
-        {/* SECTION 2: Completed Courses / Certificates (Moved below Bookings) */}
+        {/* SECTION 2: Completed Courses / Certificates */}
         <section>
           <div className="flex items-center gap-3 mb-8">
             <div className="p-2.5 bg-gradient-to-br from-amber-100 to-yellow-50 rounded-[14px] text-amber-600 shadow-sm border border-amber-200/50">
@@ -334,7 +472,6 @@ export default function MyCoursesPage() {
             >
               {certificates.map((cert) => (
                 <motion.div key={cert.id} variants={fadeUp}>
-                  {/* UPDATE: Redirects to /certificate/?name=...&email=... with URL encoding */}
                   <Link 
                     href={`/certificate/?name=${encodeURIComponent(userName)}&email=${encodeURIComponent(userEmail)}`} 
                     className="group block cursor-pointer"
@@ -397,9 +534,6 @@ export default function MyCoursesPage() {
           <motion.div variants={staggerContainer} initial="hidden" animate="show" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {upcomingCourses.map((course) => {
               
-              // NEW PRICING FIX: 
-              // 'course.fee' from the DB is already the discounted final price (e.g., 2500)
-              // If there's a discount (e.g., 50%), calculate the original full price backwards (e.g., 5000)
               const offerPrice = course.fee;
               const fullPrice = (course.discount > 0 && course.discount < 100)
                 ? Math.round(course.fee / (1 - (course.discount / 100))) 
@@ -489,6 +623,45 @@ export default function MyCoursesPage() {
           <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
         </svg>
       </a>
+
+      {/* LOGIN POPUP MODAL */}
+      {showLoginPopup && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[24px] p-6 sm:p-8 max-w-md w-full shadow-2xl relative animate-in zoom-in-95 duration-300">
+            <button 
+              onClick={() => setShowLoginPopup(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
+              aria-label="Close popup"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            
+            <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 mb-5">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            
+            <h3 className="text-xl font-black text-slate-900 mb-3">Sign in to continue</h3>
+            <p className="text-slate-600 mb-6 leading-relaxed text-sm">
+              For all your activities like booking online courses and tracking certificates, your email is taken as your identity. Please log in for a smoother experience.
+            </p>
+            
+            <div className="flex flex-col gap-3">
+              <Link 
+                href="/login" 
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-blue-500/20"
+              >
+                Sign In Now <ChevronRight className="h-4 w-4" />
+              </Link>
+              <button 
+                onClick={() => setShowLoginPopup(false)}
+                className="w-full bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold py-3 px-4 rounded-xl transition-colors"
+              >
+                Continue as Guest
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

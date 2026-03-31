@@ -5,11 +5,12 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { 
   ArrowLeft, Lock, ShieldCheck, CheckCircle2, Info, User, Mail, 
-  Phone, Loader2, UploadCloud, FileCheck, Receipt, GraduationCap, FileText, Sparkles
+  Phone, Loader2, UploadCloud, FileCheck, Receipt, GraduationCap, 
+  FileText, Sparkles, PlayCircle, MessageCircle 
 } from "lucide-react";
 
 // --- TYPES ---
-type OrderMode = "cv_phone" | "badge" | "course" | "unknown";
+type OrderMode = "cv_phone" | "badge" | "course" | "recording" | "unknown";
 
 function CheckoutContent() {
   const searchParams = useSearchParams();
@@ -17,6 +18,7 @@ function CheckoutContent() {
   const supabase = createClient();
 
   // 1. SAFELY PARSE URL PARAMS (Always fallback to empty string)
+  const urlType = searchParams.get("type")?.toLowerCase() || ""; 
   const requestType = searchParams.get("request_type")?.toLowerCase() || ""; 
   const orderType = searchParams.get("order_type")?.toLowerCase() || ""; 
   const tutorId = searchParams.get("tutor_id") || "";
@@ -25,12 +27,14 @@ function CheckoutContent() {
   const urlEmail = searchParams.get("email") || "";
   const urlPhone = searchParams.get("phone") || "";
   const urlTutorName = searchParams.get("tutor_name") || searchParams.get("tutorName") || "";
-  const urlCourseName = searchParams.get("course_name") || "";
+  // Check both "courseName" and "course_name" to match the redirect URL safely
+  const urlCourseName = searchParams.get("courseName") || searchParams.get("course_name") || "";
   const urlPrice = searchParams.get("price") || "0";
 
   // 2. DETERMINE ORDER MODE
   let currentMode: OrderMode = "unknown";
-  if (orderType.includes("course") || requestType === "course") currentMode = "course";
+  if (urlType === "recording") currentMode = "recording";
+  else if (orderType.includes("course") || requestType === "course") currentMode = "course";
   else if (orderType.includes("verif") || orderType.includes("batch") || orderType.includes("badge")) currentMode = "badge";
   else if (requestType === "cv" || requestType === "phone") currentMode = "cv_phone"; 
 
@@ -44,6 +48,7 @@ function CheckoutContent() {
   const [isUploading, setIsUploading] = useState(false);
   const [agreeRefund, setAgreeRefund] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
+  const [showRecordingSuccess, setShowRecordingSuccess] = useState(false); // New Success Modal State
 
   // 5. DYNAMIC DATA STATE (For fetching tutor names)
   const [fetchedTutorName, setFetchedTutorName] = useState(urlTutorName);
@@ -91,10 +96,22 @@ function CheckoutContent() {
   // 7. CONFIGURE UI BASED ON MODE
   const getOrderConfig = () => {
     switch (currentMode) {
+      case "recording":
+        return {
+          title: "Recording videos",
+          providerLabel: "Course Name",
+          provider: urlCourseName || "Selected Course",
+          price: parseInt(urlPrice) || 0,
+          icon: <PlayCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
+          notice: `You are purchasing instant access to "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
+          noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
+          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+        };
       case "course":
         return {
           title: `Course Enrollment: ${urlCourseName || 'Selected Course'}`,
-          provider: fetchedTutorName || "GyanHub Courses",
+          providerLabel: "Provider Name",
+          provider: fetchedTutorName || "GyanHub Online Courses",
           price: parseInt(urlPrice) || 0,
           icon: <GraduationCap className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
           notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for online class within 24 hours.`,
@@ -104,6 +121,7 @@ function CheckoutContent() {
       case "badge":
         return {
           title: "Verification Badge (One-year)",
+          providerLabel: "Tutor Name",
           provider: fullName || urlName || "Your Profile",
           price: 500,
           icon: <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
@@ -114,6 +132,7 @@ function CheckoutContent() {
       case "cv_phone":
         return {
           title: "Curriculum Vitae & Contact Number",
+          providerLabel: "Tutor Name",
           provider: fetchedTutorName || `Tutor #${tutorId || 'Unknown'}`,
           price: 1000,
           icon: <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
@@ -124,6 +143,7 @@ function CheckoutContent() {
       default:
         return {
           title: "Unknown Service",
+          providerLabel: "Tutor Name",
           provider: "Unknown",
           price: 0,
           icon: <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
@@ -157,20 +177,20 @@ function CheckoutContent() {
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `receipts/${fileName}`;
 
-      // 1. Upload logic (UNCOMMENTED!)
+      // Upload logic
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('others')
         .upload(filePath, screenshot);
         
       if (uploadError) throw uploadError;
 
-      // 2. Database insert logic (UNCOMMENTED AND MAPPED TO YOUR SQL!)
+      // Database insert logic
       const { error: dbError } = await supabase.from('orders').insert([{
         full_name: fullName,
         email: email,
         contact_number: contactNumber,
         order_type: currentMode,
-        tutor_name: config.provider, // Mapped to your SQL column
+        tutor_name: config.provider, // Reusing column for Course Name in recording flow
         price: config.price,
         screenshot_url: uploadData.path,
         agreed_refund_policy: agreeRefund,
@@ -179,8 +199,14 @@ function CheckoutContent() {
       
       if (dbError) throw dbError;
 
-      alert("Order submitted successfully!");
-      router.push("/"); 
+      // Check current mode to redirect properly
+      if (currentMode === "recording") {
+        setIsUploading(false);
+        setShowRecordingSuccess(true);
+      } else {
+        alert("Order submitted successfully!");
+        router.push("/"); 
+      }
       
     } catch (error: any) {
       console.error("Error submitting order:", error);
@@ -192,6 +218,17 @@ function CheckoutContent() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 relative selection:bg-blue-100">
       
+      {/* FLOATING WHATSAPP BUTTON */}
+      <a 
+        href="https://wa.me/9763695665" 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#25D366] text-white px-5 py-3.5 rounded-full shadow-xl hover:-translate-y-1 hover:shadow-2xl hover:bg-[#20b858] transition-all font-bold group border border-[#20b858]/50"
+      >
+        <MessageCircle className="w-6 h-6" />
+        <span className="hidden sm:inline">Immediate Support</span>
+      </a>
+
       {/* HEADER */}
       <header className="bg-white border-b border-slate-200 px-4 py-4 md:px-8 flex items-center justify-between sticky top-0 z-40">
         <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
@@ -332,7 +369,7 @@ function CheckoutContent() {
 
                 <div className="flex justify-between items-start gap-4 pt-5">
                   <span className="text-slate-500 text-xs font-bold uppercase tracking-wider shrink-0 pt-1.5">
-                    {currentMode === 'course' ? 'Provider Name' : 'Tutor Name'}
+                    {config.providerLabel}
                   </span>
                   <div className="flex items-start justify-end gap-2.5 max-w-[65%] text-right">
                     {isFetchingData ? (
@@ -351,11 +388,23 @@ function CheckoutContent() {
                 </div>
               </div>
 
-              {/* Dynamic Notice Box */}
-              <div className={`border rounded-2xl p-4 flex gap-3 shadow-sm ${config.noticeStyle}`}>
-                {config.noticeIcon}
-                <p className="text-sm leading-relaxed font-medium">{config.notice}</p>
-              </div>
+              {/* RECORDINGS HIGHLIGHT (Google Classroom Notice) */}
+              {currentMode === 'recording' && (
+                <div className="bg-emerald-50 border-2 border-emerald-500/20 p-5 rounded-2xl flex gap-3 shadow-sm mb-2">
+                  <GraduationCap className="w-6 h-6 text-emerald-600 shrink-0" />
+                  <p className="text-sm font-bold text-emerald-900 leading-snug">
+                    You will be added to Google Classroom where you will find all class recordings and study materials immediately after payment.
+                  </p>
+                </div>
+              )}
+
+              {/* Dynamic Standard Notice Box */}
+              {currentMode !== 'recording' && (
+                <div className={`border rounded-2xl p-4 flex gap-3 shadow-sm ${config.noticeStyle}`}>
+                  {config.noticeIcon}
+                  <p className="text-sm leading-relaxed font-medium">{config.notice}</p>
+                </div>
+              )}
 
               <div className="pt-2">
                 <div className="flex items-center justify-between mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
@@ -408,6 +457,33 @@ function CheckoutContent() {
 
         </div>
       </main>
+
+      {/* --- SUCCESS MODAL FOR RECORDINGS --- */}
+      {showRecordingSuccess && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[28px] p-8 max-w-md w-full shadow-2xl text-center flex flex-col items-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-sm border-4 border-white">
+              <CheckCircle2 className="w-8 h-8" />
+            </div>
+            
+            <h3 className="text-2xl font-black text-slate-900 mb-2">Thank you!</h3>
+            <p className="text-slate-600 font-medium mb-5 leading-relaxed">
+              Thank you for choosing GyanHub for the recording course of <strong className="text-slate-900">"{urlCourseName}"</strong>.
+            </p>
+            
+            <div className="bg-blue-50 border border-blue-100 p-4.5 rounded-[16px] text-sm text-blue-800 mb-8 text-left w-full">
+              You will get an invitation to join Google Classroom in your email within half an hour. For any queries or problems, please message us at <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className="font-bold underline text-blue-900">9763695665 on WhatsApp</a>.
+            </div>
+            
+            <button 
+              onClick={() => router.push("/my-courses")} 
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-[14px] transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
+            >
+              Go to My Courses
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

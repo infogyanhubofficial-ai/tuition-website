@@ -9,7 +9,8 @@ import { motion, AnimatePresence, useScroll, useSpring, Variants } from "framer-
 import { 
   Menu, X, House, Users, BriefcaseBusiness, 
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
-  LogOut, Settings, BookOpen, ChevronDown, Search, Sparkles, ChevronRight, CheckCircle2
+  LogOut, Settings, BookOpen, ChevronDown, Search, Sparkles, ChevronRight, CheckCircle2,
+  Video // Added Video icon for Recordings
 } from "lucide-react";
 
 // --- Configuration & Data ---
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/tutors", label: "Tutors", icon: Users },
   { href: "/vacancies", label: "Vacancies", icon: BriefcaseBusiness },
   { href: "/certificate", label: "Certificates", icon: GraduationCap },
+  { href: "/recording", label: "Recordings", icon: Video }, // Added Recordings here
 ];
 
 // Data for the universal Search Palette
@@ -26,6 +28,7 @@ const searchData = [
   { label: "Tutors", href: "/tutors", icon: Users },
   { label: "Vacancies", href: "/vacancies", icon: BriefcaseBusiness },
   { label: "Certificates", href: "/certificate", icon: GraduationCap },
+  { label: "Recordings", href: "/recording", icon: Video }, // Added Recordings to Search
   { label: "Dashboard", href: "/profile", icon: Settings },
   { label: "Post Tuition", href: "/post-tuition", icon: PlusCircle },
   { label: "Become a Tutor", href: "/become-a-tutor", icon: UserPlus },

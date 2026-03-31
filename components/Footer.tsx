@@ -24,7 +24,7 @@ const COMPANY_LINKS = [
 ];
 
 const QUICK_LINKS = [
-  { label: "Popular Courses", href: "/online-courses" },
+  { label: "Popular Courses", href: "/onlinecourse" },
   { label: "Find a Tutor", href: "/tutors" },
   { label: "Latest Vacancies", href: "/vacancies" },
 ];

@@ -79,8 +79,8 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
   const [avatars, setAvatars] = useState<StudentAvatar[]>([]);
   const [avatarsLoading, setAvatarsLoading] = useState(true);
   
-  // Realistic Seat Drop
-  const [seats, setSeats] = useState(20); 
+  // Seats configuration: Starts at 15 available (out of 20 total)
+  const [seats, setSeats] = useState(15); 
   const [lastUpdated, setLastUpdated] = useState(1);
 
   const [courseCountdown, setCourseCountdown] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
@@ -100,19 +100,34 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     setCourseTag(tags[Math.floor(Math.random() * tags.length)]);
   }, []);
 
-  // Realistic Urgency Simulator
+  // Persist seat count across reloads so the user sees the drop when they go back
   useEffect(() => {
-    const seatInterval = setInterval(() => {
-      setSeats(prev => {
-        if (prev <= 2) return 2; 
-        return prev - Math.floor(Math.random() * 3 + 1);
-      });
+    if (typeof window !== "undefined") {
+      const savedSeats = localStorage.getItem(`seats_${decodedCourseName}`);
+      if (savedSeats) {
+        setSeats(parseInt(savedSeats, 10));
+      }
+    }
+  }, [decodedCourseName]);
+
+  // Simulated Time Update
+  useEffect(() => {
+    const timeInterval = setInterval(() => {
       setLastUpdated(prev => prev < 15 ? prev + Math.floor(Math.random() * 3 + 1) : 2);
     }, 25000);
-    return () => clearInterval(seatInterval);
+    return () => clearInterval(timeInterval);
   }, []);
 
   const handleBookSeat = () => {
+    // Decrease seats on click and stop at 1
+    setSeats(prev => {
+      const newSeats = prev > 1 ? prev - 1 : 1;
+      if (typeof window !== "undefined") {
+        localStorage.setItem(`seats_${decodedCourseName}`, newSeats.toString());
+      }
+      return newSeats;
+    });
+
     // Encodes the string back to handle spaces safely in the URL
     router.push(`/onlinecourse/${encodeURIComponent(decodedCourseName)}/enroll`);
   };

@@ -6,20 +6,17 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'lh3.googleusercontent.com',
-        port: '',
         pathname: '/**',
       },
       {
         protocol: 'https',
         hostname: 'zuktarghyexwodqnnxlu.supabase.co',
-        port: '',
         pathname: '/storage/v1/object/public/**',
       },
       {
         protocol: 'https',
-        hostname: 'zuktarghyexwodqnnxlu.supabase.co',
-        port: '',
-        pathname: '/storage/v1/object/public/**',
+        hostname: 'placehold.co', // 👈 Added this to fix your current error
+        pathname: '/**',
       },
     ],
   },
