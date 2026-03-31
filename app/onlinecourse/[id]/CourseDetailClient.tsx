@@ -504,7 +504,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
                      </div>
                   </div>
                   <a 
-                    href={`https://docs.google.com/viewer?url=${encodeURIComponent(course.syllabus_url)}`} 
+                    href={course.syllabus_url} 
                     target="_blank" rel="noopener noreferrer" 
                     className="w-full md:w-auto px-8 py-4 bg-emerald-500 text-white rounded-xl font-black text-lg hover:bg-emerald-400 transition-colors whitespace-nowrap text-center shadow-lg shadow-emerald-500/30 active:scale-95"
                   >

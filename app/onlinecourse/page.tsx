@@ -323,7 +323,7 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           
           {course.syllabus_url && (
             <a 
-              href={`https://docs.google.com/viewer?url=${encodeURIComponent(course.syllabus_url)}`}
+              href={course.syllabus_url}
               target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-xs font-bold text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors bg-gray-50 dark:bg-gray-800/50 px-2 py-1 rounded-md"
             >
