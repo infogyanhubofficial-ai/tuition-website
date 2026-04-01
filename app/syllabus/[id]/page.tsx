@@ -139,7 +139,7 @@ function generateSyllabusHTML(
   return `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; color: #333; line-height: 1.5; padding: 0px; background: #ffffff;">
         <div style="text-align: center; border-bottom: 2px solid #eee; padding-bottom: 15px; margin-bottom: 20px;">
-            <img style="height: 140px; margin: 0 auto 15px auto; display: block;" src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="Company Logo" crossorigin="anonymous" />
+            <img style="height: 140px; margin: 0 auto 15px auto; display: block;" src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png" alt="Company Logo" crossorigin="anonymous" />
             <h1 style="margin: 0 0 10px 0; color: #0f172a; font-size: 24px;">"${course.title}"</h1>
             <p style="color: #0d9488; font-weight: bold; margin: 0; font-size: 14px;">Course Duration: ${course.duration}</p>
         </div>

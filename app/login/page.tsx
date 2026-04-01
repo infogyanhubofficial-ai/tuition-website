@@ -15,7 +15,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const supabase = createClient();
 
-  const nextUrl = searchParams.get('next') || searchParams.get('redirect') || '/stories/dashboard';
+  const nextUrl = searchParams.get('next') || searchParams.get('redirect') || '/my-courses';
 
   useEffect(() => {
     const checkUser = async () => {

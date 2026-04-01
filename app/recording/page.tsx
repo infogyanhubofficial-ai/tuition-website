@@ -7,7 +7,7 @@ import {
   PlayCircle, Clock, CheckCircle2, X, ShoppingCart, 
   ExternalLink, BarChart, BookOpen, ShieldCheck, Zap,
   Video, Infinity, Award, ArrowRight, Search, Loader2, AlertTriangle,
-  ChevronDown, HelpCircle
+  ChevronDown, HelpCircle, ChevronUp
 } from "lucide-react";
 
 // --- STRICT TYPES (Aligned perfectly with your Supabase Postgres schema) ---
@@ -90,6 +90,10 @@ export default function RecordedCoursesPage() {
   const [activeModalCourse, setActiveModalCourse] = useState<RecordingCourse | null>(null);
   const [expandedFaqIndex, setExpandedFaqIndex] = useState<number | null>(null); // Track open FAQ
   
+  // Mobile specific accordion states
+  const [showLearningOutcomes, setShowLearningOutcomes] = useState(false);
+  const [showMobileFaqs, setShowMobileFaqs] = useState(false);
+  
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("All");
@@ -131,6 +135,8 @@ export default function RecordedCoursesPage() {
   const handleOpenModal = (course: RecordingCourse) => {
     setActiveModalCourse(course);
     setExpandedFaqIndex(null); // Reset FAQ state when opening a new modal
+    setShowLearningOutcomes(false); // Reset mobile accordions
+    setShowMobileFaqs(false);
   };
 
   const handlePurchaseClick = (course: RecordingCourse) => {
@@ -406,22 +412,22 @@ export default function RecordedCoursesPage() {
         const modalDiscount = activeModalCourse.discount || 0;
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-6 lg:p-10">
             <div 
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
               onClick={() => setActiveModalCourse(null)}
             ></div>
             
-            <div className="relative bg-white rounded-[28px] shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in-95 duration-200">
+            <div className="relative bg-white md:rounded-[28px] shadow-2xl w-full h-full md:h-auto max-w-6xl md:max-h-[90vh] overflow-hidden flex flex-col md:flex-row animate-in fade-in zoom-in-95 duration-200">
               
               <button 
                 onClick={() => setActiveModalCourse(null)}
-                className="absolute top-5 right-5 z-50 p-2.5 bg-white/90 backdrop-blur hover:bg-slate-100 text-slate-600 rounded-full shadow-sm border border-slate-200/50 transition-colors"
+                className="absolute top-3 right-3 md:top-5 md:right-5 z-50 p-2 md:p-2.5 bg-black/50 hover:bg-black/70 text-white md:bg-white/90 md:backdrop-blur md:hover:bg-slate-100 md:text-slate-600 rounded-full shadow-sm md:border md:border-slate-200/50 transition-colors"
               >
                 <X size={20} className="stroke-[2]" />
               </button>
 
-              <div className="w-full md:w-[65%] overflow-y-auto custom-scrollbar flex flex-col">
+              <div className="w-full md:w-[65%] overflow-y-auto custom-scrollbar flex flex-col h-full md:h-auto">
                 <div className="w-full aspect-video bg-slate-900 relative flex-shrink-0">
                   {activeModalCourse.demo_video_url ? (
                     <iframe 
@@ -435,8 +441,8 @@ export default function RecordedCoursesPage() {
                   )}
                 </div>
 
-                <div className="p-8 md:p-10 flex-grow">
-                  <div className="flex flex-wrap gap-2 mb-5">
+                <div className="p-5 md:p-8 lg:p-10 flex-grow pb-[140px] md:pb-8">
+                  <div className="flex flex-wrap gap-2 mb-4 md:mb-5">
                     {activeModalCourse.category && (
                       <span className="bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-[10px]">
                         {activeModalCourse.category}
@@ -449,15 +455,15 @@ export default function RecordedCoursesPage() {
                     )}
                   </div>
 
-                  <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-8 tracking-tight leading-tight">
+                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-slate-900 mb-6 md:mb-8 tracking-tight leading-tight">
                     {activeModalCourse.course_name}
                   </h2>
 
                   {/* Included Section */}
                   {activeModalCourse.description && (
-                    <div className="bg-slate-50 border border-slate-100 rounded-[20px] p-7 mb-10">
-                      <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-widest mb-5">Included in this recording</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
+                    <div className="bg-slate-50 border border-slate-100 rounded-[20px] p-5 md:p-7 mb-8 md:mb-10">
+                      <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-widest mb-4 md:mb-5">Included in this recording</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 md:gap-y-4 gap-x-8">
                         {parseDescription(activeModalCourse.description).map((feature, idx) => (
                           <div key={idx} className="flex items-start gap-3">
                             <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5 stroke-[2]" />
@@ -468,9 +474,9 @@ export default function RecordedCoursesPage() {
                     </div>
                   )}
 
-                  {/* Learning Outcomes */}
+                  {/* Desktop Learning Outcomes */}
                   {extractedOutcomes.length > 0 && (
-                    <div className="mb-10">
+                    <div className="hidden md:block mb-10">
                       <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                         <Award size={22} className="text-blue-600" /> What you will learn
                       </h3>
@@ -487,9 +493,37 @@ export default function RecordedCoursesPage() {
                     </div>
                   )}
 
-                  {/* FAQ Accordion Section */}
+                  {/* Mobile Learning Outcomes Accordion */}
+                  {extractedOutcomes.length > 0 && (
+                    <div className="md:hidden mb-4">
+                      <button 
+                        onClick={() => setShowLearningOutcomes(!showLearningOutcomes)}
+                        className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[16px] shadow-sm font-bold text-slate-900"
+                      >
+                        <span className="flex items-center gap-2"><Award size={20} className="text-blue-600" /> What you will learn</span>
+                        <ChevronDown size={20} className={`text-slate-500 transition-transform ${showLearningOutcomes ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {showLearningOutcomes && (
+                        <div className="pt-3 animate-in fade-in duration-200">
+                          <ul className="space-y-3">
+                            {extractedOutcomes.map((outcome, idx) => (
+                              <li key={idx} className="flex gap-3 p-4 bg-slate-50 border border-slate-100 rounded-[16px]">
+                                <div className="bg-blue-100 text-blue-700 font-bold h-6 w-6 rounded-md flex items-center justify-center flex-shrink-0 text-xs">
+                                  {idx + 1}
+                                </div>
+                                <p className="text-slate-700 text-sm leading-snug">{outcome}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Desktop FAQ Section */}
                   {extractedFaqs.length > 0 && (
-                    <div className="mb-4">
+                    <div className="hidden md:block mb-4">
                       <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
                         <HelpCircle size={22} className="text-blue-600" /> Frequently Asked Questions
                       </h3>
@@ -537,61 +571,105 @@ export default function RecordedCoursesPage() {
                     </div>
                   )}
 
+                  {/* Mobile FAQ Accordion */}
+                  {extractedFaqs.length > 0 && (
+                    <div className="md:hidden mb-4">
+                      <button 
+                        onClick={() => setShowMobileFaqs(!showMobileFaqs)}
+                        className="w-full flex items-center justify-between p-4 bg-white border border-slate-200 rounded-[16px] shadow-sm font-bold text-slate-900"
+                      >
+                        <span className="flex items-center gap-2"><HelpCircle size={20} className="text-blue-600" /> FAQs</span>
+                        <ChevronDown size={20} className={`text-slate-500 transition-transform ${showMobileFaqs ? 'rotate-180' : ''}`} />
+                      </button>
+                      
+                      {showMobileFaqs && (
+                        <div className="pt-3 space-y-2 animate-in fade-in duration-200">
+                          {extractedFaqs.map((faq, idx) => {
+                            const isOpen = expandedFaqIndex === idx;
+                            return (
+                              <div key={idx} className="bg-slate-50 border border-slate-200 rounded-[16px] overflow-hidden">
+                                <button
+                                  onClick={() => setExpandedFaqIndex(isOpen ? null : idx)}
+                                  className="w-full text-left p-4 flex justify-between items-center"
+                                >
+                                  <span className={`font-bold text-sm pr-2 ${isOpen ? 'text-blue-700' : 'text-slate-800'}`}>
+                                    {faq.question}
+                                  </span>
+                                  <ChevronDown size={16} className={`flex-shrink-0 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {isOpen && (
+                                  <div className="px-4 pb-4 pt-0">
+                                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                                      {faq.answer}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                 </div>
               </div>
 
-              {/* Sidebar Checklist & Pricing */}
-              <div className="w-full md:w-[35%] bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col relative">
-                <div className="p-8 md:p-10 sticky top-0">
-                  <div className="mb-8">
+              {/* Sidebar Checklist & Pricing (Desktop) / Sticky Bottom Nav (Mobile) */}
+              <div className="w-full md:w-[35%] bg-white md:bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col fixed md:relative bottom-0 left-0 z-40 md:z-auto">
+                <div className="p-4 md:p-8 lg:p-10 sticky top-0 flex flex-row md:flex-col items-center md:items-stretch justify-between shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.1)] md:shadow-none bg-white md:bg-transparent">
+                  <div className="mb-0 md:mb-8 w-[45%] md:w-auto">
                     {modalDiscount > 0 && (
-                      <div className="inline-block bg-red-100 text-red-600 font-black px-3 py-1.5 rounded-[10px] text-xs uppercase tracking-wide mb-4">
+                      <div className="hidden md:inline-block bg-red-100 text-red-600 font-black px-3 py-1.5 rounded-[10px] text-xs uppercase tracking-wide mb-4">
                         Limited Time {modalDiscount}% Off
                       </div>
                     )}
-                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">One-time payment</div>
-                    <div className="flex items-end gap-3 mb-1">
-                      <span className="text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
+                    <div className="text-[10px] md:text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 md:mb-1">Total Price</div>
+                    <div className="flex flex-col md:flex-row md:items-end gap-1 md:gap-3 mb-1">
+                      <span className="text-2xl md:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-none">
                         {formatCurrency(calculateSalePrice(activeModalCourse.standard_fee, modalDiscount))}
                       </span>
                     </div>
                     {modalDiscount > 0 && (
-                      <div className="text-slate-500 font-medium text-sm mt-2">
-                        Original fee: <span className="line-through">{formatCurrency(activeModalCourse.standard_fee)}</span>
+                      <div className="text-slate-500 font-medium text-xs md:text-sm mt-1 md:mt-2">
+                        <span className="line-through">{formatCurrency(activeModalCourse.standard_fee)}</span>
+                        <span className="md:hidden text-red-500 ml-1 font-bold">({modalDiscount}% Off)</span>
                       </div>
                     )}
                   </div>
 
                   <button 
                     onClick={() => handlePurchaseClick(activeModalCourse)}
-                    className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-[14px] shadow-[0_8px_20px_-6px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] mb-4"
+                    className="w-[50%] md:w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-base md:text-lg py-3.5 md:py-4 rounded-[12px] md:rounded-[14px] shadow-[0_8px_20px_-6px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] md:mb-4"
                   >
-                    <ShoppingCart size={20} className="stroke-[2]" /> Purchase Recording
+                    <ShoppingCart size={18} className="stroke-[2] hidden sm:block" /> Buy <span className="hidden sm:inline">Recording</span>
                   </button>
 
-                  {activeModalCourse.syllabus_url && activeModalCourse.syllabus_url !== "#" && (
-                    <a 
-                      href={activeModalCourse.syllabus_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 font-bold py-3.5 rounded-[14px] transition-all mb-8 shadow-sm"
-                    >
-                      <BookOpen size={18} className="stroke-[2]" /> View Full Syllabus <ExternalLink size={14} className="text-slate-400" />
-                    </a>
-                  )}
+                  <div className="hidden md:block">
+                    {activeModalCourse.syllabus_url && activeModalCourse.syllabus_url !== "#" && (
+                      <a 
+                        href={activeModalCourse.syllabus_url} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 font-bold py-3.5 rounded-[14px] transition-all mb-8 shadow-sm"
+                      >
+                        <BookOpen size={18} className="stroke-[2]" /> View Full Syllabus <ExternalLink size={14} className="text-slate-400" />
+                      </a>
+                    )}
 
-                  <div className="space-y-4 pt-8 border-t border-slate-200">
-                    <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                      <Clock size={18} className="text-slate-400 stroke-[2]" />
-                      <span>{activeModalCourse.course_hours} Hours of HD Video</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                      <Infinity size={18} className="text-slate-400 stroke-[2]" />
-                      <span>Full Lifetime Access</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                      <ShieldCheck size={18} className="text-slate-400 stroke-[2]" />
-                      <span>Secure SSL Checkout</span>
+                    <div className="space-y-4 pt-8 border-t border-slate-200">
+                      <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                        <Clock size={18} className="text-slate-400 stroke-[2]" />
+                        <span>{activeModalCourse.course_hours} Hours of HD Video</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                        <Infinity size={18} className="text-slate-400 stroke-[2]" />
+                        <span>Full Lifetime Access</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
+                        <ShieldCheck size={18} className="text-slate-400 stroke-[2]" />
+                        <span>Secure SSL Checkout</span>
+                      </div>
                     </div>
                   </div>
                 </div>

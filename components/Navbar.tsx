@@ -240,7 +240,7 @@ export default function Navbar() {
                   scrolled ? 'w-[110px] h-[32px] lg:w-[140px] lg:h-[42px]' : 'w-[120px] h-[36px] lg:w-[170px] lg:h-[50px]'
                 }`}
               >
-                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="GyanHub Logo" fill className="object-contain" priority />
+                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png" alt="GyanHub Logo" fill className="object-contain" priority />
               </motion.div>
             </Link>
 
@@ -513,7 +513,7 @@ export default function Navbar() {
               <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-6" />
 
               <div className="flex justify-between items-center mb-6">
-                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png" alt="Logo" width={110} height={35} />
+                <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png" alt="Logo" width={110} height={35} />
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => setMobileOpen(false)} className="p-2 bg-slate-100 rounded-full text-slate-700">
                   <X className="h-5 w-5" strokeWidth={2.5} />
                 </motion.button>

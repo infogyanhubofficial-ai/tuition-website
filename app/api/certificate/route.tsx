@@ -1,4 +1,4 @@
-import { ImageResponse } from "next/og";
+import { ImageResponse } from "@vercel/og";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import QRCode from "qrcode";
 
@@ -33,7 +33,7 @@ const DEFAULTS = {
   instructorTitle: "Course Instructor",
   verifyBaseUrl: "https://www.gyanhub.com.np/certificate",
   logoUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png",
   sealUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/SEAL.png",
   directorSignatureUrl:

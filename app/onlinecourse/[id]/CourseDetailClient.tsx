@@ -382,6 +382,20 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
 
             <div className="flex flex-col sm:flex-row gap-4">
                 <EnrollButton onClick={handleBookSeat} className="flex-1 sm:flex-none justify-center">Secure My Spot</EnrollButton>
+                
+                {/* --- ADDED SYLLABUS BUTTON HERE --- */}
+                {course.syllabus_url && (
+                  <a 
+                    href={course.syllabus_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-8 py-5 bg-slate-800 hover:bg-slate-700 !text-white font-black rounded-2xl text-xl border border-slate-700 transition-all duration-300 active:scale-95 shadow-[0_10px_30px_rgba(0,0,0,0.3)] hover:shadow-[0_15px_40px_rgba(0,0,0,0.5)] hover:-translate-y-1"
+                  >
+                    <BookOpen className="w-5 h-5 text-white" /> <span className="text-white">View Syllabus</span>
+                  </a>
+                )}
+                {/* ---------------------------------- */}
+                
             </div>
           </div>
 
