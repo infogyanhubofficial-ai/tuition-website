@@ -975,7 +975,11 @@ function BookingsManager({ courses, enrollments, refresh }: { courses: OnlineCou
                   <td className="p-6 font-bold text-slate-900">{enr.full_name}</td>
                   <td className="p-6"><p className="text-sm text-slate-800 font-medium">{enr.email}</p><p className="text-xs text-slate-500 mt-1">WA: {enr.whatsapp_number}</p></td>
                   <td className="p-6 text-sm text-slate-500 font-medium">{new Date(enr.created_at).toLocaleDateString()}</td>
-                  <td className="p-6 text-sm text-slate-600 max-w-[150px] truncate" title={enr.remarks}>{enr.remarks || '-'}</td>
+                  <td className="p-6 text-sm text-slate-600 max-w-[200px]">
+                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl max-h-24 overflow-y-auto" title={enr.remarks}>
+                        {enr.remarks || '-'}
+                    </div>
+                  </td>
                   <td className="p-6"><ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Confirmed' : 'Pending'} activeColor="bg-green-500" activeText="text-green-600" /></td>
                   <td className="p-6 text-right">
                     <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"><Trash2 size={16} /></button>
@@ -1094,8 +1098,21 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
   const router = useRouter();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  // NEW: State for image preview popup
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  
+  // Helper to convert storage paths to valid URLs if needed
+  const getImageUrl = (path: string) => {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    const { data } = supabase.storage.from('certificates').getPublicUrl(path);
+    return data.publicUrl;
+  };
+  
+  // NEW: Search and Pagination State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   const [form, setForm] = useState({
     id: null as string | null,
     name: '', email: '', syllabus_name: '',
@@ -1147,11 +1164,31 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     }
   };
 
+  // NEW: Filter Data based on Search Query
+  const filteredData = data.filter((cert) => {
+    const s = searchQuery.toLowerCase();
+    return (
+      (cert.name && cert.name.toLowerCase().includes(s)) ||
+      (cert.email && cert.email.toLowerCase().includes(s)) ||
+      (cert.syllabus_name && cert.syllabus_name.toLowerCase().includes(s)) ||
+      (cert.certificate_code && cert.certificate_code.toLowerCase().includes(s))
+    );
+  });
+
+  // NEW: Pagination Variables
+  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  // Reset to first page whenever search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black text-slate-900">Certificate Registry</h2>
-        {/* FIX 1: Redirect to /admin/bulk-upload instead of opening create modal */}
         <button
           onClick={() => router.push('/admin/bulk-upload')}
           className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all"
@@ -1160,44 +1197,82 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </button>
       </div>
 
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
-              <th className="p-6">Student Info</th><th className="p-6">Course Name</th><th className="p-6">Issue Date & Code</th><th className="p-6 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map(cert => (
-              // FIX 2: Click on row opens image preview popup
-              <tr
-                key={cert.id}
-                className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer"
-                onClick={() => cert.certificate_image && setPreviewImage(cert.certificate_image)}
-              >
-                <td className="p-6">
-                  <p className="font-bold text-slate-900">{cert.name}</p>
-                  <p className="text-sm text-slate-500 mt-1">{cert.email}</p>
-                </td>
-                <td className="p-6"><p className="font-bold text-slate-800">{cert.syllabus_name}</p></td>
-                <td className="p-6">
-                  <p className="text-sm font-bold text-slate-800">{cert.issue_date ? new Date(cert.issue_date).toLocaleDateString() : 'N/A'}</p>
-                  <p className="text-xs font-mono text-slate-500 mt-1">{cert.certificate_code || '-'}</p>
-                </td>
-                <td className="p-6 text-right" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => openEditModal(cert)} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors" title="Edit"><Edit2 size={16} /></button>
-                    <button onClick={() => handleDelete(cert.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100" title="Delete"><Trash2 size={16} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {data.length === 0 && <tr><td colSpan={4} className="p-10 text-center text-slate-500">No certificates generated yet.</td></tr>}
-          </tbody>
-        </table>
+      {/* NEW: Search Bar Component */}
+      <div className="relative">
+        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+        <input 
+          type="text" 
+          placeholder="Search by name, email, course, or certificate code..." 
+          value={searchQuery} 
+          onChange={(e) => setSearchQuery(e.target.value)} 
+          className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" 
+        />
       </div>
 
-      {/* FIX 2: Certificate image preview modal */}
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden flex flex-col">
+        {/* Added overflow auto bounds for "within its frame" requested constraint */}
+        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
+                <th className="p-6">Student Info</th><th className="p-6">Course Name</th><th className="p-6">Issue Date & Code</th><th className="p-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentData.map(cert => (
+                <tr
+                  key={cert.id}
+                  className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer"
+                  onClick={() => cert.certificate_image && setPreviewImage(cert.certificate_image)}
+                >
+                  <td className="p-6">
+                    <p className="font-bold text-slate-900">{cert.name}</p>
+                    <p className="text-sm text-slate-500 mt-1">{cert.email}</p>
+                  </td>
+                  <td className="p-6"><p className="font-bold text-slate-800">{cert.syllabus_name}</p></td>
+                  <td className="p-6">
+                    <p className="text-sm font-bold text-slate-800">{cert.issue_date ? new Date(cert.issue_date).toLocaleDateString() : 'N/A'}</p>
+                    <p className="text-xs font-mono text-slate-500 mt-1">{cert.certificate_code || '-'}</p>
+                  </td>
+                  <td className="p-6 text-right" onClick={e => e.stopPropagation()}>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openEditModal(cert)} className="p-2 text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors" title="Edit"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDelete(cert.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100" title="Delete"><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredData.length === 0 && <tr><td colSpan={4} className="p-10 text-center text-slate-500">No matching certificates found.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* NEW: Pagination Controls Footer */}
+        {filteredData.length > 0 && (
+          <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+            <span className="text-sm font-medium text-slate-500">
+              Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} entries
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {previewImage && (
         <div
           className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/80 p-4 backdrop-blur-sm"
@@ -1211,12 +1286,12 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
               <X size={28} />
             </button>
             <img
-              src={previewImage}
+              src={getImageUrl(previewImage)}
               alt="Certificate Preview"
               className="w-full rounded-2xl shadow-2xl border border-white/10"
             />
             <a
-              href={previewImage}
+              href={getImageUrl(previewImage)}
               target="_blank"
               rel="noreferrer"
               className="mt-4 flex items-center justify-center gap-2 text-white/70 hover:text-white text-sm font-bold transition-colors"
@@ -1228,7 +1303,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </div>
       )}
 
-      {/* Edit-only modal (no create, that goes to bulk-upload) */}
       {editModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => !uploading && setEditModalOpen(false)}>
           <div className="bg-white rounded-[30px] shadow-2xl max-w-lg w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
