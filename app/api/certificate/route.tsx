@@ -35,7 +35,7 @@ const DEFAULTS = {
   logoUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png",
   sealUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/SEAL.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Official_Stamp-removebg-preview.png",
   directorSignatureUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/director_sign.png",
   fallbackInstructorSignatureUrl:
@@ -185,8 +185,6 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1).trim()}…`;
 }
 
-// FIX: Removed the normalizeDescription function that forced a spatial-analysis
-// GIS fallback. Description is now taken directly from syllabi.description.
 function cleanDescription(value?: string | null): string {
   if (!value || !value.trim()) return "";
   return truncateText(value.replace(/\s+/g, " ").trim(), 125);
@@ -205,9 +203,6 @@ function isUniqueCodeViolation(errorMessage?: string | null) {
 }
 
 // ─── DB Helpers ──────────────────────────────────────────────────────────────
-
-// FIX: getCertificateContext strictly maps syllabi → online_tutors with no
-// hardcoded course-specific fallbacks. All fields come from the DB.
 async function getCertificateContext(supabase: SupabaseClient, cert: CertificateRow) {
   const syllabusId = cert.syllabus_id;
   if (!syllabusId) throw new Error(`Certificate ${cert.id} has no syllabus_id`);
@@ -223,9 +218,6 @@ async function getCertificateContext(supabase: SupabaseClient, cert: Certificate
   if (syllabusError || !syllabus)
     throw new Error(`Unable to load syllabus for certificate ${cert.id}`);
 
-  // FIX: Fetch tutor from online_tutors via syllabi.tutor_id.
-  // Fields mapped: name → instructorName, designation → instructorTitle,
-  // signature_url → instructorSignatureUrl.
   let tutor: TutorLookupRow | null = null;
   if (syllabus.tutor_id) {
     const { data: tutorData } = await supabase
@@ -253,7 +245,6 @@ async function getCourseCodeForSyllabus(supabase: SupabaseClient, syllabusId: nu
   if (!rawCourseCode)
     throw new Error(`Missing course_code in syllabi for syllabus_id=${syllabusId}`);
 
-  // FIX: Certificate code prefix is syllabi.course_code, never a hardcoded string.
   return sanitizeCourseCode(rawCourseCode);
 }
 
@@ -331,8 +322,6 @@ async function insertCertificateWithRetry(
   );
 }
 
-// FIX: buildTemplateData now maps all dynamic fields strictly from the DB.
-// No hardcoded course name, duration, or description fallbacks remain.
 async function buildTemplateData(
   supabase: SupabaseClient,
   cert: CertificateRow
@@ -341,24 +330,18 @@ async function buildTemplateData(
 
   const studentName = cert.name || "Student Name";
   const studentEmail = cert.email || "student@example.com";
-
-  // FIX: syllabi.name → courseName (no "GIS and Mapping Course" fallback)
   const courseName = syllabus.name || cert.syllabus_name || "";
-
-  // FIX: syllabi.duration → courseDuration (no "10 Days | 15+ Hours" fallback)
   const courseDuration = syllabus.duration || "";
-
-  // FIX: syllabi.description → courseDescription via cleanDescription()
-  // (normalizeDescription with its forced spatial-analysis text is removed)
   const courseDescription = cleanDescription(syllabus.description);
 
   const issueDate = cert.issue_date || normalizeDate();
   const certCode = cert.certificate_code || "";
   const verificationUrl = buildVerificationUrl(studentName, studentEmail);
 
+  // QR size increased by 30%: 160 → 208
   const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
     margin: 1,
-    width: 160,
+    width: 208,
     color: { dark: COLORS.navy, light: "#ffffff" },
   });
 
@@ -370,14 +353,10 @@ async function buildTemplateData(
     courseDuration,
     certCode,
     formattedDate: formatDate(issueDate),
-    // FIX: online_tutors.name → instructorName
     instructorName: tutor?.name || "",
-    // FIX: online_tutors.designation → instructorTitle
     instructorTitle: tutor?.designation || DEFAULTS.instructorTitle,
-    // FIX: online_tutors.signature_url → instructorSignatureUrl
     instructorSignatureUrl:
       tutor?.signature_url || DEFAULTS.fallbackInstructorSignatureUrl,
-    // Director details remain hardcoded via DEFAULTS (never changes)
     directorName: DEFAULTS.directorName,
     directorTitle: DEFAULTS.directorTitle,
     directorSignatureUrl: DEFAULTS.directorSignatureUrl,
@@ -392,11 +371,6 @@ async function buildTemplateData(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CERTIFICATE TEMPLATE
-// Applied fixes:
-//   FIX-LOGO   — Logo container and <img> dimensions doubled (200% increase)
-//   FIX-TEXT   — Faint rgba sub-texts replaced with solid COLORS.navySoft /
-//                COLORS.navyLight for legibility
-//   FIX-DUPID  — Duplicate certCode <div> removed from footer centre column
 // ─────────────────────────────────────────────────────────────────────────────
 function CertificateTemplate(data: CertificateTemplateData) {
   const FOOTER_H = 128;
@@ -496,9 +470,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
 
           {/* ══════════════════════════════════════════
               ZONE 1 — HEADER
-              FIX-LOGO: Container doubled from 520×90 → 1040×180.
-              <img> doubled from 440×88 → 880×176.
-              The subtitle below grows naturally via flexDirection:"column".
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -511,7 +482,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
               flexShrink: 0,
             }}
           >
-            {/* FIX-LOGO: Container width 520→1040, height 90→180 */}
             <div
               style={{
                 display: "flex",
@@ -522,7 +492,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 height: "180px",
               }}
             >
-              {/* Elliptical glow scaled proportionally */}
               <div
                 style={{
                   display: "flex",
@@ -534,7 +503,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
                     "radial-gradient(ellipse, rgba(47,109,179,0.10) 0%, rgba(47,109,179,0.04) 50%, rgba(247,251,255,0) 75%)",
                 }}
               />
-              {/* FIX-LOGO: img width 440→880, height 88→176 */}
               <img
                 src={data.logoUrl}
                 alt="Issuer Logo"
@@ -613,7 +581,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
               }}
             />
 
-            {/* FIX-TEXT: "This is to certify that" — solid navySoft, no faint rgba */}
             <div
               style={{
                 display: "flex",
@@ -707,7 +674,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
               {data.courseName}
             </div>
 
-            {/* Orange accent underline — course title only */}
+            {/* Orange accent underline */}
             <div
               style={{
                 display: "flex",
@@ -719,7 +686,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
               }}
             />
 
-            {/* FIX-TEXT: Description — solid navySoft, opacity removed */}
             <div
               style={{
                 display: "flex",
@@ -734,7 +700,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
               {data.courseDescription}
             </div>
 
-            {/* FIX-TEXT: Duration — solid navy, opacity removed */}
             <div
               style={{
                 display: "flex",
@@ -776,7 +741,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
           />
 
           {/* ══════════════════════════════════════════
-              ZONE 3 — FOOTER (locked, never cropped)
+              ZONE 3 — FOOTER
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -846,7 +811,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
               </div>
             </div>
 
-            {/* ── Centre: Seal + issue date only ── */}
+            {/* ── Centre: Seal + issue date ── */}
             <div
               style={{
                 display: "flex",
@@ -857,7 +822,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 height: "100%",
               }}
             >
-              {/* Seal */}
               <div
                 style={{
                   display: "flex",
@@ -883,11 +847,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 />
               </div>
 
-              {/*
-                FIX-DUPID: The duplicate {data.certCode} <div> that was here has
-                been removed entirely. The Credential ID is shown in the top-right
-                badge only. Keeping only the issue date avoids overlap.
-              */}
               <div
                 style={{
                   display: "flex",
@@ -965,7 +924,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 </div>
               </div>
 
-              {/* QR Code */}
+              {/* QR Code — size increased 30%: img 70×70 → 91×91 */}
               <div
                 style={{
                   display: "flex",
@@ -991,8 +950,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
                   <img
                     src={data.qrCodeDataUri}
                     alt="Verification QR"
-                    width={70}
-                    height={70}
+                    width={91}
+                    height={91}
                     style={{ objectFit: "contain" }}
                   />
                   <div
@@ -1026,7 +985,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
             </div>
           </div>
 
-          {/* Credential ID badge — top right, this is the single source of truth */}
+          {/* Credential ID badge */}
           <div
             style={{
               display: "flex",
@@ -1132,20 +1091,19 @@ export async function GET(req: Request) {
       searchParams.get("date") || new Date().toISOString().split("T")[0];
     const studentName = searchParams.get("name") || "Student Name";
     const studentEmail = searchParams.get("email") || "student@example.com";
-    // FIX: No hardcoded "GIS-2026-001" fallback — cert code comes from the DB.
     const certCode = searchParams.get("id") || "";
     const verificationUrl = buildVerificationUrl(studentName, studentEmail);
 
+    // QR size increased by 30%: 160 → 208
     const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
       margin: 1,
-      width: 160,
+      width: 208,
       color: { dark: COLORS.navy, light: "#ffffff" },
     });
 
     const data: CertificateTemplateData = {
       studentName,
       studentEmail,
-      // FIX: No hardcoded "GIS and Mapping Course" fallback in GET preview either
       courseName: searchParams.get("course") || "",
       courseDescription: searchParams.get("description") || "",
       courseDuration: searchParams.get("duration") || "",
