@@ -338,20 +338,23 @@ export default function CourseEnrollmentClient() {
                   </p>
                 </div>
 
+                {/* --- SWAPPED BUTTON ORDER HERE --- */}
                 <div className="flex flex-col sm:flex-row gap-4 pt-2">
-                  <button 
-                    onClick={() => router.push('/my-courses')} 
-                    className="flex-1 flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
-                  >
-                    <Clock className="w-5 h-5" /> Pay Later
-                  </button>
                   <button 
                     onClick={handleProceedToPayment} 
                     className="flex-1 flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-black shadow-lg shadow-slate-900/20 hover:shadow-xl transition-all"
                   >
                     <CreditCard className="w-5 h-5" /> Pay Deposit Now
                   </button>
+                  <button 
+                    onClick={() => router.push('/my-courses')} 
+                    className="flex-1 flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
+                  >
+                    <Clock className="w-5 h-5" /> Pay Later
+                  </button>
                 </div>
+                {/* ------------------------------- */}
+
               </div>
             </motion.div>
           </div>
