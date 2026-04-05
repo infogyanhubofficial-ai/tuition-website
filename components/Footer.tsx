@@ -5,7 +5,7 @@ import { useState } from "react";
 import { 
   Facebook, Youtube, Instagram, Linkedin, 
   Mail, ChevronUp, MessageCircle, ShieldCheck, CheckCircle2,
-  ArrowRight
+  ArrowRight, Lock
 } from "lucide-react";
 
 // --- DATA ARRAYS FOR CODE OPTIMIZATION (Suggestions 11 & 15) ---
@@ -19,7 +19,7 @@ const SOCIAL_LINKS = [
 
 const COMPANY_LINKS = [
   { label: "About GyanHub", href: "/about" },
-  { label: "GyanHub Stories", href: "/stories" },
+  { label: "GyanHub Stories", href: "#", isLocked: true }, // Added isLocked flag
   { label: "User's Data Policy", href: "/privacy-policy" },
 ];
 
@@ -27,6 +27,7 @@ const QUICK_LINKS = [
   { label: "Popular Courses", href: "/onlinecourse" },
   { label: "Find a Tutor", href: "/tutors" },
   { label: "Latest Vacancies", href: "/vacancies" },
+  { label: "Recording Courses", href: "https://www.gyanhub.com.np/recording" }, // Added Recording Courses
 ];
 
 const ADMIN_LINKS = [
@@ -124,11 +125,21 @@ export default function Footer() {
             <ul className="space-y-4 text-[14px] font-medium text-slate-400">
               {COMPANY_LINKS.map(link => (
                 <li key={link.label}>
-                  <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
-                    {link.label}
-                    {/* 12. Animated underline effect */}
-                    <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
-                  </Link>
+                  {link.isLocked ? (
+                    <button 
+                      onClick={(e) => { e.preventDefault(); alert("This feature will be available soon!"); }}
+                      className="group relative inline-flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-help"
+                      title="This feature will be available soon!"
+                    >
+                      {link.label}
+                      <Lock className="w-3.5 h-3.5 ml-1.5 opacity-70" />
+                    </button>
+                  ) : (
+                    <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
+                      {link.label}
+                      <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
+                    </Link>
+                  )}
                 </li>
               ))}
             </ul>

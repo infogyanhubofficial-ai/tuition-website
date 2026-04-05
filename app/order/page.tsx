@@ -13,6 +13,11 @@ import {
 type OrderMode = "cv_phone" | "badge" | "course" | "recording" | "unknown";
 
 function CheckoutContent() {
+  // 0. FIX: SCROLL TO TOP ON MOUNT
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  }, []);
+
   const searchParams = useSearchParams();
   const router = useRouter(); 
   const supabase = createClient();

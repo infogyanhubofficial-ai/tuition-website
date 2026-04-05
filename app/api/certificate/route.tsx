@@ -37,7 +37,7 @@ const DEFAULTS = {
   sealUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Official_Stamp-removebg-preview.png",
   directorSignatureUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/director_sign.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/DIRECTOR_SIGN-removebg-preview%20(1).png",
   fallbackInstructorSignatureUrl:
     "https://placehold.co/253x80/png?text=Instructor+Signature",
 };
@@ -371,6 +371,15 @@ async function buildTemplateData(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CERTIFICATE TEMPLATE
+// Changes vs previous version:
+//   QR-MOVE  — QR code removed from footer right column; now rendered as an
+//              absolute badge in the top-left, mirroring the Credential ID
+//              badge in the top-right. (left:20px / top:20px)
+//   FOOTER   — Right column is now director-only, styled identically to the
+//              left (instructor) column: flexDirection column, alignItems
+//              center, justifyContent flex-end. All three footer blocks are
+//              now equidistant from the centre seal and share the same
+//              vertical axis as the logo above.
 // ─────────────────────────────────────────────────────────────────────────────
 function CertificateTemplate(data: CertificateTemplateData) {
   const FOOTER_H = 128;
@@ -742,6 +751,10 @@ function CertificateTemplate(data: CertificateTemplateData) {
 
           {/* ══════════════════════════════════════════
               ZONE 3 — FOOTER
+              Three equal columns (33.3% / 33.4% / 33.3%).
+              Left = Instructor | Centre = Seal + date | Right = Director.
+              All columns use identical flex settings so each signature block
+              sits equidistant from the centre seal.
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -861,131 +874,124 @@ function CertificateTemplate(data: CertificateTemplateData) {
               </div>
             </div>
 
-            {/* ── Right: Director Signature + QR ── */}
+            {/* ── Right: Director Signature only ──
+                QR-MOVE: QR is no longer here — it lives in the top-left badge.
+                This column now mirrors the left (instructor) column exactly so
+                both signatures are equidistant from the centre seal.
+            ── */}
             <div
               style={{
                 display: "flex",
                 width: "33.3%",
+                flexDirection: "column",
+                alignItems: "center",
                 justifyContent: "flex-end",
-                alignItems: "flex-end",
-                gap: "14px",
                 height: "100%",
               }}
             >
-              {/* Director */}
+              <img
+                src={data.directorSignatureUrl}
+                alt="Director Signature"
+                width={184}
+                height={56}
+                style={{ objectFit: "contain" }}
+              />
               <div
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  height: "100%",
+                  width: "196px",
+                  borderTop: `2px solid ${COLORS.navy}`,
+                  marginTop: "5px",
+                }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: "5px",
+                  fontSize: "14.5px",
+                  color: COLORS.navy,
+                  fontWeight: 700,
+                  textAlign: "center",
                 }}
               >
-                <img
-                  src={data.directorSignatureUrl}
-                  alt="Director Signature"
-                  width={184}
-                  height={56}
-                  style={{ objectFit: "contain" }}
-                />
-                <div
-                  style={{
-                    display: "flex",
-                    width: "196px",
-                    borderTop: `2px solid ${COLORS.navy}`,
-                    marginTop: "5px",
-                  }}
-                />
-                <div
-                  style={{
-                    display: "flex",
-                    marginTop: "5px",
-                    fontSize: "14.5px",
-                    color: COLORS.navy,
-                    fontWeight: 700,
-                    textAlign: "center",
-                  }}
-                >
-                  {data.directorName}
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    marginTop: "3px",
-                    fontSize: "9px",
-                    color: COLORS.navySoft,
-                    textTransform: "uppercase",
-                    letterSpacing: "1.4px",
-                    fontWeight: 700,
-                  }}
-                >
-                  • {data.directorTitle} •
-                </div>
+                {data.directorName}
               </div>
-
-              {/* QR Code — size increased 30%: img 70×70 → 91×91 */}
               <div
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "flex-end",
-                  height: "100%",
-                  paddingBottom: "2px",
+                  marginTop: "3px",
+                  fontSize: "9px",
+                  color: COLORS.navySoft,
+                  textTransform: "uppercase",
+                  letterSpacing: "1.4px",
+                  textAlign: "center",
+                  fontWeight: 700,
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    border: `1px solid rgba(213,223,235,0.52)`,
-                    backgroundColor: COLORS.qrBg,
-                    padding: "8px 8px 5px 8px",
-                    borderRadius: "6px",
-                    boxShadow: "0 2px 14px rgba(22,50,77,0.07)",
-                  }}
-                >
-                  <img
-                    src={data.qrCodeDataUri}
-                    alt="Verification QR"
-                    width={91}
-                    height={91}
-                    style={{ objectFit: "contain" }}
-                  />
-                  <div
-                    style={{
-                      display: "flex",
-                      marginTop: "4px",
-                      fontSize: "7px",
-                      letterSpacing: "0.6px",
-                      color: COLORS.navySoft,
-                      fontWeight: 700,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Verify online
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      marginTop: "1px",
-                      fontSize: "5.5px",
-                      letterSpacing: "0.3px",
-                      color: COLORS.navyLight,
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    By GyanHub Pvt. Ltd
-                  </div>
-                </div>
+                • {data.directorTitle} •
               </div>
             </div>
           </div>
 
-          {/* Credential ID badge */}
+          {/* ══════════════════════════════════════════
+              TOP-LEFT: QR Code badge  (QR-MOVE)
+              Mirrors the Credential ID badge at top-right in card style.
+              Position: left:20px / top:20px (vs right:20px / top:20px).
+          ══════════════════════════════════════════ */}
+          <div
+            style={{
+              display: "flex",
+              position: "absolute",
+              left: "20px",
+              top: "20px",
+              padding: "8px 8px 5px 8px",
+              border: `1px solid rgba(213,223,235,0.52)`,
+              backgroundColor: COLORS.qrBg,
+              borderRadius: "7px",
+              flexDirection: "column",
+              alignItems: "center",
+              zIndex: 2,
+              boxShadow: "0 2px 10px rgba(22,50,77,0.06)",
+            }}
+          >
+            <img
+              src={data.qrCodeDataUri}
+              alt="Verification QR"
+              width={91}
+              height={91}
+              style={{ objectFit: "contain" }}
+            />
+            <div
+              style={{
+                display: "flex",
+                marginTop: "4px",
+                fontSize: "7px",
+                letterSpacing: "0.6px",
+                color: COLORS.navySoft,
+                fontWeight: 700,
+                textTransform: "uppercase",
+              }}
+            >
+              Verify online
+            </div>
+            <div
+              style={{
+                display: "flex",
+                marginTop: "1px",
+                fontSize: "5.5px",
+                letterSpacing: "0.3px",
+                color: COLORS.navyLight,
+                fontWeight: 600,
+                textTransform: "uppercase",
+              }}
+            >
+              By GyanHub Pvt. Ltd
+            </div>
+          </div>
+
+          {/* ══════════════════════════════════════════
+              TOP-RIGHT: Credential ID badge (unchanged)
+          ══════════════════════════════════════════ */}
           <div
             style={{
               display: "flex",
