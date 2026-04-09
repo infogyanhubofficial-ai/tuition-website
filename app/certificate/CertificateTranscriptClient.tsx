@@ -22,9 +22,23 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
 
   const SUPABASE_STORAGE_URL = 'https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/';
 
+  const safeDecode = (value: string) => {
+    try {
+      return decodeURIComponent(decodeURIComponent(value));
+    } catch {
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    }
+  };
+
+  const decodedEmail = safeDecode(email);
+
   useEffect(() => {
     async function fetchTranscript() {
-      if (!email) {
+      if (!decodedEmail) {
         setLoading(false);
         return;
       }
@@ -32,7 +46,7 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
       const { data, error } = await supabase
         .from('certificates')
         .select('*, syllabi(duration, description, syllabus_pdf)')
-        .eq('email', email)
+        .eq('email', decodedEmail)
         .order('issue_date', { ascending: false });
 
       if (!error && data) {
@@ -41,16 +55,16 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
       setTimeout(() => setLoading(false), 800); 
     }
     fetchTranscript();
-  }, [email]);
+  }, [decodedEmail]);
 
   useEffect(() => {
     async function fetchProfilePic() {
-      if (!email) return;
+      if (!decodedEmail) return;
       
       const { data, error } = await supabase
         .from('profiles')
         .select('avatar_url')
-        .ilike('email', email)
+        .ilike('email', decodedEmail)
         .maybeSingle();
 
       if (!error && data?.avatar_url) {
@@ -63,7 +77,7 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
       }
     }
     fetchProfilePic();
-  }, [email]);
+  }, [decodedEmail]);
 
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '/brand/placeholder-verify.png';
@@ -113,7 +127,7 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
     <div className="min-h-screen bg-[#F7F9FC] flex flex-col items-center justify-center text-center px-4">
       <ShieldCheck className="w-16 h-16 text-slate-300 mb-4" />
       <h2 className="text-2xl font-bold text-[#111827] mb-2">No Verified Transcript Found</h2>
-      <p className="text-[#6B7280] max-w-md mb-6">We couldn't authenticate records for {email}.</p>
+      <p className="text-[#6B7280] max-w-md mb-6">We couldn't authenticate records for {decodedEmail}.</p>
       <button onClick={() => router.back()} className="inline-flex items-center gap-2 bg-[#0F1E3A] text-white px-6 py-3 rounded-xl font-semibold hover:bg-[#1E3A8A] transition-all">
         <ArrowLeft className="w-4 h-4" /> Return to Registry
       </button>
@@ -183,7 +197,6 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
                   src={profilePic} 
                   alt={cert.name} 
                   className="w-full h-full object-cover"
-                  // Next.js Image component would be better here, but maintaining your structure
                   onError={() => setProfilePic(null)}
                 />
               ) : (
@@ -207,7 +220,6 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
           </div>
         </div>
 
-        {/* Timeline */}
         {certs.length > 1 && (
           <div className="print:block print:break-inside-avoid print:mt-4">
             <h3 className="text-xs font-bold text-[#6B7280] uppercase tracking-wider mb-4 print:text-[#111827] print:mb-2">Official Transcript Timeline</h3>
@@ -239,8 +251,6 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
         )}
 
         <div className="grid lg:grid-cols-12 print:flex print:flex-col gap-8 print:gap-4 print:mt-4">
-          
-          {/* Main Viewer */}
           <div className="lg:col-span-8 flex flex-col gap-6 print:gap-0 print:max-w-[85%] print:mx-auto print:w-full print:break-inside-avoid">
             <div className="bg-white rounded-2xl overflow-hidden shadow-[0_8px_25px_rgba(0,0,0,0.08)] relative group print:shadow-none print:border print:border-[#E5E7EB] print:rounded-xl">
               <div className="relative aspect-[1.414/1] w-full bg-[#F7F9FC] flex items-center justify-center p-6 print:p-2">
@@ -270,7 +280,6 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
               </div>
             </div>
 
-            {/* Syllabus Bar */}
             {pdfLink && (
               <div className="bg-white rounded-2xl p-6 shadow-[0_8px_25px_rgba(0,0,0,0.04)] border border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 print:hidden">
                 <div className="flex items-start gap-4">
@@ -296,10 +305,8 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
             )}
           </div>
 
-          {/* Sidebar */}
           <div className="lg:col-span-4 space-y-6 print:w-full print:space-y-4">
             <div className="bg-white rounded-2xl p-8 shadow-[0_8px_25px_rgba(0,0,0,0.04)] print:shadow-none print:border print:border-[#E5E7EB] print:p-5 print:rounded-xl print:break-inside-avoid">
-              
               <div className="flex justify-between items-start mb-8 border-b border-slate-100 pb-8 print:mb-4 print:pb-4">
                 <div>
                   <h3 className="text-xl font-bold text-[#111827] print:text-lg">Credential Details</h3>

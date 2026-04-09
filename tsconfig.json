@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "middleware.ts.disabled"  ],
+, "middleware.ts.disabled", "app/quiz/chapter-wise/page.jsx"  ],
   "exclude": ["node_modules"]
 }
