@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     siteName: "GyanHub",
     images: [
       {
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
         width: 1200,
         height: 630,
         alt: "GyanHub Tutors Directory",
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
     title: "Find Verified Tutors in Nepal | GyanHub",
     description:
       "Search and connect with verified home and online tutors in Nepal.",
-    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"],
+    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"],
   },
 };
 
@@ -58,7 +58,7 @@ export default function TutorsPage() {
       name: "GyanHub",
       logo: {
         "@type": "ImageObject",
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"
+        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"
       }
     }
   };

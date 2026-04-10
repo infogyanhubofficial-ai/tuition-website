@@ -459,7 +459,7 @@ export default function VacancyDetailClient() {
                     className="absolute inset-0 block cursor-pointer"
                   >
                     <img 
-                      src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/street%20view.jpg" 
+                      src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webpGyanHub_logo_website-removebg-preview__1_-removebg-preview.webpstreet%20view.jpg" 
                       alt="Map representation of vacancy location" 
                       className="w-full h-full object-cover opacity-50 filter grayscale-[40%] group-hover:grayscale-0 group-hover:opacity-70 transition-all duration-300" 
                     />

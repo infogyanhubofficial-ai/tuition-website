@@ -24,7 +24,7 @@ export const metadata: Metadata = {
     siteName: "GyanHub",
     images: [
       {
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
         width: 1200,
         height: 630,
         alt: "GyanHub Tuition Vacancies List",
@@ -37,7 +37,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Tuition Vacancies & Teaching Jobs in Nepal",
     description: "Browse the latest home tuition and online teaching jobs across Nepal.",
-    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"],
+    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"],
   },
 };
 
@@ -54,7 +54,7 @@ export default function Page() {
       name: "GyanHub",
       logo: {
         "@type": "ImageObject",
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"
+        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"
       }
     }
   };

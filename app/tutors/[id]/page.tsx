@@ -46,7 +46,7 @@ export async function generateMetadata(
   // Safely parse data for SEO strings
   const tutorName = tutor.name || "Expert Tutor";
   const location = tutor.location ? `in ${tutor.location}` : "Online";
-  const avatarUrl = tutor.avatar_url || tutor.photo || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png";
+  const avatarUrl = tutor.avatar_url || tutor.photo || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
   
   // Format subjects into a readable string
   let subjectsString = "Various Subjects";
@@ -121,7 +121,7 @@ export default async function TutorProfilePage({ params }: Props) {
 
   if (tutor) {
     const tutorName = tutor.name || "Expert Tutor";
-    const avatarUrl = tutor.avatar_url || tutor.photo || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png";
+    const avatarUrl = tutor.avatar_url || tutor.photo || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
     
     jsonLd = {
       "@context": "https://schema.org",

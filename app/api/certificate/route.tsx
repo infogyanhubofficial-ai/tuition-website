@@ -33,9 +33,9 @@ const DEFAULTS = {
   instructorTitle: "Course Instructor",
   verifyBaseUrl: "https://www.gyanhub.com.np/certificate",
   logoUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
   sealUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Official_Stamp-removebg-preview.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Official_Stamp-removebg-preview%20(1).webp",
   directorSignatureUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/DIRECTOR_SIGN-removebg-preview%20(1).png",
   fallbackInstructorSignatureUrl:

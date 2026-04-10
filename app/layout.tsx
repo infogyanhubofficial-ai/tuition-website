@@ -8,7 +8,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 // Store the logo URL in a variable so it's easy to change everywhere at once
-const LOGO_URL = "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BACKGROUND_REMOVED.png";
+const LOGO_URL = "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
 
 // --- GLOBAL SEO & METADATA ---
 export const metadata: Metadata = {

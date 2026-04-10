@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     siteName: "GyanHub",
     images: [
       {
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
         width: 1200,
         height: 630,
         alt: "GyanHub Courses and Tutors",
@@ -49,7 +49,7 @@ export const metadata: Metadata = {
     title: "GyanHub | Courses & Tutors in Nepal",
     description:
       "Learn in-demand skills with GyanHub. Explore tutors and professional courses in Nepal.",
-    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"],
+    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"],
   },
   metadataBase: new URL("https://www.gyanhub.com.np"),
 };
@@ -61,7 +61,7 @@ export default function Page() {
     "@type": "EducationalOrganization",
     name: "GyanHub",
     url: "https://www.gyanhub.com.np",
-    logo: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+    logo: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
     description: "Online learning and tutor discovery platform in Nepal offering engineering courses, AutoCAD, GIS, and private tutoring.",
     address: {
       "@type": "PostalAddress",

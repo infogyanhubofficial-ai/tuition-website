@@ -78,7 +78,7 @@ export async function generateMetadata(
       siteName: "GyanHub",
       images: [
         {
-          url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png",
+          url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
           width: 1200,
           height: 630,
           alt: `Tuition Vacancy for ${subject} in ${location}`,
@@ -91,7 +91,7 @@ export async function generateMetadata(
       card: "summary_large_image",
       title: `Tutor Wanted: ${subject} in ${location}`,
       description: cleanDescription,
-      images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"],
+      images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"],
     },
   };
 }
@@ -140,7 +140,7 @@ export default async function VacancyProfilePage({ params }: Props) {
         "@type": "Organization",
         "name": "GyanHub",
         "sameAs": "https://www.gyanhub.com.np",
-        "logo": "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview.png"
+        "logo": "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"
       },
       "jobLocation": {
         "@type": "Place",
