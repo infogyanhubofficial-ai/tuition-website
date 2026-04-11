@@ -23,6 +23,7 @@ export interface Course {
   start_datetime: string;
   syllabus_url: string;
   cover_pic: string;
+  is_active: boolean; // Added is_active to the interface
 }
 
 const DIFFICULTY_COLORS: Record<string, string> = {
@@ -70,7 +71,13 @@ export default function OnlineCoursesPage() {
       const res = await fetch("/api/online-courses");
       if (!res.ok) throw new Error("Failed to fetch courses");
       const data = await res.json();
-      setCourses(Array.isArray(data) ? data : []);
+      
+      // Filter the data immediately so only active courses are set in state
+      const activeCourses = Array.isArray(data) 
+        ? data.filter((course: Course) => course.is_active === true) 
+        : [];
+        
+      setCourses(activeCourses);
     } catch (err) {
       setError("We couldn't load the courses. Please check your connection.");
     } finally {
