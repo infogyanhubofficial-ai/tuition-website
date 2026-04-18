@@ -284,7 +284,7 @@ export default function AdminDashboard() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {chatOpen && activeUser && (
+          {/* {chatOpen && activeUser && (
             <ChatModal
               userId={activeUser}
               onClose={() => setChatOpen(false)}
@@ -296,6 +296,7 @@ export default function AdminDashboard() {
               refreshData={fetchAllData}
             />
           )}
+          */}
         </AnimatePresence>
       </main>
     </div>
