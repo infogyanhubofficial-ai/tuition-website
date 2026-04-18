@@ -273,7 +273,7 @@ export default function ProfilePage() {
 
   const fetchGlobalData = useCallback(async () => {
     const { data: cData } = await supabase
-      .from('online-courses')
+      .from('online_courses')
       .select('id, title, fee, start_datetime, cover_pic, discount')
       .gte('start_datetime', new Date().toISOString()) // Only future/upcoming courses
       .order('start_datetime', { ascending: true }) // Earliest starting course first
@@ -615,7 +615,7 @@ export default function ProfilePage() {
                   <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} isTutor={true} />
                   <NavButton icon={<Briefcase size={20} />} label="Job Board" active={activeTab === 'Available Vacancies'} onClick={() => setActiveTab('Available Vacancies')} isTutor={true} />
                   <NavButton icon={<Users size={20} />} label="Requests" active={activeTab === 'Student Requests'} onClick={() => setActiveTab('Student Requests')} isTutor={true} />
-                  <NavButton icon={<BookOpen size={20} />} label="Courses" active={false} onClick={() => window.location.href = '/online-courses'} isTutor={true} />
+                  <NavButton icon={<BookOpen size={20} />} label="Courses" active={false} onClick={() => window.location.href = '/online_courses'} isTutor={true} />
                   <NavButton icon={<User size={20} />} label="My Info" active={activeTab === 'My Info'} onClick={() => setActiveTab('My Info')} isTutor={true} />
                 </>
               ) : (
@@ -629,7 +629,7 @@ export default function ProfilePage() {
                   <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} isTutor={false} />
                   <NavButton icon={<FileText size={20} />} label="My Postings" active={activeTab === 'Posted Vacancies'} onClick={() => setActiveTab('Posted Vacancies')} isTutor={false} />
                   <NavButton icon={<Users size={20} />} label="My Requests" active={activeTab === 'My Requests'} onClick={() => setActiveTab('My Requests')} isTutor={false} />
-                  <NavButton icon={<BookOpen size={20} />} label="Courses" active={false} onClick={() => window.location.href = '/online-courses'} isTutor={false} />
+                  <NavButton icon={<BookOpen size={20} />} label="Courses" active={false} onClick={() => window.location.href = '/online_courses'} isTutor={false} />
                 </>
               )
             )}

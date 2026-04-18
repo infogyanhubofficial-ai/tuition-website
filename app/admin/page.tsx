@@ -1,14 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
-  LayoutDashboard, Briefcase, FileText, MessageSquare, BookOpen, LogOut,
-  Plus, Trash2, Edit2, X, Send, Loader2, MapPin, ExternalLink, ChevronDown,
-  Search, Users, ChevronRight, User, Award, Upload, CalendarDays, ArrowLeft,
-  Lock, ShoppingCart
+  LayoutDashboard, FileText, BookOpen, LogOut, Plus,
+  Bell, Users, Crown, X, Edit2, Check, MapPin, Clock,
+  DollarSign, Trash2, Save, GraduationCap, Briefcase, User,
+  ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle,
+  AlertCircle, CheckCircle, Flame, Sparkles, Link as LinkIcon, RotateCcw,
+  ShoppingCart, CalendarDays, Award, ChevronDown, Search, EyeOff, Eye,
+  Loader2, MessageSquare, ArrowLeft, Upload, Copy
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 
 // --- TYPES ---
@@ -17,7 +20,7 @@ interface Vacancy {
   description: string; salary_range: string; tuition_type: string;
   student_gender_pref: string; class_time: string; days_a_week: string;
   contact_number: string; contact_name: string; status: boolean; urgent: boolean;
-  user_id?: string; created_at: string;
+  user_id?: string; created_at: string; applicant_count?: number;
 }
 interface VacancyApplication {
   id: number; vacancy_id: number; applicant_name: string; applicant_phone: string;
@@ -40,12 +43,25 @@ interface OnlineCourse {
   id: string; title: string; category: string; fee: number; discount: number;
   duration: string; cover_pic: string; tutor_name: string; is_active: boolean;
   start_datetime: string; created_at: string;
+  class_info?: { google_classroom_link?: string; online_class_link?: string; };
+}
+interface CourseBatch {
+  course_id: string;
+  batch_no: number;
+  online_class_link?: string;
+  google_classroom_link?: string;
+  whatsapp_group_link?: string;
+  is_active: boolean;
+  created_at?: string;
 }
 interface Enrollment {
   id: string; user_id: string; course_id: string; full_name: string; email: string;
   whatsapp_number: string; remarks: string; status: string; created_at: string;
   course_name: string; course_details_url: string; locked_price: number;
   starting_date: string; confirmed: boolean;
+  paid_amount: number;
+  remaining_amount: number;
+  batch_no: number | null;
 }
 interface Message {
   id: string; user_id: string; sender_role: string; content: string;
@@ -59,7 +75,7 @@ interface Certificate {
 }
 interface Order {
   id: string; full_name: string; email: string; contact_number: string;
-  order_type: string; tutor_name: string; price: number; screenshot_url: string;
+  order_type: string; order_name: string; price: number; screenshot_url: string;
   status: string; created_at: string;
 }
 
@@ -74,6 +90,16 @@ function timeAgo(dateString: string) {
   if (diffHrs < 24) return `${diffHrs}h ago`;
   return `${Math.floor(diffHrs / 24)}d ago`;
 }
+
+// --- FRAMER MOTION VARIANTS ---
+const staggerContainer: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.08 } }
+};
+const staggerItem: Variants = {
+  hidden: { opacity: 0, y: 20, scale: 0.98 },
+  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
+};
 
 // --- MAIN COMPONENT ---
 export default function AdminDashboard() {
@@ -91,6 +117,7 @@ export default function AdminDashboard() {
   const [applications, setApplications] = useState<VacancyApplication[]>([]);
   const [requests, setRequests] = useState<StudentRequest[]>([]);
   const [courses, setCourses] = useState<OnlineCourse[]>([]);
+  const [batches, setBatches] = useState<CourseBatch[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [tutors, setTutors] = useState<Tutor[]>([]);
   const [conversations, setConversations] = useState<Message[]>([]);
@@ -115,22 +142,24 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_batches' }, () => fetchAllData())
       .subscribe();
     return () => { supabase.removeChannel(channels); };
   }, [router]);
 
   const fetchAllData = async () => {
-    const [vacRes, appRes, reqRes, curRes, tutRes, msgRes, certRes, sylRes, enrRes, ordRes] = await Promise.all([
+    const [vacRes, appRes, reqRes, curRes, tutRes, msgRes, certRes, sylRes, enrRes, ordRes, batchRes] = await Promise.all([
       supabase.from("vacancies").select("*").order("created_at", { ascending: false }),
       supabase.from("vacancy_applications").select("*, vacancies(subject, location, salary_range, contact_name, contact_number)").order("id", { ascending: false }),
       supabase.from("student_requests").select("*, tutors(name, contact_num, hour_rate, user_id)").order("id", { ascending: false }),
-      supabase.from("online-courses").select("*").order("created_at", { ascending: false }),
+      supabase.from("online_courses").select("*").order("created_at", { ascending: false }),
       supabase.from("tutors").select("*").order("created_at", { ascending: false }),
       supabase.from("messages").select("*").order("created_at", { ascending: false }),
       supabase.from("certificates").select("*").order("created_at", { ascending: false }),
       supabase.from("syllabi").select("id, name"),
       supabase.from("enrollments").select("*").order("created_at", { ascending: false }),
-      supabase.from("orders").select("*").order("created_at", { ascending: false })
+      supabase.from("orders").select("*").order("created_at", { ascending: false }),
+      supabase.from("course_batches").select("*").order("batch_no", { ascending: false })
     ]);
 
     if (vacRes.data) setVacancies(vacRes.data);
@@ -142,6 +171,7 @@ export default function AdminDashboard() {
     if (sylRes.data) setSyllabi(sylRes.data);
     if (enrRes.data) setEnrollments(enrRes.data);
     if (ordRes.data) setOrders(ordRes.data);
+    if (batchRes.data) setBatches(batchRes.data);
 
     if (msgRes.error) {
       console.error("Error fetching messages:", msgRes.error);
@@ -248,8 +278,8 @@ export default function AdminDashboard() {
           {activeTab === "Vacancies" && <VacanciesManager key="vac" data={vacancies} applications={applications} tutors={tutors} refresh={fetchAllData} />}
           {activeTab === "Applications" && <ApplicationsManager key="app" data={applications} tutors={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Tuition Requests" && <RequestsManager key="req" data={requests} refresh={fetchAllData} onOpenChat={openChat} />}
-          {activeTab === "Online Courses" && <CoursesManager key="crs" data={courses} refresh={fetchAllData} />}
-          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} refresh={fetchAllData} />}
+          {activeTab === "Online Courses" && <CoursesManager key="crs" data={courses} batches={batches} refresh={fetchAllData} />}
+          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} refresh={fetchAllData} />}
           {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={fetchAllData} />}
         </AnimatePresence>
 
@@ -370,12 +400,33 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'failed'>('all');
+  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'course' | 'others'>('all'); 
+  const [showAllOrders, setShowAllOrders] = useState(false);
 
   const filteredData = data.filter((o: Order) => {
     const s = searchQuery.toLowerCase();
-    const matchesSearch = (o.full_name && o.full_name.toLowerCase().includes(s)) || (o.email && o.email.toLowerCase().includes(s)) || (o.tutor_name && o.tutor_name.toLowerCase().includes(s));
+    const matchesSearch = (o.full_name && o.full_name.toLowerCase().includes(s)) || 
+                          (o.email && o.email.toLowerCase().includes(s)) || 
+                          (o.order_name && o.order_name.toLowerCase().includes(s));
+    
     const matchesStatus = statusFilter === 'all' ? true : o.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    
+    let matchesType = true;
+    if (orderTypeFilter !== 'all') {
+      const lowerType = o.order_type?.toLowerCase() || '';
+      if (orderTypeFilter === 'recording') matchesType = lowerType.includes('recording');
+      else if (orderTypeFilter === 'course') matchesType = lowerType.includes('course');
+      else if (orderTypeFilter === 'others') matchesType = !lowerType.includes('recording') && !lowerType.includes('course');
+    }
+
+    let matchesDate = true;
+    if (!showAllOrders) {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      matchesDate = new Date(o.created_at) >= threeDaysAgo;
+    }
+
+    return matchesSearch && matchesStatus && matchesType && matchesDate;
   });
 
   const handleStatusChange = async (id: string, newStatus: string) => {
@@ -406,10 +457,10 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black text-slate-900">Orders</h2>
       </div>
-      <div className="flex gap-4">
-        <div className="relative flex-1">
+      <div className="flex flex-wrap gap-4 items-center">
+        <div className="relative flex-1 min-w-[250px]">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-          <input type="text" placeholder="Search by name, email, or target..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
+          <input type="text" placeholder="Search by name, email, or order name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
         </div>
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
           <option value="all">All Status</option>
@@ -417,6 +468,18 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
           <option value="verified">Verified</option>
           <option value="failed">Failed</option>
         </select>
+        
+        <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)}>
+          <option value="all">All Types</option>
+          <option value="recording">Recording</option>
+          <option value="course">Course</option>
+          <option value="others">Others</option>
+        </select>
+
+        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-3 rounded-2xl shadow-sm">
+          <input type="checkbox" checked={showAllOrders} onChange={(e) => setShowAllOrders(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+          Show All Time
+        </label>
       </div>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
         <table className="w-full text-left border-collapse">
@@ -427,7 +490,6 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
           </thead>
           <tbody>
             {filteredData.map(order => {
-              const isCourse = order.order_type.toLowerCase().includes('course');
               return (
                 <tr key={order.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer" onClick={() => setSelectedOrder(order)}>
                   <td className="p-6 text-sm text-slate-500 font-bold whitespace-nowrap">{new Date(order.created_at).toLocaleDateString()}</td>
@@ -437,11 +499,11 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   </td>
                   <td className="p-6">
                     <p className="font-bold text-slate-800 flex items-center gap-2">
-                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{isCourse ? 'COURSE' : order.order_type}</span>
+                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{order.order_type}</span>
                       Rs. {order.price}
                     </p>
-                    <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.tutor_name}>
-                      {isCourse ? `Course: ${order.tutor_name} | Target: GyanHub Online Courses` : `Target: ${order.tutor_name}`}
+                    <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.order_name}>
+                      Target: {order.order_name}
                     </p>
                   </td>
                   <td className="p-6" onClick={(e) => e.stopPropagation()}>
@@ -457,7 +519,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   <td className="p-6 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end items-center gap-4">
                       <button onClick={() => handleDelete(order.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete Order"><Trash2 size={16} /></button>
-                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Receipt</span>
+                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Details</span>
                     </div>
                   </td>
                 </tr>
@@ -467,35 +529,35 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
           </tbody>
         </table>
       </div>
+
       {selectedOrder && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
           <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-2xl w-full relative overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedOrder(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
             <h3 className="text-2xl font-black mb-6">Order Details</h3>
+            
             <div className="grid grid-cols-2 gap-6 mb-6 text-sm font-medium text-slate-700">
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-                <p className="text-[10px] font-black uppercase text-slate-400">Customer Info</p>
-                <p><span className="font-bold">Name:</span> {selectedOrder.full_name}</p>
-                <p><span className="font-bold">Email:</span> {selectedOrder.email}</p>
-                <p><span className="font-bold">Phone:</span> {selectedOrder.contact_number}</p>
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Customer Info</p>
+                  <p><span className="font-bold text-slate-800">Name:</span> {selectedOrder.full_name}</p>
+                  <p><span className="font-bold text-slate-800">Email:</span> {selectedOrder.email}</p>
+                  <p><span className="font-bold text-slate-800">Phone:</span> {selectedOrder.contact_number}</p>
+                </div>
+                <a href={`https://wa.me/${selectedOrder.contact_number.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20b858] text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm transition-colors w-full">
+                  <MessageCircle size={16} /> Contact via WhatsApp
+                </a>
               </div>
+              
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-                <p className="text-[10px] font-black uppercase text-slate-400">Order Info</p>
-                {selectedOrder.order_type.toLowerCase().includes('course') ? (
-                  <>
-                    <p><span className="font-bold">Course:</span> <span className="uppercase">{selectedOrder.tutor_name}</span></p>
-                    <p><span className="font-bold">Target:</span> GyanHub Online Courses</p>
-                  </>
-                ) : (
-                  <>
-                    <p><span className="font-bold">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
-                    <p><span className="font-bold">Target:</span> {selectedOrder.tutor_name}</p>
-                  </>
-                )}
-                <p><span className="font-bold">Price:</span> Rs. {selectedOrder.price}</p>
-                <p><span className="font-bold">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
+                <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Order Info</p>
+                <p><span className="font-bold text-slate-800">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
+                <p><span className="font-bold text-slate-800">Order Name:</span> {selectedOrder.order_name}</p>
+                <p><span className="font-bold text-slate-800">Price:</span> Rs. {selectedOrder.price}</p>
+                <p><span className="font-bold text-slate-800">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
               </div>
             </div>
+
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col items-center">
               <p className="text-[10px] font-black uppercase text-slate-400 mb-4 w-full">Payment Screenshot</p>
               {selectedOrder.screenshot_url ? (
@@ -924,11 +986,20 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
 }
 
 // --- SECTION: BOOKINGS ---
-function BookingsManager({ courses, enrollments, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], refresh: () => void }) {
+function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<number | 'all'>('all');
+  
+  // Payment Editing State
+  const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
+  const [editPaid, setEditPaid] = useState<number>(0);
+  const [editRemaining, setEditRemaining] = useState<number>(0);
+  
+  // Add hidden enrollments state
+  const [hiddenBookingIds, setHiddenBookingIds] = useState<Set<string>>(new Set());
 
   const toggleConfirmation = async (enrollmentId: string, currentStatus: boolean) => {
     try {
@@ -938,22 +1009,86 @@ function BookingsManager({ courses, enrollments, refresh }: { courses: OnlineCou
     } catch (err) { alert("An unexpected error occurred while updating."); }
   };
 
+  const openPaymentEdit = (enr: Enrollment) => {
+    setEditingPayment(enr);
+    setEditPaid(enr.paid_amount || 0);
+    setEditRemaining(enr.remaining_amount || 0);
+  };
+
+  const savePayment = async () => {
+    if (!editingPayment) return;
+    const { error } = await supabase.from('enrollments').update({
+      paid_amount: editPaid,
+      remaining_amount: editRemaining
+    }).eq('id', editingPayment.id);
+    
+    if (error) {
+      alert("Failed to update payment: " + error.message);
+    } else {
+      refresh();
+      setEditingPayment(null);
+    }
+  };
+
+  const handleHide = (id: string) => {
+    setHiddenBookingIds(prev => {
+      const newSet = new Set(prev);
+      newSet.add(id);
+      return newSet;
+    });
+  };
+
+  const handleUnhideAll = () => {
+    setHiddenBookingIds(new Set());
+  };
+
   if (selectedCourse) {
-    let courseEnrollments = enrollments.filter(e => e.course_id === selectedCourse.id);
+    // Collect all available batches for the selected course
+    const availableBatches = Array.from(new Set([
+      ...batches.filter(b => b.course_id === selectedCourse.id).map(b => b.batch_no),
+      ...enrollments.filter(e => e.course_id === selectedCourse.id && e.batch_no).map(e => e.batch_no as number)
+    ])).sort((a, b) => b - a); // Highest first
+
+    // Filter out hidden enrollments & apply other filters
+    let courseEnrollments = enrollments.filter(e => e.course_id === selectedCourse.id && !hiddenBookingIds.has(e.id));
     if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter(e => e.confirmed);
     if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter(e => !e.confirmed);
+    if (selectedBatchFilter !== 'all') courseEnrollments = courseEnrollments.filter(e => e.batch_no === selectedBatchFilter);
+    
     courseEnrollments.sort((a, b) => {
       const timeA = new Date(a.created_at).getTime(); const timeB = new Date(b.created_at).getTime();
       return dateSort === 'desc' ? timeB - timeA : timeA - timeB;
     });
+
+    const handleCopyCSV = () => {
+      const header = "Name,Phone,Email\n";
+      const rows = courseEnrollments.map(e => `"${e.full_name}","${e.whatsapp_number}","${e.email}"`).join("\n");
+      navigator.clipboard.writeText(header + rows).then(() => {
+        alert("Copied to clipboard!");
+      });
+    };
+
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => setSelectedCourse(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
+            <button onClick={() => { setSelectedCourse(null); setSelectedBatchFilter('all'); }} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
             <div><h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2><p className="text-sm font-medium text-slate-500">Managing Enrollments</p></div>
           </div>
           <div className="flex gap-4 items-center">
+            {hiddenBookingIds.size > 0 && (
+              <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
+                <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
+              </button>
+            )}
+            
+            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={selectedBatchFilter} onChange={e => setSelectedBatchFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              <option value="all">All Batches</option>
+              {availableBatches.map(b => (
+                <option key={b} value={b}>Batch {b}</option>
+              ))}
+            </select>
+
             <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={dateSort} onChange={e => setDateSort(e.target.value as 'desc' | 'asc')}>
               <option value="desc">Date: Newest First</option><option value="asc">Date: Oldest First</option>
             </select>
@@ -962,34 +1097,83 @@ function BookingsManager({ courses, enrollments, refresh }: { courses: OnlineCou
             </select>
           </div>
         </div>
+
+        {/* STATS AND EXPORT BAR */}
+        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
+          <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
+          <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
+            <Copy size={14} /> Copy CSV List
+          </button>
+        </div>
+
         <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
-                <th className="p-6">Applicant Name</th><th className="p-6">Contact Details</th><th className="p-6">Booking Date</th><th className="p-6">Remarks</th><th className="p-6">Confirmed</th><th className="p-6 text-right">Delete</th>
+                <th className="p-6">Applicant Name</th><th className="p-6">Batch</th><th className="p-6">Contact Details</th><th className="p-6">Booking Date</th><th className="p-6">Remarks</th><th className="p-6">Payment</th><th className="p-6">Confirmed</th><th className="p-6 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {courseEnrollments.map(enr => (
                 <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                   <td className="p-6 font-bold text-slate-900">{enr.full_name}</td>
+                  <td className="p-6">
+                    <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-black">
+                      Batch {enr.batch_no || '-'}
+                    </span>
+                  </td>
                   <td className="p-6"><p className="text-sm text-slate-800 font-medium">{enr.email}</p><p className="text-xs text-slate-500 mt-1">WA: {enr.whatsapp_number}</p></td>
                   <td className="p-6 text-sm text-slate-500 font-medium">{new Date(enr.created_at).toLocaleDateString()}</td>
-                  <td className="p-6 text-sm text-slate-600 max-w-[200px]">
+                  <td className="p-6 text-sm text-slate-600 max-w-[150px]">
                     <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl max-h-24 overflow-y-auto" title={enr.remarks}>
                         {enr.remarks || '-'}
                     </div>
                   </td>
+                  <td className="p-6 whitespace-nowrap">
+                    <p className="text-sm font-bold text-slate-800">Paid Amount Rs. {enr.paid_amount || 0}</p>
+                    <p className="text-xs font-bold text-red-500 mt-0.5">Remaining Rs. {enr.remaining_amount || 0}</p>
+                  </td>
                   <td className="p-6"><ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Confirmed' : 'Pending'} activeColor="bg-green-500" activeText="text-green-600" /></td>
                   <td className="p-6 text-right">
-                    <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"><Trash2 size={16} /></button>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => openPaymentEdit(enr)} className="p-2 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors" title="Edit Payment Details"><DollarSign size={16} /></button>
+                      <button onClick={() => handleHide(enr.id)} className="p-2 text-slate-500 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors" title="Hide Booking"><EyeOff size={16} /></button>
+                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {courseEnrollments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
+              {courseEnrollments.length === 0 && <tr><td colSpan={8} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
             </tbody>
           </table>
         </div>
+
+        {/* PAYMENT EDIT MODAL */}
+        {editingPayment && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
+            <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setEditingPayment(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
+              <h3 className="text-xl font-black mb-1">Edit Payment</h3>
+              <p className="text-xs font-medium text-slate-500 mb-6">{editingPayment.full_name}</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
+                  <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Remaining Amount (Rs)</label>
+                  <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-end gap-3">
+                <button onClick={() => setEditingPayment(null)} className="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+                <button onClick={savePayment} className="px-6 py-2 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
     );
   }
@@ -1021,23 +1205,77 @@ function BookingsManager({ courses, enrollments, refresh }: { courses: OnlineCou
 }
 
 // --- SECTION: COURSES ---
-function CoursesManager({ data, refresh }: { data: OnlineCourse[], refresh: () => void }) {
+function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Partial<OnlineCourse> | null>(null);
+  const [editBatch, setEditBatch] = useState<Partial<CourseBatch>>({});
+
+  const openEdit = (course: OnlineCourse) => {
+    setEditingCourse({ ...course });
+    // Pull course batches and pick highest batch_no for editing
+    const courseBatches = batches.filter(b => b.course_id === course.id).sort((a,b) => b.batch_no - a.batch_no);
+    if (courseBatches.length > 0) {
+      setEditBatch({ ...courseBatches[0] });
+    } else {
+      setEditBatch({ batch_no: 1, is_active: true });
+    }
+    setModalOpen(true);
+  };
 
   const saveCourse = async () => {
     if (!editingCourse) return;
     const payload = { ...editingCourse };
     payload.fee = parseFloat(payload.fee as any) || 0;
     payload.discount = parseFloat(payload.discount as any) || 0;
-    if (payload.id) { const { error } = await supabase.from('online-courses').update(payload).eq('id', payload.id); if (error) alert(error.message); }
-    else { const { error } = await supabase.from('online-courses').insert([payload]); if (error) alert(error.message); }
-    setModalOpen(false); refresh();
+    
+    // Legacy cleanup - keeping it structurally fine if using pure table mapping
+    delete payload.class_info;
+
+    let savedCourseId = editingCourse.id;
+
+    // 1. Save Online Course Data
+    if (payload.id) { 
+      const { error } = await supabase.from('online_courses').update(payload).eq('id', payload.id); 
+      if (error) { alert(error.message); return; }
+    } else { 
+      const { data: inserted, error } = await supabase.from('online_courses').insert([payload]).select('id').single(); 
+      if (error) { alert(error.message); return; }
+      savedCourseId = inserted.id;
+    }
+
+    // 2. Save Batch Data
+    if (savedCourseId && editBatch.batch_no) {
+      const exists = batches.find(b => b.course_id === savedCourseId && b.batch_no === editBatch.batch_no);
+      
+      const batchPayload = {
+        course_id: savedCourseId,
+        batch_no: editBatch.batch_no,
+        online_class_link: editBatch.online_class_link || null,
+        google_classroom_link: editBatch.google_classroom_link || null,
+        whatsapp_group_link: editBatch.whatsapp_group_link || null,
+        is_active: editBatch.is_active ?? true
+      };
+
+      if (exists) {
+        const { error: bErr } = await supabase.from('course_batches')
+          .update(batchPayload)
+          .eq('course_id', savedCourseId)
+          .eq('batch_no', editBatch.batch_no);
+        if (bErr) alert("Batch Update Error: " + bErr.message);
+      } else {
+        const { error: bErr } = await supabase.from('course_batches')
+          .insert([batchPayload]);
+        if (bErr) alert("Batch Create Error: " + bErr.message);
+      }
+    }
+
+    setModalOpen(false); 
+    refresh();
   };
 
   const toggleCourseStatus = async (course: OnlineCourse) => {
-    const { error } = await supabase.from('online-courses').update({ is_active: !course.is_active }).eq('id', course.id);
+    const { error } = await supabase.from('online_courses').update({ is_active: !course.is_active }).eq('id', course.id);
     if (error) alert(error.message); else refresh();
   };
 
@@ -1062,7 +1300,7 @@ function CoursesManager({ data, refresh }: { data: OnlineCourse[], refresh: () =
                 <td className="p-6"><ToggleSwitch checked={course.is_active} onChange={() => toggleCourseStatus(course)} label={course.is_active ? 'Active' : 'Draft'} /></td>
                 <td className="p-6 text-right">
                   <div className="flex justify-end gap-2">
-                    <button onClick={() => { setEditingCourse({ ...course }); setModalOpen(true); }} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100" title="Edit Pricing"><Edit2 size={16} /></button>
+                    <button onClick={() => openEdit(course)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100" title="Edit Pricing"><Edit2 size={16} /></button>
                   </div>
                 </td>
               </tr>
@@ -1076,10 +1314,55 @@ function CoursesManager({ data, refresh }: { data: OnlineCourse[], refresh: () =
             {editingCourse.id && <p className="font-mono text-[10px] text-slate-400 absolute top-4 left-6">ID: {editingCourse.id}</p>}
             <button onClick={() => setModalOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800 z-10"><X /></button>
             <div className="p-6 border-b border-slate-100 bg-slate-50 mt-4"><h3 className="text-2xl font-black text-slate-900">Edit Course Config</h3><p className="text-sm text-slate-500 font-medium mt-1">{editingCourse.title}</p></div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
               <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Fee (Rs)</label><input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.fee || ''} onChange={e => setEditingCourse({ ...editingCourse, fee: e.target.value as any })} /></div>
               <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Discount (%)</label><input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.discount || ''} onChange={e => setEditingCourse({ ...editingCourse, discount: e.target.value as any })} /></div>
               <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Start Date/Time</label><input type="datetime-local" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.start_datetime ? new Date(new Date(editingCourse.start_datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={e => setEditingCourse({ ...editingCourse, start_datetime: new Date(e.target.value).toISOString() })} /></div>
+              
+              <hr className="border-slate-200 my-4" />
+              
+              <div className="bg-slate-100 p-4 rounded-xl border border-slate-200">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="block text-[10px] font-black text-slate-500 uppercase ml-1">Batch Management</label>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">Latest Default</span>
+                </div>
+                
+                <div className="mb-3">
+                  <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Target Batch No. (Increment to create new batch)</label>
+                  <input type="number" className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editBatch.batch_no || 1} onChange={e => setEditBatch({ ...editBatch, batch_no: Number(e.target.value) })} />
+                </div>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Google Classroom Link</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
+                      value={editBatch.google_classroom_link || ''} 
+                      onChange={e => setEditBatch({ ...editBatch, google_classroom_link: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Online Class Link</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
+                      value={editBatch.online_class_link || ''} 
+                      onChange={e => setEditBatch({ ...editBatch, online_class_link: e.target.value })} 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">WhatsApp Group Link</label>
+                    <input 
+                      type="text" 
+                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
+                      value={editBatch.whatsapp_group_link || ''} 
+                      onChange={e => setEditBatch({ ...editBatch, whatsapp_group_link: e.target.value })} 
+                    />
+                  </div>
+                </div>
+              </div>
+
             </div>
             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
               <button onClick={() => setModalOpen(false)} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800">Cancel</button>
@@ -1164,7 +1447,7 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     }
   };
 
-  // NEW: Filter Data based on Search Query
+  // Filter Data based on Search Query
   const filteredData = data.filter((cert) => {
     const s = searchQuery.toLowerCase();
     return (
@@ -1175,12 +1458,11 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     );
   });
 
-  // NEW: Pagination Variables
+  // Pagination Variables
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
-  // Reset to first page whenever search query changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
@@ -1197,7 +1479,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </button>
       </div>
 
-      {/* NEW: Search Bar Component */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input 
@@ -1210,7 +1491,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
       </div>
 
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden flex flex-col">
-        {/* Added overflow auto bounds for "within its frame" requested constraint */}
         <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -1247,7 +1527,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
           </table>
         </div>
 
-        {/* NEW: Pagination Controls Footer */}
         {filteredData.length > 0 && (
           <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0">
             <span className="text-sm font-medium text-slate-500">
@@ -1339,208 +1618,5 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </div>
       )}
     </motion.div>
-  );
-}
-
-// --- CHAT MODAL WITH TOGGLEABLE DETAILS VIEW ---
-function ChatModal({ userId, onClose, tutors, vacancies, applications, requests, profilesMap, refreshData }: any) {
-  const supabase = createClient();
-  const [msg, setMsg] = useState("");
-  const [chatMessages, setChatMessages] = useState<Message[]>([]);
-  const [showDetails, setShowDetails] = useState(false);
-  const [expandedVacId, setExpandedVacId] = useState<number | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const tutorProfile = tutors.find((t: Tutor) => t.user_id === userId);
-  const studentVacancy = vacancies.find((v: Vacancy) => v.user_id === userId);
-  const studentRequest = requests.find((r: StudentRequest) => r.user_id === userId);
-  const role = tutorProfile ? "Tutor" : "Student";
-  const displayName = tutorProfile?.name || studentVacancy?.contact_name || studentRequest?.student_name || profilesMap?.full_name || "Unknown User";
-  const displayPhone = tutorProfile?.contact_num || studentVacancy?.contact_number || studentRequest?.phone || "Phone N/A";
-  const tutorApps = applications.filter((a: VacancyApplication) => a.user_id === userId);
-  const tutorIncomingReqs = tutorProfile ? requests.filter((r: StudentRequest) => r.tutor_id === tutorProfile.id) : [];
-  const studentVacs = vacancies.filter((v: Vacancy) => v.user_id === userId);
-  const studentOutgoingReqs = requests.filter((r: StudentRequest) => r.user_id === userId);
-
-  useEffect(() => {
-    const fetchChat = async () => {
-      const { data } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
-      if (data) setChatMessages(data);
-      try {
-        await supabase.from('messages').update({ is_read: true }).eq('user_id', userId).eq('sender_role', 'user');
-        refreshData();
-      } catch (e) { console.warn("is_read column missing or update failed"); }
-    };
-    fetchChat();
-    const channel = supabase.channel(`chat-${userId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
-      setChatMessages((prev) => [...prev, payload.new as Message]);
-      supabase.from('messages').update({ is_read: true }).eq('id', payload.new.id).then(() => refreshData());
-    }).subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [userId, refreshData]);
-
-  useEffect(() => {
-    if (!showDetails) messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages, showDetails]);
-
-  const handleSend = async () => {
-    if (!msg.trim()) return;
-    const newMsgData = { user_id: userId, sender_role: 'admin', content: msg.trim() };
-    setMsg("");
-    const { error } = await supabase.from('messages').insert([newMsgData]);
-    if (error) alert("Failed to send message: " + error.message);
-  };
-
-  const deleteMessage = async (msgId: string) => {
-    if (confirm("Are you sure you want to delete this message?")) {
-      const { error } = await supabase.from('messages').delete().eq('id', msgId);
-      if (error) alert("Failed to delete message: " + error.message);
-      else { setChatMessages(prev => prev.filter(m => m.id !== msgId)); refreshData(); }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm pt-20 pb-10">
-      <div className="bg-white rounded-[30px] shadow-2xl max-w-4xl w-full flex flex-col h-[85vh] max-h-[850px] overflow-hidden">
-        <div onClick={() => setShowDetails(!showDetails)} className="p-6 border-b bg-slate-50 flex justify-between items-center shrink-0 cursor-pointer hover:bg-slate-100 transition-colors select-none group">
-          <div>
-            <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-              {displayName}
-              <span className={`text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-md font-bold ${role === 'Tutor' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{role}</span>
-            </h3>
-            <p className="text-sm text-slate-500 font-medium mt-1">{displayPhone} • <span className="text-indigo-500 group-hover:underline">{showDetails ? 'Switch to Chat' : 'View Activity Details'}</span></p>
-          </div>
-          <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-slate-400 hover:text-slate-800 p-2"><X size={24} /></button>
-        </div>
-
-        {showDetails ? (
-          <div className="flex-1 p-8 overflow-y-auto bg-slate-50/50 space-y-8">
-            {role === 'Tutor' ? (
-              <>
-                <div>
-                  <h4 className="font-black text-lg mb-4 text-slate-900">Applications to Vacancies</h4>
-                  {tutorApps.length === 0 ? <p className="text-sm text-slate-500">No applications found.</p> : (
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase"><tr><th className="p-4">Subject & Location</th><th className="p-4">Salary</th><th className="p-4">Student Status</th></tr></thead>
-                        <tbody className="text-sm font-medium">
-                          {tutorApps.map((app: any) => (
-                            <tr key={app.id} className="border-b border-slate-50">
-                              <td className="p-4"><p className="font-bold text-slate-800">{app.vacancies?.subject}</p><p className="text-xs text-slate-500">{app.vacancies?.location}</p></td>
-                              <td className="p-4 text-green-600 font-bold">{app.vacancies?.salary_range}</td>
-                              <td className="p-4 uppercase text-xs font-black tracking-wider text-slate-500">{app.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-black text-lg mb-4 text-slate-900">Direct Requests from Students</h4>
-                  {tutorIncomingReqs.length === 0 ? <p className="text-sm text-slate-500">No requests found.</p> : (
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase"><tr><th className="p-4">Student Name</th><th className="p-4">Contact</th><th className="p-4">Status</th></tr></thead>
-                        <tbody className="text-sm font-medium">
-                          {tutorIncomingReqs.map((req: any) => (
-                            <tr key={req.id} className="border-b border-slate-50">
-                              <td className="p-4 font-bold text-slate-800">{req.student_name}</td>
-                              <td className="p-4 text-slate-600">{req.phone}</td>
-                              <td className="p-4 uppercase text-xs font-black tracking-wider text-slate-500">{req.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <h4 className="font-black text-lg mb-4 text-slate-900">Posted Vacancies & Applicants</h4>
-                  {studentVacs.length === 0 ? <p className="text-sm text-slate-500">No vacancies posted.</p> : (
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase"><tr><th className="p-4">Date</th><th className="p-4">Subject</th><th className="p-4">Total Applicants</th></tr></thead>
-                        <tbody className="text-sm font-medium">
-                          {studentVacs.map((vac: Vacancy) => {
-                            const vacApps = applications.filter((a: VacancyApplication) => a.vacancy_id === vac.id);
-                            const isExpanded = expandedVacId === vac.id;
-                            return (
-                              <React.Fragment key={vac.id}>
-                                <tr onClick={() => setExpandedVacId(isExpanded ? null : vac.id)} className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer">
-                                  <td className="p-4 text-slate-500">{new Date(vac.created_at).toLocaleDateString()}</td>
-                                  <td className="p-4 font-bold text-slate-800 flex items-center gap-2"><ChevronRight size={16} className={`transition-transform ${isExpanded ? 'rotate-90 text-indigo-500' : 'text-slate-400'}`} /> {vac.subject}</td>
-                                  <td className="p-4 font-black text-indigo-600">{vacApps.length}</td>
-                                </tr>
-                                {isExpanded && (
-                                  <tr className="bg-slate-50/50">
-                                    <td colSpan={3} className="p-4 border-b border-slate-100">
-                                      {vacApps.length === 0 ? <p className="text-xs text-slate-400 pl-8">No tutors have applied yet.</p> : (
-                                        <div className="pl-8 space-y-2">
-                                          {vacApps.map((a: VacancyApplication) => (
-                                            <div key={a.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200">
-                                              <div><p className="text-sm font-bold text-slate-800">{a.applicant_name}</p><p className="text-xs text-slate-500">{a.applicant_phone}</p></div>
-                                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded ${a.status === 'accepted' ? 'bg-green-100 text-green-700' : a.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>{a.status}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </td>
-                                  </tr>
-                                )}
-                              </React.Fragment>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h4 className="font-black text-lg mb-4 text-slate-900">Direct Tutor Requests Made</h4>
-                  {studentOutgoingReqs.length === 0 ? <p className="text-sm text-slate-500">No requests made.</p> : (
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-50 border-b border-slate-100 text-xs text-slate-500 uppercase"><tr><th className="p-4">Tutor Applied</th><th className="p-4">Tutor Contact</th><th className="p-4">Status</th></tr></thead>
-                        <tbody className="text-sm font-medium">
-                          {studentOutgoingReqs.map((req: any) => (
-                            <tr key={req.id} className="border-b border-slate-50">
-                              <td className="p-4 font-bold text-slate-800">{req.tutors?.name || 'Unknown'}</td>
-                              <td className="p-4 text-slate-600">{req.tutors?.contact_num || 'N/A'}</td>
-                              <td className="p-4 uppercase text-xs font-black tracking-wider text-slate-500">{req.status}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 p-6 overflow-y-auto bg-white flex flex-col gap-4">
-              {chatMessages.length === 0 && <p className="text-center text-slate-400 mt-10 font-medium">No messages yet.</p>}
-              {chatMessages.map(m => (
-                <div key={m.id} className={`flex group items-center ${m.sender_role === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  {m.sender_role === 'admin' && <button onClick={() => deleteMessage(m.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded-full mr-2 transition-all"><Trash2 size={16} /></button>}
-                  <div className={`max-w-[75%] px-5 py-3.5 rounded-3xl font-medium text-[15px] break-words whitespace-pre-wrap ${m.sender_role === 'admin' ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm'}`}>{m.content}</div>
-                  {m.sender_role === 'user' && <button onClick={() => deleteMessage(m.id)} className="opacity-0 group-hover:opacity-100 p-2 text-red-500 hover:bg-red-50 rounded-full ml-2 transition-all"><Trash2 size={16} /></button>}
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-            <div className="p-4 border-t bg-slate-50 shrink-0 flex gap-2">
-              <input type="text" placeholder="Type a message as admin..." className="flex-1 bg-white px-5 py-4 rounded-2xl outline-none border border-slate-200 focus:border-indigo-500 font-medium transition-colors" value={msg} onChange={e => setMsg(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} />
-              <button onClick={handleSend} className="bg-indigo-600 text-white px-6 rounded-2xl font-black hover:bg-indigo-700 transition-colors"><Send size={18} /></button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
   );
 }

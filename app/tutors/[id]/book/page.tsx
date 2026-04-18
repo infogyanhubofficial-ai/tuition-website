@@ -18,7 +18,6 @@ import {
   Sparkles,
   Send,
   Loader2,
-  Users,
   ChevronRight
 } from 'lucide-react';
 
@@ -33,7 +32,7 @@ export default function BookTutorPage() {
 
   // States
   const [tutor, setTutor] = useState<any>(null);
-  const [userId, setUserId] = useState<string | null>(null); // Added state for the logged-in user
+  const [userId, setUserId] = useState<string | null>(null);
   const [loadingTutor, setLoadingTutor] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
@@ -47,6 +46,9 @@ export default function BookTutorPage() {
     message: ''
   });
 
+  // Extract the numeric ID from the slug
+  const numericTutorId = id ? parseInt(String(id).split('-')[0], 10) : null;
+
   // Fetch Tutor Summary & Current User
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -56,32 +58,40 @@ export default function BookTutorPage() {
         setUserId(user.id);
       }
 
-      // 2. Fetch the tutor details
-      if (!id) return;
+      // 2. Fetch the tutor details using the parsed numeric ID
+      if (!numericTutorId || isNaN(numericTutorId)) {
+        setLoadingTutor(false);
+        return;
+      }
+
       const { data: tutorData, error: tutorError } = await supabase
         .from('tutors')
         .select('id, name, subject, avatar_url, hour_rate, verified, mode_of_teaching')
-        .eq('id', Number(id))
+        .eq('id', numericTutorId)
         .single();
 
-      if (!tutorError) setTutor(tutorData);
+      if (!tutorError && tutorData) {
+        setTutor(tutorData);
+      }
       setLoadingTutor(false);
     };
 
     fetchInitialData();
-  }, [id]);
+  }, [numericTutorId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!numericTutorId) return;
+
     setIsSubmitting(true);
 
-    // Insert into your new student_requests table
+    // Insert into student_requests table using the parsed numeric ID
     const { error } = await supabase
       .from('student_requests')
       .insert([
         {
-          tutor_id: id,
-          user_id: userId, // <-- Added user_id here to map to auth.users
+          tutor_id: numericTutorId,
+          user_id: userId,
           ...formData,
           status: 'pending'
         }
@@ -115,14 +125,12 @@ export default function BookTutorPage() {
     );
   }
 
-  // Generate a cleaner "handle" from the name if desired
   const tutorHandle = tutor.name.split(' ').join('');
 
   // --- SUCCESS STATE UI ---
   if (isSuccess) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] p-4 text-center">
-        {/* Breadcrumbs for premium nav flow */}
         <nav className="mb-10 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.15em] text-slate-400">
            <Link href="/tutors" className="hover:text-orange-600 transition-colors">Tutors</Link>
            <ChevronRight className="h-3 w-3" />
@@ -131,28 +139,21 @@ export default function BookTutorPage() {
            <span className="text-blue-600">Request Confirmed</span>
         </nav>
 
-        {/* The New Confirmation Card */}
         <div className="max-w-xl w-full rounded-[48px] border border-emerald-100 bg-white p-12 shadow-2xl shadow-emerald-900/5 animate-in zoom-in duration-500 relative overflow-hidden">
-          
-          {/* Decorative subtle background gradient */}
           <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-white/95 pointer-events-none" />
 
           <div className="relative z-10 flex flex-col items-center">
-            {/* The Icon Container: Now more integrated */}
             <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-emerald-100/70 border border-emerald-100 text-emerald-600 mb-8 shadow-inner">
               <CheckCircle2 className="h-12 w-12" />
             </div>
 
-            {/* Title: More reassurance, emerald-tinted */}
             <h2 className="text-4xl sm:text-5xl font-black text-emerald-900 tracking-tight mb-5">Request Confirmed!</h2>
             
-            {/* Confirmation Text: Trust-signal focused, integrated */}
             <div className="max-w-md space-y-4 text-center">
               <p className="text-lg font-medium text-slate-600 leading-relaxed">
                 Thanks! We've received your request to connect with <strong className="text-slate-900">{tutor.name}</strong>.
               </p>
               
-              {/* Trust Signal Block: More direct reassurance */}
               <div className="mt-6 rounded-2xl bg-emerald-100/50 border border-emerald-100 p-5 flex items-start gap-3 text-left">
                  <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
                  <div>
@@ -164,7 +165,6 @@ export default function BookTutorPage() {
               </div>
             </div>
 
-            {/* Simple, clean Link replacing the dark button */}
             <div className="mt-12 w-full border-t border-emerald-100 pt-8 flex justify-end">
               <Link 
                 href="/tutors"
@@ -203,7 +203,6 @@ export default function BookTutorPage() {
           {/* LEFT: Tutor Summary & Trust Signals */}
           <aside className="space-y-6">
             <div className="rounded-[40px] bg-slate-900 p-8 text-white shadow-2xl shadow-blue-900/20 relative overflow-hidden">
-              {/* Decorative background element */}
               <div className="absolute -top-24 -right-24 h-64 w-64 rounded-full bg-blue-600 blur-3xl opacity-20" />
               
               <div className="relative z-10">
@@ -217,10 +216,10 @@ export default function BookTutorPage() {
                       <div className="flex h-full w-full items-center justify-center text-slate-500"><UserCircle2 size={32} /></div>
                     )}
                   </div>
-                  <div>
-                    <h2 className="text-xl font-black flex items-center gap-2">
+                  <div className="overflow-hidden">
+                    <h2 className="text-xl font-black flex items-center gap-2 truncate">
                       {tutor.name}
-                      {tutor.verified && <ShieldCheck className="h-4 w-4 text-blue-400" />}
+                      {tutor.verified && <ShieldCheck className="h-4 w-4 text-blue-400 shrink-0" />}
                     </h2>
                     <p className="text-sm text-slate-400 font-medium truncate">{Array.isArray(tutor.subject) ? tutor.subject.join(', ') : tutor.subject}</p>
                   </div>
@@ -337,7 +336,7 @@ export default function BookTutorPage() {
                       )}
                     >
                       <mode.icon className={cn("h-6 w-6", formData.preferred_mode === mode.id ? "text-blue-600" : "text-slate-400")} />
-                      <span className="text-[11px] font-bold uppercase tracking-wider">{mode.id}</span>
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-center">{mode.id}</span>
                     </button>
                   ))}
                 </div>

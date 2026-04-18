@@ -146,16 +146,12 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
   return (
     <div className="min-h-screen bg-[#F7F9FC] pb-20 font-sans text-slate-900 relative print:bg-white print:pb-0">
       
-      {/* Optimized Print Styles: Removes site-wide layout elements like main nav and footer */}
+      {/* Optimized Print Styles */}
       <style dangerouslySetInnerHTML={{__html: `
         @media print {
           body { background-color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           @page { size: auto; margin: 10mm; } 
-          
-          /* Hide global layout elements (Navbar and Footer) */
           nav:not(.print-nav), footer, header:not(.print-header) { display: none !important; }
-          
-          /* Hide external site elements often found in layouts */
           #main-nav, .site-footer, .policy-footer, .login-nav { display: none !important; }
         }
       `}} />
@@ -261,7 +257,10 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
                       alt="Certificate" 
                       className="w-full h-full object-contain drop-shadow-sm relative z-20 transition-transform duration-500 group-hover:scale-[1.01] print:drop-shadow-none"
                     />
-                    <button onClick={() => setShowLightbox(true)} className="absolute bottom-6 right-6 z-30 bg-[#0F1E3A]/90 backdrop-blur-sm text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#E86A2C] print:hidden">
+
+                  
+
+                    <button onClick={() => setShowLightbox(true)} className="absolute bottom-6 right-6 z-40 bg-[#0F1E3A]/90 backdrop-blur-sm text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#E86A2C] print:hidden">
                       <Maximize2 className="w-5 h-5" />
                     </button>
                   </>

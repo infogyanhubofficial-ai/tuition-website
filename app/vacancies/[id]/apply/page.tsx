@@ -29,10 +29,12 @@ function cn(...classes: Array<string | false | null | undefined>) {
 export default function ApplyVacancyPage() {
   const params = useParams();
   const rawId = params?.id;
-  const id = Array.isArray(rawId) ? rawId[0] : rawId;
+  const idSlug = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
 
-  // FIX: Initialize the secure client inside the component
+  // FIX: Secure parsing of the numeric ID from slug (e.g., "58-math-tutor" -> 58)
+  const numericVacancyId = idSlug ? parseInt(String(idSlug).split('-')[0], 10) : null;
+
   const supabase = createClient();
 
   // States
@@ -51,54 +53,50 @@ export default function ApplyVacancyPage() {
     cover_message: ''
   });
 
-  // Fetch Vacancy Summary & Check Auth & Check Tutor Profile
+  // Fetch Initial Data
   useEffect(() => {
     const initPage = async () => {
-      if (!id) return;
+      if (!numericVacancyId || isNaN(numericVacancyId)) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
-      // 1. Get current logged-in user using the secure getUser()
+      // 1. Get current logged-in user
       const { data: { user } } = await supabase.auth.getUser();
       
       if (!user) {
-        // If they are not logged in, redirect them to the login page
-        router.push(`/login?redirect=/vacancies/${id}/apply`);
+        router.push(`/login?redirect=/vacancies/${idSlug}/apply`);
         return;
       }
       
       setUser(user);
 
-      // 2. Check if the user has a tutor profile
-      // FIX: Changed from 'phone, email' to 'contact_num' to match the actual DB schema
+      // 2. Check for Tutor Profile
       const { data: tutorData, error: tutorError } = await supabase
         .from('tutors')
         .select('id, name, contact_num') 
         .eq('user_id', user.id)
-        .maybeSingle(); // FIX: maybeSingle() prevents crashes if rows don't exist
-
-      if (tutorError) {
-        console.error("Error fetching tutor profile:", tutorError);
-      }
+        .maybeSingle();
 
       if (tutorData) {
         setTutorId(tutorData.id);
-        // Pre-fill form with tutor data using the correct column name
         setFormData(prev => ({
           ...prev,
           applicant_name: tutorData.name || '',
-          applicant_phone: tutorData.contact_num || '', // Mapped to contact_num
-          applicant_email: user.email || '' // Email comes straight from Auth session
+          applicant_phone: tutorData.contact_num || '',
+          applicant_email: user.email || ''
         }));
       } else {
-        // Pre-fill email if available from their account (even if no tutor profile yet)
         setFormData(prev => ({ ...prev, applicant_email: user.email || '' }));
       }
 
-      // 3. Fetch Vacancy details for the summary card
+      // 3. Fetch Vacancy details using the parsed numeric ID
       const { data, error } = await supabase
         .from('vacancies')
         .select('id, subject, location, salary_range, class_level')
-        .eq('id', Number(id))
+        .eq('id', numericVacancyId)
         .single();
 
       if (!error) setVacancy(data);
@@ -106,11 +104,11 @@ export default function ApplyVacancyPage() {
     };
 
     initPage();
-  }, [id, router, supabase]);
+  }, [numericVacancyId, idSlug, router, supabase]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!id) return;
+    if (!numericVacancyId) return;
     
     if (!tutorId) {
       alert("You must create a tutor profile before applying.");
@@ -119,7 +117,6 @@ export default function ApplyVacancyPage() {
 
     setIsSubmitting(true);
 
-    // Fetch the absolute latest session right before submitting to be safe
     const { data: { user } } = await supabase.auth.getUser();
     const currentUserId = user?.id;
 
@@ -129,12 +126,12 @@ export default function ApplyVacancyPage() {
       return;
     }
 
-    // Insert into the vacancy_applications table WITH the user_id AND tutor_id
+    // Insert using the verified numeric ID
     const { error } = await supabase
       .from('vacancy_applications')
       .insert([
         {
-          vacancy_id: Number(id),
+          vacancy_id: numericVacancyId,
           user_id: currentUserId, 
           tutor_id: tutorId, 
           applicant_name: formData.applicant_name,
@@ -152,7 +149,7 @@ export default function ApplyVacancyPage() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       console.error("Application Error:", error);
-      alert('Something went wrong submitting your application. Please ensure you are logged in and try again.');
+      alert('Something went wrong. Please ensure you are logged in and try again.');
     }
   };
 
@@ -173,7 +170,6 @@ export default function ApplyVacancyPage() {
     );
   }
 
-  // --- TUTOR PROFILE REQUIRED UI ---
   if (user && !tutorId) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
@@ -185,7 +181,7 @@ export default function ApplyVacancyPage() {
           <h2 className="text-2xl font-black text-slate-900 mb-2">Tutor Profile Required</h2>
           <p className="text-slate-500 mb-8 font-medium">To maintain quality and trust, you must have an active tutor profile to apply for jobs.</p>
           <div className="space-y-4">
-            <Link href="/become-tutor" className="block w-full bg-orange-500 text-white font-bold py-4 rounded-2xl hover:bg-orange-600 transition shadow-[0_10px_20px_rgba(249,115,22,0.2)] hover:-translate-y-1">
+            <Link href="/become-a-tutor" className="block w-full bg-orange-500 text-white font-bold py-4 rounded-2xl hover:bg-orange-600 transition shadow-[0_10px_20px_rgba(249,115,22,0.2)] hover:-translate-y-1">
               Create Tutor Profile
             </Link>
             <button onClick={() => router.back()} className="block w-full text-slate-500 font-bold py-2 hover:text-slate-900 transition">
@@ -197,7 +193,6 @@ export default function ApplyVacancyPage() {
     );
   }
 
-  // --- SUCCESS STATE UI ---
   if (isSuccess) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
@@ -224,7 +219,7 @@ export default function ApplyVacancyPage() {
 
           <div className="mt-10">
             <Link 
-              href={`/vacancies/${id}`}
+              href={`/vacancies/${idSlug}`}
               className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 py-4 text-sm font-black text-white shadow-lg shadow-orange-200 transition-all duration-300 hover:-translate-y-1 hover:bg-orange-600 active:scale-95"
             >
               <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" /> 
@@ -236,7 +231,6 @@ export default function ApplyVacancyPage() {
     );
   }
 
-  // --- MAIN APPLICATION UI ---
   return (
     <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-12 lg:py-20 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
@@ -247,10 +241,8 @@ export default function ApplyVacancyPage() {
 
         <div className="grid gap-8 lg:grid-cols-[380px_1fr] items-start">
           
-          {/* LEFT: Clean Vacancy Summary */}
           <aside className="space-y-6">
             <div className="rounded-[40px] border border-orange-100 bg-white p-8 shadow-xl shadow-orange-900/5">
-              
               <div className="flex items-center gap-2 mb-8">
                 <div className="h-2 w-2 rounded-full bg-orange-500 animate-pulse" />
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-600">Application Summary</p>
@@ -264,27 +256,25 @@ export default function ApplyVacancyPage() {
                 <p className="mt-1 text-sm font-bold text-slate-500">{vacancy.class_level}</p>
               </div>
 
-              {/* Attractive Details */}
               <div className="rounded-3xl bg-slate-50 border border-slate-100 p-5 mb-8 space-y-4">
-                 <div className="flex items-center justify-between border-b border-slate-200/60 pb-4">
-                    <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</span>
-                    <span className="text-sm font-black text-slate-900 truncate max-w-[150px]">{vacancy.location}</span>
-                 </div>
-                 <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><Clock className="h-4 w-4" /> Est. Salary</span>
-                    <span className="text-sm font-black text-orange-600">{vacancy.salary_range ? `Rs. ${vacancy.salary_range}` : 'Negotiable'}</span>
-                 </div>
+                  <div className="flex items-center justify-between border-b border-slate-200/60 pb-4">
+                     <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><MapPin className="h-4 w-4" /> Location</span>
+                     <span className="text-sm font-black text-slate-900 truncate max-w-[150px]">{vacancy.location}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                     <span className="text-xs font-bold text-slate-500 flex items-center gap-2"><Clock className="h-4 w-4" /> Est. Salary</span>
+                     <span className="text-sm font-black text-orange-600">{vacancy.salary_range ? `Rs. ${vacancy.salary_range}` : 'Negotiable'}</span>
+                  </div>
               </div>
 
-              <div className="rounded-2xl bg-orange-50/50 p-4 border border-orange-100/50">
-                 <p className="text-[11px] font-bold text-orange-800 leading-relaxed text-center">
-                   Submit your details to express interest. GyanHub will review and connect you with the client.
-                 </p>
+              <div className="rounded-2xl bg-orange-50/50 p-4 border border-orange-100/50 text-center">
+                  <p className="text-[11px] font-bold text-orange-800 leading-relaxed">
+                    Submit your details to express interest. GyanHub will review and connect you with the client.
+                  </p>
               </div>
             </div>
           </aside>
 
-          {/* RIGHT: The Application Form */}
           <main className="rounded-[40px] border border-slate-200 bg-white p-6 sm:p-10 shadow-sm">
             <div className="mb-8 flex items-center gap-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
@@ -307,10 +297,10 @@ export default function ApplyVacancyPage() {
                       type="text" 
                       required
                       placeholder="e.g. Khusbu Kharel"
-                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 pl-12 text-sm font-medium outline-none transition-all focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 pl-12 text-sm font-medium outline-none transition-all focus:border-orange-500 focus:bg-white focus:ring-4 focus:ring-orange-500/10 disabled:opacity-70"
                       value={formData.applicant_name}
                       onChange={(e) => setFormData({...formData, applicant_name: e.target.value})}
-                      disabled // Disabled because it's pulled from their tutor profile
+                      disabled
                     />
                   </div>
                 </div>
@@ -363,7 +353,7 @@ export default function ApplyVacancyPage() {
                 <button 
                   type="submit" 
                   disabled={isSubmitting}
-                  className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 py-4 text-base font-black text-white shadow-lg shadow-orange-500/25 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/30 active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                  className="group flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 py-4 text-base font-black text-white shadow-lg shadow-orange-500/25 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl active:scale-95 disabled:opacity-50"
                 >
                   {isSubmitting ? (
                     <Loader2 className="h-5 w-5 animate-spin" />

@@ -9,7 +9,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   try {
     // Note: Server components require absolute URLs for fetch.
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.gyanhub.com.np';
-    const res = await fetch(`${baseUrl}/api/online-courses/${encodeURIComponent(decodedCourseName)}`);
+    const res = await fetch(`${baseUrl}/api/online_courses/${encodeURIComponent(decodedCourseName)}`);
     
     if (!res.ok) {
       return { title: 'Course Not Found | GyanHub' };

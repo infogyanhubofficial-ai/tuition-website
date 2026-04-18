@@ -216,7 +216,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     async function fetchCourse() {
       try {
         // Pass the properly encoded, cleaned string to the fetch API
-        const res = await fetch(`/api/online-courses/${encodeURIComponent(decodedCourseName)}`);
+        const res = await fetch(`/api/online_courses/${encodeURIComponent(decodedCourseName)}`);
         if (!res.ok) throw new Error("Course not found");
         setCourse(await res.json());
       } catch (err) { setError(true); } 
@@ -271,22 +271,21 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
       <h3 className="text-xl font-black text-slate-900 mb-2">Industry Certificate</h3>
       <p className="text-sm font-medium text-slate-500 mb-6">Earn a verified certificate upon completion to showcase your skills to employers.</p>
       
-      {course.certificate_url ? (
-        <Link href="https://www.gyanhub.com.np/certificate?name=Bhim%20Bahadur%20Thapa&email=thapanibas2018%40gmail.com" target="_blank" className="block relative group w-full cursor-pointer rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
-          <img src={course.certificate_url} className="w-full object-cover group-hover:scale-105 group-hover:blur-sm transition-all duration-500" alt="Course Certificate Verification" loading="lazy" />
-          <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
-             <ShieldCheck className="w-8 h-8 text-emerald-400" />
-             <span className="bg-emerald-500 text-white text-xs font-black px-5 py-2.5 rounded-full shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-all duration-300">
-               Click to Verify Authenticity
-             </span>
-          </div>
-        </Link>
-      ) : (
-        <div className="w-full aspect-[1.4/1] bg-slate-50 border border-slate-100 rounded-2xl flex flex-col gap-2 items-center justify-center text-slate-400 font-bold">
-          <FileText className="w-6 h-6 opacity-50" />
-          <span className="text-xs">Preview Unavailable</span>
+      <Link href="https://www.gyanhub.com.np/certificate?name=Bhim%20Bahadur%20Thapa&email=thapanibas2018%40gmail.com" target="_blank" className="block relative group w-full cursor-pointer rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
+        {/* REPLACED: New Sample Image Fallback added here and removed the Preview Unavailable block */}
+        <img 
+          src={course.certificate_url || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Sample_Certificate.webp"} 
+          className="w-full object-cover group-hover:scale-105 group-hover:blur-sm transition-all duration-500" 
+          alt="Course Certificate Verification" 
+          loading="lazy" 
+        />
+        <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-3">
+           <ShieldCheck className="w-8 h-8 text-emerald-400" />
+           <span className="bg-emerald-500 text-white text-xs font-black px-5 py-2.5 rounded-full shadow-lg transform translate-y-4 group-hover:translate-y-0 transition-all duration-300">
+             Click to Verify Authenticity
+           </span>
         </div>
-      )}
+      </Link>
     </div>
   );
 
@@ -565,173 +564,40 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
                 </div>
                 <p className="text-slate-600 font-bold mb-8">After completing this course, you will be able to:</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  
                   <div className="flex gap-4">
-                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm"><Briefcase className="w-5 h-5 text-orange-500"/></div>
+                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm">
+                      <Briefcase className="w-5 h-5 text-orange-500" />
+                    </div>
                     <div>
-                      <h4 className="font-black text-slate-800 mb-1">Apply for Jobs Confidently</h4>
-                      <p className="text-sm text-slate-500 font-medium">Bypass the fresher struggle with practical knowledge.</p>
+                      <h4 className="font-bold text-slate-800">Job-Ready Portfolio</h4>
+                      <p className="text-sm text-slate-600 mt-1">Showcase real projects to employers.</p>
                     </div>
                   </div>
-                  <div className="flex gap-4">
-                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm"><MonitorPlay className="w-5 h-5 text-orange-500"/></div>
-                    <div>
-                      <h4 className="font-black text-slate-800 mb-1">Work on Real Projects</h4>
-                      <p className="text-sm text-slate-500 font-medium">Handle real-world scenarios independently.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm"><Sparkles className="w-5 h-5 text-orange-500"/></div>
-                    <div>
-                      <h4 className="font-black text-slate-800 mb-1">Freelance Opportunities</h4>
-                      <p className="text-sm text-slate-500 font-medium">Start earning globally by offering your new skills.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-4">
-                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm"><FileText className="w-5 h-5 text-orange-500"/></div>
-                    <div>
-                      <h4 className="font-black text-slate-800 mb-1">Build a Strong Portfolio</h4>
-                      <p className="text-sm text-slate-500 font-medium">Showcase concrete assignments to future employers.</p>
-                    </div>
-                  </div>
-                </div>
-            </section>
 
-            {/* Certificate Section (MOBILE ONLY - Above FAQ) */}
-            <div className="block xl:hidden">
-              <CertificateCard />
-            </div>
-
-            {/* FAQ SECTION */}
-            <section>
-                <div className="flex items-center gap-4 mb-10">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-200 flex items-center justify-center text-slate-700 shrink-0">
-                    <HelpCircle className="w-6 h-6" />
+                  <div className="flex gap-4">
+                    <div className="bg-white p-2.5 rounded-xl border border-orange-200 shrink-0 h-min shadow-sm">
+                      <TrendingUp className="w-5 h-5 text-orange-500" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-800">Career Growth</h4>
+                      <p className="text-sm text-slate-600 mt-1">Boost your earnings and land better roles.</p>
+                    </div>
                   </div>
-                  <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-900">Frequently Asked Questions</h2>
-                </div>
-                
-                <div className="space-y-4">
-                    {parsedFaqs.length > 0 ? (
-                        parsedFaqs.map((faq: any, i: number) => (
-                            <details key={i} className="group bg-white border border-slate-200 rounded-3xl overflow-hidden [&_summary::-webkit-details-marker]:hidden shadow-sm hover:shadow-md transition-all">
-                                <summary className="flex items-center justify-between cursor-pointer p-6 sm:p-8 font-black text-lg text-slate-800 outline-none">
-                                    {faq.q}
-                                    <span className="transition group-open:rotate-180 bg-slate-50 p-2 rounded-full">
-                                        <svg fill="none" height="20" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="20"><path d="M6 9l6 6 6-6"></path></svg>
-                                    </span>
-                                </summary>
-                                <div className="px-6 sm:px-8 pb-8 pt-0 text-slate-600 font-medium leading-relaxed border-t border-slate-50 mt-2">
-                                    {faq.a}
-                                </div>
-                            </details>
-                        ))
-                    ) : (
-                        <p className="text-slate-500 italic p-8 border border-dashed border-slate-300 rounded-3xl text-center bg-white">No FAQs available right now.</p>
-                    )}
+
                 </div>
             </section>
           </div>
 
-          {/* RIGHT SIDEBAR (STICKY PRICING & CERTIFICATE) */}
-          <div className="xl:relative">
-            <div className="xl:sticky xl:top-28 space-y-8">
-                
-                {/* Pricing Card */}
-                <div className="bg-white border border-slate-200 p-8 rounded-[3rem] shadow-[0_20px_50px_rgba(0,0,0,0.05)] relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-orange-400 to-amber-400"></div>
-                    
-                    <div className="mb-8">
-                        <div className="flex justify-between items-end mb-2">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Discount Seats Left</p>
-                          <p className="text-[9px] font-bold text-red-500 uppercase flex items-center gap-1 animate-pulse">
-                            <Clock className="w-3 h-3"/> Updated {lastUpdated}m ago
-                          </p>
-                        </div>
-                        <div className="flex gap-1.5 items-end">
-                          <span className="text-5xl font-black text-slate-900 tracking-tighter leading-none">{seats}</span>
-                          <span className="text-lg font-bold text-slate-500 mb-1">/ 20</span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-2.5 rounded-full mt-4 overflow-hidden">
-                          <div 
-                            className="h-full bg-gradient-to-r from-orange-500 to-red-500 rounded-full transition-all duration-1000 ease-out"
-                            style={{ width: `${(seats / 20) * 100}%` }}
-                          ></div>
-                        </div>
-                    </div>
-
-                    <div className="mb-8 p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-[0.2em]">Course Fee</p>
-                        <div className="flex flex-col">
-                          {discount > 0 && (
-                            <span className="text-lg font-bold text-slate-400 line-through mb-1">
-                              NRs. {formatPrice(originalPrice)}
-                            </span>
-                          )}
-                          <span className="text-4xl font-black text-emerald-600 tracking-tighter flex items-baseline gap-1">
-                            <span className="text-lg text-emerald-600/70 font-bold">NRs.</span>
-                            {formatPrice(finalPrice)}
-                          </span>
-                        </div>
-                        {discount > 0 && (
-                          <div className="mt-4 inline-block bg-orange-100 text-orange-700 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider border border-orange-200">
-                            🔥 {discount}% Discount Applied
-                          </div>
-                        )}
-                    </div>
-
-                    <button 
-                      onClick={handleBookSeat}
-                      className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-lg shadow-xl hover:shadow-2xl hover:bg-black transition-all active:scale-95 flex justify-center items-center gap-2 group"
-                    >
-                        Secure Your Seat <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                    </button>
-                    
-                    <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-500">
-                      <ShieldCheck className="w-4 h-4" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">100% Secure Checkout</span>
-                    </div>
-                </div>
-
-                {/* Desktop Certificate Card (Hidden on Mobile) */}
-                <div className="hidden xl:block">
-                   <CertificateCard />
-                </div>
-            </div>
+          {/* Right Sidebar */}
+          <div className="xl:col-span-1">
+             <div className="sticky top-24">
+                <CertificateCard />
+             </div>
           </div>
+          
         </div>
       </main>
-
-      {/* MOBILE STICKY CTA */}
-      <div className="xl:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 shadow-[0_-10px_30px_rgba(0,0,0,0.08)] z-50 p-4 flex items-center justify-between gap-4">
-         <div className="flex flex-col">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-0.5">Total Fee</span>
-            <span className="text-xl font-black text-slate-900 leading-none">Rs. {formatPrice(finalPrice)}</span>
-         </div>
-         <button 
-           onClick={handleBookSeat}
-           className="flex-1 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-black py-3.5 rounded-xl text-center shadow-lg active:scale-95 transition-transform"
-         >
-           Enroll Now
-         </button>
-      </div>
-
-      <style jsx global>{`
-        @keyframes marquee-slow {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee-slow {
-          animation: marquee-slow 40s linear infinite;
-        }
-      `}</style>
     </div>
   );
-}
-
-function ArrowRight(props: any) {
-  return (
-    <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14" /><path d="m12 5 7 7-7 7" />
-    </svg>
-  )
 }

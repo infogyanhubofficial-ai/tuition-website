@@ -68,7 +68,7 @@ export default function OnlineCoursesPage() {
       setLoading(true);
       setError(null);
       // Ensure this endpoint returns your online courses from Supabase
-      const res = await fetch("/api/online-courses");
+      const res = await fetch("/api/online_courses");
       if (!res.ok) throw new Error("Failed to fetch courses");
       const data = await res.json();
       

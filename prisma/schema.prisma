@@ -651,7 +651,7 @@ model online_courses {
   is_active         Boolean?  @default(true)
   created_at        DateTime? @default(now()) @db.Timestamptz(6)
 
-  @@map("online-courses")
+  @@map("online_courses")
   @@schema("public")
 }
 

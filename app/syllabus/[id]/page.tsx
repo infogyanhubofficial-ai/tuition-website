@@ -76,7 +76,7 @@ function getYouTubeEmbedUrl(url: string | null) {
 async function getCourseAndTutorData(id: string): Promise<{ course: Course | null, tutor: Tutor | null }> {
   
   const { data: courseData, error: courseError } = await supabase
-    .from('online-courses')
+    .from('online_courses')
     .select('*')
     .eq('tutor_id', id)
     .limit(1)

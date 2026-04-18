@@ -48,7 +48,7 @@ function CertificateContent() {
       setStats({ alumni: certCount.count || 0, activeSyllabi: syllabiCount.count || 0 });
 
       const { data: courses } = await supabase
-        .from('online-courses')
+        .from('online_courses')
         .select('id, title, duration, start_datetime, cover_pic, fee')
         .eq('is_active', true)
         .order('created_at', { ascending: false })

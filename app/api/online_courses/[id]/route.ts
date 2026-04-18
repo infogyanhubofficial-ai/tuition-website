@@ -25,7 +25,7 @@ export async function GET(
 
     // 4. Query Supabase dynamically based on the identifier type
     const { data: course, error } = await supabase
-      .from("online-courses") 
+      .from("online_courses") 
       .select("*")
       .eq(searchColumn, decodedIdentifier) 
       .single();

@@ -149,7 +149,7 @@ export default function MyCoursesPage() {
           .order('created_at', { ascending: false });
           
         const coursesPromise = supabase
-          .from('online-courses')
+          .from('online_courses')
           .select('id, title, duration, fee, discount, cover_pic, start_datetime')
           .gte('start_datetime', new Date().toISOString())
           .order('start_datetime', { ascending: true })
@@ -526,7 +526,7 @@ export default function MyCoursesPage() {
               </div>
               <h2 className="text-2xl font-black text-slate-900">Upcoming Courses</h2>
             </div>
-            <Link href="/online-courses" className="text-sm font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1">
+            <Link href="/online_courses" className="text-sm font-bold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1">
               View All <ChevronRight className="h-4 w-4" />
             </Link>
           </div>

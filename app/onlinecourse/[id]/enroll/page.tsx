@@ -13,7 +13,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     // Note: Server-side fetch requires an absolute URL. 
     // Ensure NEXT_PUBLIC_SITE_URL is set in your .env (e.g., https://www.gyanhub.com.np)
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.gyanhub.com.np';
-    const res = await fetch(`${siteUrl}/api/online-courses/${encodeURIComponent(courseId)}`, {
+    const res = await fetch(`${siteUrl}/api/online_courses/${encodeURIComponent(courseId)}`, {
       next: { revalidate: 60 } 
     });
     

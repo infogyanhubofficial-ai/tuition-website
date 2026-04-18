@@ -6,11 +6,69 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   ArrowLeft, Lock, ShieldCheck, CheckCircle2, Info, User, Mail, 
   Phone, Loader2, UploadCloud, FileCheck, Receipt, GraduationCap, 
-  FileText, Sparkles, PlayCircle, MessageCircle 
+  FileText, Sparkles, PlayCircle, MessageCircle, Tag
 } from "lucide-react";
 
 // --- TYPES ---
 type OrderMode = "cv_phone" | "badge" | "course" | "recording" | "unknown";
+
+// --- IMAGE COMPRESSION UTILITY ---
+// Compresses image to WebP format for maximum storage savings
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return reject(new Error('Failed to get canvas context'));
+
+        // Max dimensions for the screenshot to save space
+        const MAX_WIDTH = 1200;
+        const MAX_HEIGHT = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height *= MAX_WIDTH / width;
+            width = MAX_WIDTH;
+          }
+        } else {
+          if (height > MAX_HEIGHT) {
+            width *= MAX_HEIGHT / height;
+            height = MAX_HEIGHT;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Export as WebP with 0.5 quality for extreme compression
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) return reject(new Error('Canvas is empty'));
+            // Rename file extension to .webp
+            const newFileName = file.name.replace(/\.[^/.]+$/, ".webp");
+            const compressedFile = new File([blob], newFileName, {
+              type: 'image/webp',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          'image/webp',
+          0.5 
+        );
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
 
 function CheckoutContent() {
   // 0. FIX: SCROLL TO TOP ON MOUNT
@@ -22,7 +80,7 @@ function CheckoutContent() {
   const router = useRouter(); 
   const supabase = createClient();
 
-  // 1. SAFELY PARSE URL PARAMS (Always fallback to empty string)
+  // 1. SAFELY PARSE URL PARAMS
   const urlType = searchParams.get("type")?.toLowerCase() || ""; 
   const requestType = searchParams.get("request_type")?.toLowerCase() || ""; 
   const orderType = searchParams.get("order_type")?.toLowerCase() || ""; 
@@ -32,7 +90,6 @@ function CheckoutContent() {
   const urlEmail = searchParams.get("email") || "";
   const urlPhone = searchParams.get("phone") || "";
   const urlTutorName = searchParams.get("tutor_name") || searchParams.get("tutorName") || "";
-  // Check both "courseName" and "course_name" to match the redirect URL safely
   const urlCourseName = searchParams.get("courseName") || searchParams.get("course_name") || "";
   const urlPrice = searchParams.get("price") || "0";
 
@@ -53,19 +110,17 @@ function CheckoutContent() {
   const [isUploading, setIsUploading] = useState(false);
   const [agreeRefund, setAgreeRefund] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
-  const [showRecordingSuccess, setShowRecordingSuccess] = useState(false); // New Success Modal State
+  const [showRecordingSuccess, setShowRecordingSuccess] = useState(false);
 
-  // 5. DYNAMIC DATA STATE (For fetching tutor names)
+  // 5. DYNAMIC DATA STATE
   const [fetchedTutorName, setFetchedTutorName] = useState(urlTutorName);
   const [isFetchingData, setIsFetchingData] = useState(false);
 
-  // 6. INITIALIZATION & DATA FETCHING EFFECT
+  // 6. INITIALIZATION & DATA FETCHING
   useEffect(() => {
     const initializeCheckout = async () => {
       setIsFetchingData(true);
-
       try {
-        // Fetch User Info if missing (from Supabase Auth)
         if (!urlName || !urlEmail) {
           const { data: { user } } = await supabase.auth.getUser();
           if (user) {
@@ -73,8 +128,6 @@ function CheckoutContent() {
             if (!urlEmail) setEmail(user.email || '');
           }
         }
-
-        // Fetch Tutor Name if missing, but we have an ID
         if (tutorId && !urlTutorName && currentMode === 'cv_phone') {
           const { data, error } = await supabase
             .from('tutors')
@@ -82,11 +135,8 @@ function CheckoutContent() {
             .eq('id', tutorId)
             .single();
 
-          if (data) {
-            setFetchedTutorName(data.full_name || data.name || `Tutor #${tutorId}`);
-          } else {
-            setFetchedTutorName(`Tutor #${tutorId}`);
-          }
+          if (data) setFetchedTutorName(data.full_name || data.name || `Tutor #${tutorId}`);
+          else setFetchedTutorName(`Tutor #${tutorId}`);
         }
       } catch (error) {
         console.error("Initialization Error:", error);
@@ -94,53 +144,48 @@ function CheckoutContent() {
         setIsFetchingData(false);
       }
     };
-
     initializeCheckout();
   }, [tutorId, urlTutorName, urlName, urlEmail, currentMode, supabase]);
 
-  // 7. CONFIGURE UI BASED ON MODE
+  // 7. CONFIGURE UI AND DATA BASED ON MODE
   const getOrderConfig = () => {
     switch (currentMode) {
       case "recording":
         return {
-          title: "Recording videos",
-          providerLabel: "Course Name",
-          provider: urlCourseName || "Selected Course",
+          title: "Recording Video Access",
+          orderName: urlCourseName || "Selected Course",
           price: parseInt(urlPrice) || 0,
-          icon: <PlayCircle className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
+          icon: <PlayCircle className="w-5 h-5 text-indigo-600 shrink-0" />,
           notice: `You are purchasing instant access to "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
           noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
           noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
         };
       case "course":
         return {
-          title: `Course Enrollment: ${urlCourseName || 'Selected Course'}`,
-          providerLabel: "Provider Name",
-          provider: fetchedTutorName || "GyanHub Online Courses",
+          title: "Online Course Enrollment",
+          orderName: urlCourseName || "Selected Course",
           price: parseInt(urlPrice) || 0,
-          icon: <GraduationCap className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
-          notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for online class within 24 hours.`,
+          icon: <GraduationCap className="w-5 h-5 text-indigo-600 shrink-0" />,
+          notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for the online class within 24 hours.`,
           noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
           noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
         };
       case "badge":
         return {
-          title: "Verification Badge (One-year)",
-          providerLabel: "Tutor Name",
-          provider: fullName || urlName || "Your Profile",
+          title: "Verification Badge (1-Year)",
+          orderName: fullName || urlName || "Your Profile Verification",
           price: 500,
-          icon: <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
+          icon: <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />,
           notice: "You must submit original documents later. Badge won't be verified otherwise and payment is non-refundable.",
           noticeStyle: "bg-amber-50 border-amber-200/60 text-amber-800",
           noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5" />
         };
       case "cv_phone":
         return {
-          title: "Curriculum Vitae & Contact Number",
-          providerLabel: "Tutor Name",
-          provider: fetchedTutorName || `Tutor #${tutorId || 'Unknown'}`,
+          title: "CV & Contact Detail Unlock",
+          orderName: fetchedTutorName || `Tutor #${tutorId || 'Unknown'}`,
           price: 1000,
-          icon: <FileText className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
+          icon: <FileText className="w-5 h-5 text-indigo-600 shrink-0" />,
           notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
           noticeStyle: "bg-emerald-50 border-emerald-200/60 text-emerald-800",
           noticeIcon: <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
@@ -148,10 +193,9 @@ function CheckoutContent() {
       default:
         return {
           title: "Unknown Service",
-          providerLabel: "Tutor Name",
-          provider: "Unknown",
+          orderName: "Unknown",
           price: 0,
-          icon: <Info className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />,
+          icon: <Info className="w-5 h-5 text-slate-400 shrink-0" />,
           notice: "Invalid request. Please go back and try again.",
           noticeStyle: "bg-slate-50 border-slate-200/60 text-slate-800",
           noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5" />
@@ -160,42 +204,46 @@ function CheckoutContent() {
   };
 
   const config = getOrderConfig();
-  
-  // Safe string formatting
   const amountInWords = config.price === 1000 ? "One Thousand Rupees" : config.price === 500 ? "Five Hundred Rupees" : `${config.price.toLocaleString()} Rupees`;
-  const avatarInitial = config.provider ? config.provider.charAt(0).toUpperCase() : 'G';
 
-  // 8. VALIDATION
+  // 8. VALIDATION CHECKS
   const isPhoneValid = contactNumber.replace(/\D/g, '').length >= 10;
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const isNameValid = fullName.trim().length > 2;
-  const isFormValid = isPhoneValid && isEmailValid && isNameValid && screenshot && agreeRefund && agreePrivacy && !isFetchingData && currentMode !== "unknown";
 
   // 9. SUBMIT HANDLER
   const handleSubmit = async () => {
-    if (!isFormValid || !screenshot) return;
-    
+    // Check and point users to missing fields
+    if (!isNameValid) { alert("Please enter your Full Name."); document.getElementById("fullName")?.focus(); return; }
+    if (!isEmailValid) { alert("Please enter a valid Email Address."); document.getElementById("email")?.focus(); return; }
+    if (!isPhoneValid) { alert("Please enter a valid Contact Number (at least 10 digits)."); document.getElementById("contactNumber")?.focus(); return; }
+    if (!screenshot) { alert("Please upload your payment screenshot."); document.getElementById("dropzone-file")?.focus(); return; }
+    if (!agreeRefund) { alert("Please agree to the Refund & Return Policy."); document.getElementById("agreeRefund")?.focus(); return; }
+    if (!agreePrivacy) { alert("Please agree to the User's Data Policy."); document.getElementById("agreePrivacy")?.focus(); return; }
+    if (currentMode === "unknown") { alert("Invalid order type. Please restart the checkout process."); return; }
+
     setIsUploading(true);
     try {
-      // Create a unique file name
-      const fileExt = screenshot.name.split('.').pop();
+      // --- COMPRESS THE IMAGE BEFORE UPLOAD ---
+      const compressedScreenshot = await compressImage(screenshot);
+
+      const fileExt = compressedScreenshot.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `receipts/${fileName}`;
 
-      // Upload logic
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('others')
-        .upload(filePath, screenshot);
+        .upload(filePath, compressedScreenshot); // Upload the compressed file
         
       if (uploadError) throw uploadError;
 
-      // Database insert logic
+      // Inserting exact columns per the DB Schema
       const { error: dbError } = await supabase.from('orders').insert([{
         full_name: fullName,
         email: email,
         contact_number: contactNumber,
         order_type: currentMode,
-        tutor_name: config.provider, // Reusing column for Course Name in recording flow
+        order_name: config.orderName,
         price: config.price,
         screenshot_url: uploadData.path,
         agreed_refund_policy: agreeRefund,
@@ -204,13 +252,13 @@ function CheckoutContent() {
       
       if (dbError) throw dbError;
 
-      // Check current mode to redirect properly
       if (currentMode === "recording") {
         setIsUploading(false);
         setShowRecordingSuccess(true);
       } else {
         alert("Order submitted successfully!");
-        router.push("/"); 
+        // --- UPDATED REDIRECT TO /dashboard ---
+        router.push("/dashboard"); 
       }
       
     } catch (error: any) {
@@ -222,7 +270,6 @@ function CheckoutContent() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 relative selection:bg-blue-100">
-      
       {/* FLOATING WHATSAPP BUTTON */}
       <a 
         href="https://wa.me/9763695665" 
@@ -262,20 +309,22 @@ function CheckoutContent() {
               <div className="space-y-5">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name <span className="text-red-500">*</span></label>
+                    <label htmlFor="fullName" className="block text-sm font-medium text-slate-700 mb-1.5">Full Name <span className="text-red-500">*</span></label>
                     <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden">
                       <div className="pl-4 text-slate-400"><User className="w-4 h-4" /></div>
                       <input 
+                        id="fullName"
                         type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe"
                         className="w-full px-3 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address <span className="text-red-500">*</span></label>
+                    <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email Address <span className="text-red-500">*</span></label>
                     <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden">
                       <div className="pl-4 text-slate-400"><Mail className="w-4 h-4" /></div>
                       <input 
+                        id="email"
                         type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
                         className="w-full px-3 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                       />
@@ -283,12 +332,13 @@ function CheckoutContent() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Contact Number <span className="text-red-500">*</span></label>
+                  <label htmlFor="contactNumber" className="block text-sm font-medium text-slate-700 mb-1.5">Contact Number <span className="text-red-500">*</span></label>
                   <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden group">
                     <span className="flex items-center gap-2 text-slate-500 px-4 py-3 border-r border-slate-200 font-medium bg-slate-50">
                       <Phone className="w-4 h-4" /> +977
                     </span>
                     <input 
+                      id="contactNumber"
                       type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="98XXXXXXXX"
                       className="w-full px-4 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                     />
@@ -339,7 +389,7 @@ function CheckoutContent() {
                         <>
                           <UploadCloud className="w-10 h-10 text-slate-400 mb-3" />
                           <p className="mb-1 text-sm text-slate-600"><span className="font-bold text-blue-600">Click to upload</span> or drag and drop</p>
-                          <p className="text-xs text-slate-400 font-medium">PNG, JPG or JPEG (MAX. 5MB)</p>
+                          <p className="text-xs text-slate-400 font-medium">PNG, JPG or JPEG (Will be compressed to WEBP automatically)</p>
                         </>
                       )}
                     </div>
@@ -361,35 +411,41 @@ function CheckoutContent() {
                 <Receipt className="w-5 h-5 text-blue-600" /> Order Summary
               </h2>
               
-              <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200/60 rounded-2xl p-5 space-y-4 shadow-sm">
-                <div className="flex justify-between items-start gap-4 pb-5 border-b border-slate-200/60">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider shrink-0 pt-0.5">Service Requested</span>
-                  <div className="flex items-start gap-2 max-w-[65%] justify-end text-right">
-                    <div className="shrink-0 pt-0.5">{config.icon}</div>
-                    <strong className="text-slate-900 font-bold whitespace-normal break-words leading-tight">
+              {/* ATTRACTIVE ORDER TYPE & NAME */}
+              <div className="bg-gradient-to-br from-indigo-50 via-blue-50/50 to-white border border-indigo-100/80 rounded-2xl p-6 space-y-5 shadow-sm">
+                
+                {/* Order Type */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-indigo-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5" /> Order Type
+                  </span>
+                  <div className="flex items-center gap-2.5">
+                    {config.icon}
+                    <strong className="text-slate-900 font-black text-lg leading-tight">
                       {config.title}
                     </strong>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-start gap-4 pt-5">
-                  <span className="text-slate-500 text-xs font-bold uppercase tracking-wider shrink-0 pt-1.5">
-                    {config.providerLabel}
+                <div className="w-full h-px bg-indigo-100/60"></div>
+
+                {/* Order Name */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-indigo-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5" /> Reference Name
                   </span>
-                  <div className="flex items-start justify-end gap-2.5 max-w-[65%] text-right">
-                    {isFetchingData ? (
-                      <Loader2 className="w-4 h-4 text-blue-600 animate-spin mt-1" />
-                    ) : (
-                      <>
-                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs shrink-0 mt-0.5">
-                          {avatarInitial}
-                        </div>
-                        <strong className="text-slate-900 font-bold whitespace-normal break-words leading-tight pt-1">
-                          {config.provider}
-                        </strong>
-                      </>
-                    )}
-                  </div>
+                  {isFetchingData ? (
+                    <div className="flex items-center gap-2 text-indigo-600">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm font-semibold">Loading data...</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex w-fit px-3 py-1.5 bg-indigo-100/50 text-indigo-800 rounded-lg border border-indigo-200/50">
+                      <strong className="font-bold whitespace-normal break-words leading-tight">
+                        {config.orderName}
+                      </strong>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -420,17 +476,17 @@ function CheckoutContent() {
                 </div>
 
                 <div className="space-y-3.5 mb-6">
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label htmlFor="agreeRefund" className="flex items-start gap-3 cursor-pointer group">
                     <div className="relative flex items-center justify-center mt-0.5">
-                      <input type="checkbox" checked={agreeRefund} onChange={(e) => setAgreeRefund(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
+                      <input id="agreeRefund" type="checkbox" checked={agreeRefund} onChange={(e) => setAgreeRefund(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
                     <span className="text-[13px] text-slate-600 leading-snug group-hover:text-slate-800 transition-colors">
                       I have read and agree to the <a href="/refund" className="text-blue-600 hover:underline font-semibold" target="_blank">Refund & Return Policy</a>.
                     </span>
                   </label>
-                  <label className="flex items-start gap-3 cursor-pointer group">
+                  <label htmlFor="agreePrivacy" className="flex items-start gap-3 cursor-pointer group">
                     <div className="relative flex items-center justify-center mt-0.5">
-                      <input type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
+                      <input id="agreePrivacy" type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
                     <span className="text-[13px] text-slate-600 leading-snug group-hover:text-slate-800 transition-colors">
                       I have read and agree to the <a href="/privacy-policy" className="text-blue-600 hover:underline font-semibold" target="_blank">User's data policy</a>.
@@ -439,22 +495,16 @@ function CheckoutContent() {
                 </div>
 
                 <button 
-                  disabled={!isFormValid || isUploading || isFetchingData}
+                  disabled={isUploading || isFetchingData}
                   onClick={handleSubmit}
-                  className={`w-full py-4 rounded-2xl text-white font-bold text-lg transition-all flex justify-center items-center gap-2 ${
-                    (isFormValid && !isUploading && !isFetchingData)
-                      ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 hover:-translate-y-0.5" 
-                      : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                  className={`w-full py-4 rounded-2xl font-bold text-lg transition-all flex justify-center items-center gap-2 ${
+                    (isUploading || isFetchingData)
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 hover:-translate-y-0.5" 
                   }`}
                 >
                   {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</> : <><Lock className="w-5 h-5" /> Complete Order</>}
                 </button>
-                
-                {!isFormValid && (
-                  <p className="text-center text-xs text-slate-500 mt-4 font-medium flex items-center justify-center gap-1.5">
-                    <Info className="w-3.5 h-3.5" /> Complete all fields to enable payment
-                  </p>
-                )}
               </div>
 
             </div>
@@ -480,11 +530,12 @@ function CheckoutContent() {
               You will get an invitation to join Google Classroom in your email within half an hour. For any queries or problems, please message us at <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className="font-bold underline text-blue-900">9763695665 on WhatsApp</a>.
             </div>
             
+            {/* --- UPDATED REDIRECT AND BUTTON TEXT --- */}
             <button 
-              onClick={() => router.push("/my-courses")} 
+              onClick={() => router.push("/dashboard")} 
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-[14px] transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
             >
-              Go to My Courses
+              Go to Dashboard
             </button>
           </div>
         </div>
