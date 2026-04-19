@@ -1683,6 +1683,12 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
   const relatedEnrollment = enrollments?.find((e: Enrollment) => e.course_name.toLowerCase() === order.order_name.toLowerCase());
   const remainingDue = relatedEnrollment ? relatedEnrollment.remaining_amount : 0;
 
+  const getScreenshotUrl = (path: string) => {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    return `https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/${path}`;
+  };
+
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
       <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white rounded-xl w-full max-w-lg shadow-strong flex flex-col max-h-[90vh] relative overflow-y-auto custom-scrollbar">
@@ -1719,7 +1725,11 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
             <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-3">Payment Screenshot</h4>
             {order.screenshot_url ? (
               <div className="rounded-lg border-2 border-slate-100 overflow-hidden bg-slate-50 p-2">
-                <img src={order.screenshot_url} alt="Payment Receipt" className="w-full object-contain rounded-md max-h-[300px]" />
+                <img
+                  src={getScreenshotUrl(order.screenshot_url)}
+                  alt="Payment Receipt"
+                  className="w-full object-contain rounded-md max-h-[300px]"
+                />
               </div>
             ) : (
               <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center flex flex-col items-center text-slate-400 bg-slate-50">
