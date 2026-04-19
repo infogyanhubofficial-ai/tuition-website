@@ -124,7 +124,7 @@ function CertificateContent() {
     const courseName = cert.syllabus_name || 'Professional Certification';
     const issueDate = new Date(cert.issue_date);
     const certUrl = `${getBaseUrl()}/certificate/?name=${encodeURIComponent(cert.name)}&email=${encodeURIComponent(cert.email)}`;
-    const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(courseName)}&organizationName=GyanHub&issueYear=${issueDate.getFullYear()}&issueMonth=${issueDate.getMonth() + 1}&certUrl=${encodeURIComponent(certUrl)}`;
+    const linkedInUrl = `https://www.linkedin.com/dashboard/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(courseName)}&organizationName=GyanHub&issueYear=${issueDate.getFullYear()}&issueMonth=${issueDate.getMonth() + 1}&certUrl=${encodeURIComponent(certUrl)}`;
     window.open(linkedInUrl, '_blank', 'noopener,noreferrer');
   };
 

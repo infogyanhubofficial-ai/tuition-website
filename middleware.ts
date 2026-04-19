@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 3. PROTECT PROFILE: Redirect to /login if not authenticated
-  if (!user && url.pathname.startsWith('/profile')) {
+  if (!user && url.pathname.startsWith('/dashboard')) {
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }

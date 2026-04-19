@@ -18,13 +18,20 @@ function LoginRedirector() {
       const nextUrl =
         searchParams.get('next') ||
         searchParams.get('redirect') ||
-        '/my-courses';
+        '/dashboard';
 
       // 1. Check if the user is already logged in
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
-        // If already authenticated, send them to the intended page
+        // --- NEW CODE: Link guest records since we know the user is authenticated ---
+        const { error: rpcError } = await supabase.rpc('link_guest_bookings');
+        if (rpcError) {
+          console.error("Error linking guest records:", rpcError);
+        }
+        // -------------------------------------------------------------------------
+
+        // Send them to the intended page
         router.push(nextUrl);
         return;
       }

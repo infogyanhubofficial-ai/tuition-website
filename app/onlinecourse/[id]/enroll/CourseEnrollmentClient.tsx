@@ -456,7 +456,7 @@ export default function CourseEnrollmentClient() {
                     <CreditCard className="w-5 h-5" /> Pay Deposit Now
                   </button>
                   <button
-                    onClick={() => router.push('/my-courses')}
+                    onClick={() => router.push('/dashboard')}
                     className="flex-1 flex items-center justify-center gap-2 bg-slate-100 text-slate-700 font-bold py-4 rounded-xl hover:bg-slate-200 transition-colors"
                   >
                     <Clock className="w-5 h-5" /> Pay Later

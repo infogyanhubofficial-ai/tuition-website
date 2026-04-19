@@ -10,7 +10,7 @@ import {
 
 // --- DATA ARRAYS FOR CODE OPTIMIZATION (Suggestions 11 & 15) ---
 const SOCIAL_LINKS = [
-  { icon: Facebook, href: "https://www.facebook.com/profile.php?id=61569757534336", label: "Facebook", hoverColor: "hover:bg-[#1877F2]" },
+  { icon: Facebook, href: "https://www.facebook.com/dashboard.php?id=61569757534336", label: "Facebook", hoverColor: "hover:bg-[#1877F2]" },
   { icon: Youtube, href: "https://www.youtube.com/@GyanHubOnline", label: "YouTube", hoverColor: "hover:bg-[#FF0000]" },
   { icon: Instagram, href: "https://www.instagram.com/gyanhubonline/?next=%2F", label: "Instagram", hoverColor: "hover:bg-[#E4405F]" },
   { icon: Linkedin, href: "https://www.linkedin.com/company/gyanhub/", label: "LinkedIn", hoverColor: "hover:bg-[#0A66C2]" },

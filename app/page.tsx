@@ -74,7 +74,7 @@ export default function Page() {
       availableLanguage: ["English", "Nepali"]
     },
     sameAs: [
-      "https://www.facebook.com/profile.php?id=61569757534336",
+      "https://www.facebook.com/dashboard.php?id=61569757534336",
       "https://www.youtube.com/@GyanHubOnline",
       "https://www.instagram.com/gyanhubonline/?next=%2F",
       "https://www.linkedin.com/company/gyanhub/",

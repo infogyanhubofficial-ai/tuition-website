@@ -284,19 +284,14 @@ export default function AdminDashboard() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {/* {chatOpen && activeUser && (
+          {chatOpen && activeUser && (
             <ChatModal
               userId={activeUser}
               onClose={() => setChatOpen(false)}
-              tutors={tutors}
-              vacancies={vacancies}
-              applications={applications}
-              requests={requests}
               profilesMap={conversations.find(c => c.user_id === activeUser)?.profiles}
               refreshData={fetchAllData}
             />
           )}
-          */}
         </AnimatePresence>
       </main>
     </div>
@@ -990,9 +985,9 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
 function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
-  const [selectedBatchFilter, setSelectedBatchFilter] = useState<number | 'all'>('all');
   
   // Payment Editing State
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
@@ -1043,164 +1038,242 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     setHiddenBookingIds(new Set());
   };
 
-  if (selectedCourse) {
+  // STEP 1: SHOW COURSES LIST
+  if (!selectedCourse) {
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900">Course Bookings</h2>
+          <p className="text-slate-500 font-medium mt-1">Select an online course to view its batches and enrollments.</p>
+        </div>
+        
+        {/* CHANGED: Flex-col gap-4 to make items appear one per line */}
+        <div className="flex flex-col gap-4">
+          {courses.map(course => {
+            const bookingCount = enrollments.filter(e => e.course_id === course.id).length;
+            return (
+              <div key={course.id} onClick={() => setSelectedCourse(course)} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md cursor-pointer transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shrink-0">
+                    <BookOpen size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base line-clamp-1">{course.title}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">Starts: {course.start_datetime ? new Date(course.start_datetime).toLocaleDateString() : 'TBA'}</p>
+                  </div>
+                </div>
+                <div className="text-right pl-4">
+                  <p className="text-xl font-black text-indigo-600">{bookingCount}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bookings</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </motion.div>
+    );
+  }
+
+  // STEP 2: SHOW BATCHES LIST FOR SELECTED COURSE
+  if (selectedCourse && selectedBatch === null) {
     // Collect all available batches for the selected course
     const availableBatches = Array.from(new Set([
       ...batches.filter(b => b.course_id === selectedCourse.id).map(b => b.batch_no),
       ...enrollments.filter(e => e.course_id === selectedCourse.id && e.batch_no).map(e => e.batch_no as number)
     ])).sort((a, b) => b - a); // Highest first
 
-    // Filter out hidden enrollments & apply other filters
-    let courseEnrollments = enrollments.filter(e => e.course_id === selectedCourse.id && !hiddenBookingIds.has(e.id));
-    if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter(e => e.confirmed);
-    if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter(e => !e.confirmed);
-    if (selectedBatchFilter !== 'all') courseEnrollments = courseEnrollments.filter(e => e.batch_no === selectedBatchFilter);
-    
-    courseEnrollments.sort((a, b) => {
-      const timeA = new Date(a.created_at).getTime(); const timeB = new Date(b.created_at).getTime();
-      return dateSort === 'desc' ? timeB - timeA : timeA - timeB;
-    });
-
-    const handleCopyCSV = () => {
-      const header = "Name,Phone,Email\n";
-      const rows = courseEnrollments.map(e => `"${e.full_name}","${e.whatsapp_number}","${e.email}"`).join("\n");
-      navigator.clipboard.writeText(header + rows).then(() => {
-        alert("Copied to clipboard!");
-      });
-    };
+    const unassignedCount = enrollments.filter(e => e.course_id === selectedCourse.id && !e.batch_no).length;
 
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => { setSelectedCourse(null); setSelectedBatchFilter('all'); }} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
-            <div><h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2><p className="text-sm font-medium text-slate-500">Managing Enrollments</p></div>
-          </div>
-          <div className="flex gap-4 items-center">
-            {hiddenBookingIds.size > 0 && (
-              <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
-                <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
-              </button>
-            )}
-            
-            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={selectedBatchFilter} onChange={e => setSelectedBatchFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-              <option value="all">All Batches</option>
-              {availableBatches.map(b => (
-                <option key={b} value={b}>Batch {b}</option>
-              ))}
-            </select>
-
-            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={dateSort} onChange={e => setDateSort(e.target.value as 'desc' | 'asc')}>
-              <option value="desc">Date: Newest First</option><option value="asc">Date: Oldest First</option>
-            </select>
-            <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
-              <option value="all">Status: All</option><option value="pending">Status: Pending Only</option><option value="confirmed">Status: Confirmed Only</option>
-            </select>
+        <div className="flex items-center gap-4">
+          <button onClick={() => setSelectedCourse(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2>
+            <p className="text-sm font-medium text-slate-500">Select a Batch to view its enrollments</p>
           </div>
         </div>
 
-        {/* STATS AND EXPORT BAR */}
-        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
-          <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
-          <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
-            <Copy size={14} /> Copy CSV List
-          </button>
-        </div>
-
-        <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
-                <th className="p-6">Applicant Name</th><th className="p-6">Batch</th><th className="p-6">Contact Details</th><th className="p-6">Booking Date</th><th className="p-6">Remarks</th><th className="p-6">Payment</th><th className="p-6">Confirmed</th><th className="p-6 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {courseEnrollments.map(enr => (
-                <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="p-6 font-bold text-slate-900">{enr.full_name}</td>
-                  <td className="p-6">
-                    <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-black">
-                      Batch {enr.batch_no || '-'}
-                    </span>
-                  </td>
-                  <td className="p-6"><p className="text-sm text-slate-800 font-medium">{enr.email}</p><p className="text-xs text-slate-500 mt-1">WA: {enr.whatsapp_number}</p></td>
-                  <td className="p-6 text-sm text-slate-500 font-medium">{new Date(enr.created_at).toLocaleDateString()}</td>
-                  <td className="p-6 text-sm text-slate-600 max-w-[150px]">
-                    <div className="p-3 bg-slate-50 border border-slate-100 rounded-xl max-h-24 overflow-y-auto" title={enr.remarks}>
-                        {enr.remarks || '-'}
-                    </div>
-                  </td>
-                  <td className="p-6 whitespace-nowrap">
-                    <p className="text-sm font-bold text-slate-800">Paid Amount Rs. {enr.paid_amount || 0}</p>
-                    <p className="text-xs font-bold text-red-500 mt-0.5">Remaining Rs. {enr.remaining_amount || 0}</p>
-                  </td>
-                  <td className="p-6"><ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Confirmed' : 'Pending'} activeColor="bg-green-500" activeText="text-green-600" /></td>
-                  <td className="p-6 text-right">
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => openPaymentEdit(enr)} className="p-2 text-emerald-600 bg-emerald-50 rounded-xl hover:bg-emerald-100 transition-colors" title="Edit Payment Details"><DollarSign size={16} /></button>
-                      <button onClick={() => handleHide(enr.id)} className="p-2 text-slate-500 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors" title="Hide Booking"><EyeOff size={16} /></button>
-                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {courseEnrollments.length === 0 && <tr><td colSpan={8} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-
-        {/* PAYMENT EDIT MODAL */}
-        {editingPayment && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
-            <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
-              <button onClick={() => setEditingPayment(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
-              <h3 className="text-xl font-black mb-1">Edit Payment</h3>
-              <p className="text-xs font-medium text-slate-500 mb-6">{editingPayment.full_name}</p>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
-                  <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+          {availableBatches.map(b => {
+            const batchCount = enrollments.filter(e => e.course_id === selectedCourse.id && e.batch_no === b).length;
+            return (
+              <div key={b} onClick={() => setSelectedBatch(b)} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-xl">
+                    {b}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-lg">Batch {b}</h3>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Remaining Amount (Rs)</label>
-                  <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                <div className="text-right">
+                  <p className="text-2xl font-black text-emerald-600">{batchCount}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollments</p>
                 </div>
               </div>
-              
-              <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setEditingPayment(null)} className="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
-                <button onClick={savePayment} className="px-6 py-2 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
-              </div>
-            </div>
-          </div>
-        )}
+            );
+          })}
+
+          {unassignedCount > 0 && (
+             <div onClick={() => setSelectedBatch('unassigned')} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-orange-400 hover:shadow-md cursor-pointer transition-all">
+               <div className="flex items-center gap-4">
+                 <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-black text-xl">
+                   ?
+                 </div>
+                 <div>
+                   <h3 className="font-bold text-slate-900 text-lg">Unassigned</h3>
+                 </div>
+               </div>
+               <div className="text-right">
+                 <p className="text-2xl font-black text-orange-600">{unassignedCount}</p>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollments</p>
+               </div>
+             </div>
+          )}
+        </div>
       </motion.div>
     );
   }
 
+  // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH
+  // Filter enrollments by course and chosen batch, and apply hidden filter
+  let courseEnrollments = enrollments.filter(e => {
+    if (e.course_id !== selectedCourse.id) return false;
+    if (hiddenBookingIds.has(e.id)) return false;
+    if (selectedBatch === 'unassigned') return !e.batch_no;
+    return e.batch_no === selectedBatch;
+  });
+
+  if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter(e => e.confirmed);
+  if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter(e => !e.confirmed);
+  
+  courseEnrollments.sort((a, b) => {
+    const timeA = new Date(a.created_at).getTime(); const timeB = new Date(b.created_at).getTime();
+    return dateSort === 'desc' ? timeB - timeA : timeA - timeB;
+  });
+
+  const handleCopyCSV = () => {
+    const header = "Name,Phone,Email\n";
+    const rows = courseEnrollments.map(e => `"${e.full_name}","${e.whatsapp_number}","${e.email}"`).join("\n");
+    navigator.clipboard.writeText(header + rows).then(() => {
+      alert("Copied to clipboard!");
+    });
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div><h2 className="text-3xl font-black text-slate-900">Course Bookings</h2><p className="text-slate-500 font-medium mt-1">Select a course to view and manage its enrollments.</p></div>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setSelectedBatch(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
+          <div>
+            <h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2>
+            <p className="text-sm font-medium text-slate-500">
+              {selectedBatch === 'unassigned' ? 'Unassigned Enrollments' : `Batch ${selectedBatch} Enrollments`}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-4 items-center">
+          {hiddenBookingIds.size > 0 && (
+            <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
+              <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
+            </button>
+          )}
+
+          <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={dateSort} onChange={e => setDateSort(e.target.value as 'desc' | 'asc')}>
+            <option value="desc">Date: Newest First</option><option value="asc">Date: Oldest First</option>
+          </select>
+          <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
+            <option value="all">Status: All</option><option value="pending">Status: Pending Only</option><option value="confirmed">Status: Confirmed Only</option>
+          </select>
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {courses.map(course => {
-          const bookingCount = enrollments.filter(e => e.course_id === course.id).length;
-          return (
-            <div key={course.id} onClick={() => setSelectedCourse(course)} className="bg-white border border-slate-200 rounded-3xl overflow-hidden hover:shadow-xl hover:border-indigo-300 transition-all cursor-pointer group">
-              <div className="h-40 w-full bg-slate-100 relative overflow-hidden">
-                {course.cover_pic ? <img src={course.cover_pic} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" /> : <div className="w-full h-full flex items-center justify-center text-slate-300"><BookOpen size={48} /></div>}
-                <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-xl text-xs font-black text-indigo-700 shadow-sm">{bookingCount} Booking{bookingCount !== 1 ? 's' : ''}</div>
+
+      {/* STATS AND EXPORT BAR */}
+      <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
+        <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
+        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
+          <Copy size={14} /> Copy CSV List
+        </button>
+      </div>
+
+      {/* COMPACT NO-SCROLL TABLE */}
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden w-full">
+        <table className="w-full text-left border-collapse table-auto">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <th className="p-4 w-[25%]">Applicant Details</th>
+              <th className="p-4 w-[15%]">Date</th>
+              <th className="p-4 w-[30%]">Remarks</th>
+              <th className="p-4 w-[12%]">Payment</th>
+              <th className="p-4 w-[10%]">Confirmed</th>
+              <th className="p-4 text-right w-[8%]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {courseEnrollments.map(enr => (
+              <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                <td className="p-4 align-top">
+                  <p className="font-bold text-slate-900 leading-tight">{enr.full_name}</p>
+                  <p className="text-xs text-slate-500 mt-1 truncate" title={enr.email}>{enr.email}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">WA: {enr.whatsapp_number}</p>
+                </td>
+                <td className="p-4 align-top text-sm text-slate-500 font-medium">
+                  {new Date(enr.created_at).toLocaleDateString()}
+                </td>
+                <td className="p-4 align-top">
+                  {/* Highly responsive box for Remarks with no scrollbars required */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap break-words h-auto min-w-[200px]">
+                      {enr.remarks || <span className="italic text-slate-400">No remarks provided.</span>}
+                  </div>
+                </td>
+                <td className="p-4 align-top whitespace-nowrap">
+                  <p className="text-sm font-bold text-slate-800">Paid: Rs.{enr.paid_amount || 0}</p>
+                  <p className="text-xs font-bold text-red-500 mt-0.5">Due: Rs.{enr.remaining_amount || 0}</p>
+                </td>
+                <td className="p-4 align-top">
+                  <ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Yes' : 'No'} activeColor="bg-green-500" activeText="text-green-600" />
+                </td>
+                <td className="p-4 align-top text-right">
+                  <div className="flex justify-end gap-1 flex-wrap">
+                    <button onClick={() => openPaymentEdit(enr)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors" title="Edit Payment"><DollarSign size={16} /></button>
+                    <button onClick={() => handleHide(enr.id)} className="p-1.5 text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Hide"><EyeOff size={16} /></button>
+                    <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {courseEnrollments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {/* PAYMENT EDIT MODAL */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
+          <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setEditingPayment(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
+            <h3 className="text-xl font-black mb-1">Edit Payment</h3>
+            <p className="text-xs font-medium text-slate-500 mb-6">{editingPayment.full_name}</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
+                <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
               </div>
-              <div className="p-6">
-                <h3 className="font-black text-lg text-slate-900 leading-tight mb-2 group-hover:text-indigo-600 transition-colors line-clamp-2">{course.title}</h3>
-                <p className="text-sm font-medium text-slate-500 flex items-center gap-2"><CalendarDays size={14} /> {course.start_datetime ? new Date(course.start_datetime).toLocaleDateString() : 'TBA'}</p>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Remaining Amount (Rs)</label>
+                <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
               </div>
             </div>
-          );
-        })}
-      </div>
+            
+            <div className="mt-6 flex justify-end gap-3">
+              <button onClick={() => setEditingPayment(null)} className="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+              <button onClick={savePayment} className="px-6 py-2 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -1384,7 +1457,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
   const [uploading, setUploading] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   
-  // Helper to convert storage paths to valid URLs if needed
   const getImageUrl = (path: string) => {
     if (!path) return '';
     if (path.startsWith('http')) return path;
@@ -1392,7 +1464,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     return data.publicUrl;
   };
   
-  // NEW: Search and Pagination State
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -1448,7 +1519,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     }
   };
 
-  // Filter Data based on Search Query
   const filteredData = data.filter((cert) => {
     const s = searchQuery.toLowerCase();
     return (
@@ -1459,7 +1529,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     );
   });
 
-  // Pagination Variables
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -1619,5 +1688,120 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </div>
       )}
     </motion.div>
+  );
+}
+
+// --- NEW COMPONENT: FULL ADMIN CHAT MODAL ---
+function ChatModal({ userId, onClose, profilesMap }: any) {
+  const supabase = createClient();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchMessages = async () => {
+      // Fetch user messages
+      const { data } = await supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: true });
+      if (data) setMessages(data);
+    };
+
+    fetchMessages();
+
+    // Listen for realtime chat updates
+    const channel = supabase.channel(`chat_updates_${userId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
+         setMessages(prev => {
+           // Prevent duplicate if we already added it via handleSend
+           if (prev.some(msg => msg.id === payload.new.id)) return prev;
+           return [...prev, payload.new as Message];
+         });
+      }).subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
+  }, [userId]); // Removed refreshData to prevent constant re-subscriptions
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim()) return;
+    
+    // Completely removed `is_read` from payload to fix the schema crash
+    const msgPayload = { user_id: userId, sender_role: 'admin', content: newMessage.trim() };
+    
+    // Added .select().single() to return the inserted row instantly
+    const { data, error } = await supabase.from("messages").insert([msgPayload]).select().single();
+    
+    if (!error && data) {
+      setNewMessage("");
+      // Optimistic update
+      setMessages(prev => [...prev, data as Message]); 
+    } else {
+      alert("Failed to send message: " + error?.message);
+    }
+  };
+
+  const userName = profilesMap?.full_name || "User";
+
+  return (
+    <div className="fixed inset-0 z-[120] flex justify-end bg-slate-900/20 backdrop-blur-sm" onClick={onClose}>
+      <motion.div 
+        initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col" 
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 overflow-hidden">
+              {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" /> : userName.charAt(0)}
+            </div>
+            <div>
+              <h3 className="font-black text-slate-900">{userName}</h3>
+              <span className="text-[10px] uppercase font-bold text-green-500 tracking-wider">Online</span>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-800 transition-colors bg-slate-50 hover:bg-slate-100 rounded-full"><X size={18} /></button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/50">
+          {messages.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
+              <MessageSquare size={40} className="opacity-20" />
+              <p className="text-sm font-medium">No messages yet. Say hello!</p>
+            </div>
+          ) : (
+            messages.map((msg, idx) => {
+              const isAdmin = msg.sender_role === 'admin';
+              return (
+                <div key={idx} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
+                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${isAdmin ? 'bg-indigo-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm'}`}>
+                    {msg.content}
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 font-medium px-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              );
+            })
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        <div className="p-4 bg-white border-t border-slate-100 shrink-0">
+          <form onSubmit={handleSend} className="relative flex items-center">
+            <input 
+              type="text" 
+              value={newMessage} 
+              onChange={e => setNewMessage(e.target.value)} 
+              placeholder="Type your message..." 
+              className="w-full bg-slate-50 pl-4 pr-12 py-3.5 rounded-full outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm transition-all"
+            />
+            <button type="submit" disabled={!newMessage.trim()} className="absolute right-2 p-2 bg-indigo-600 text-white rounded-full hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-600 transition-colors shadow-sm">
+              <Send size={16} />
+            </button>
+          </form>
+        </div>
+      </motion.div>
+    </div>
   );
 }

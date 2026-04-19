@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('next') || '/my-courses';
+  const next = requestUrl.searchParams.get('next') || '/dashboard';
 
   // ✅ FIX: Always use actual request origin (localhost or production)
   const origin = requestUrl.origin;
@@ -41,6 +41,15 @@ export async function GET(request: Request) {
         full_name: data.user.user_metadata?.full_name || '',
         avatar_url: data.user.user_metadata?.avatar_url || '',
       }, { onConflict: 'id' });
+
+      // --- NEW FIX: Link guest bookings to the newly authenticated user ---
+      const { error: rpcError } = await supabase.rpc('link_guest_bookings');
+      
+      if (rpcError) {
+        // We log the error but don't block the user from logging in
+        console.error("Failed to link guest records during callback:", rpcError);
+      }
+      // ------------------------------------------------------------------
 
       const redirectUrl = new URL(next, origin);
       return NextResponse.redirect(redirectUrl.toString());

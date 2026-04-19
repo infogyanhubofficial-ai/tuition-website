@@ -1,83 +1,133 @@
-import type { Metadata, Viewport } from 'next';
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
 
-// Store the logo URL in a variable so it's easy to change everywhere at once
-const LOGO_URL = "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
-// --- GLOBAL SEO & METADATA ---
+const SITE_URL = "https://www.gyanhub.com.np";
+const LOGO_URL = `${SITE_URL}/logo.png`;
+const OG_IMAGE_URL = `${SITE_URL}/logo.png`;
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+
   title: {
-    template: '%s | GyanHub', 
-    default: 'GyanHub - Learn Today | Lead Tomorrow', 
+    template: "%s | GyanHub",
+    default: "GyanHub - Learn Today | Lead Tomorrow",
   },
-  description: "Nepal's premium network connecting expert educators with eager learners. Specialized in Engineering, Design, and Technical training.",
-  keywords: ["GyanHub", "Tutors Nepal", "Engineering Tuition", "Online Courses Nepal", "Skill Development"],
+
+  description:
+    "Nepal's premium network connecting expert educators with eager learners. Specialized in Engineering, Design, and Technical training.",
+
+  keywords: [
+    "GyanHub",
+    "Tutors Nepal",
+    "Engineering Tuition",
+    "Online Courses Nepal",
+    "Skill Development",
+  ],
+
   authors: [{ name: "GyanHub Team" }],
-  
-  // OpenGraph (Facebook, LinkedIn, Discord)
+
   openGraph: {
-    title: 'GyanHub - Learn Today | Lead Tomorrow',
-    description: "Connect with the best tutors in Nepal. Join 1200+ students mastering technical skills.",
-    url: 'https://gyanhub.com.np', // Replace with your actual domain
-    siteName: 'GyanHub',
+    title: "GyanHub - Learn Today | Lead Tomorrow",
+    description:
+      "Connect with the best tutors in Nepal. Join 1200+ students mastering technical skills.",
+    url: SITE_URL,
+    siteName: "GyanHub",
     images: [
       {
-        url: LOGO_URL,
+        url: OG_IMAGE_URL,
         width: 1200,
         height: 630,
-        alt: 'GyanHub Logo',
+        alt: "GyanHub Logo",
       },
     ],
-    locale: 'en_US',
-    type: 'website',
+    locale: "en_US",
+    type: "website",
   },
 
-  // Twitter
   twitter: {
-    card: 'summary_large_image',
-    title: 'GyanHub | Nepal’s Educator Network',
-    description: 'Expert-led technical training and student-tutor matching.',
-    images: [LOGO_URL],
-  },
-
-  // Icons - THIS IS WHAT SETS THE BROWSER ICON (FAVICON)
-  icons: {
-    icon: LOGO_URL,
-    apple: LOGO_URL,
-    shortcut: LOGO_URL, // Added shortcut for broader browser support
+    card: "summary_large_image",
+    title: "GyanHub | Nepal’s Educator Network",
+    description:
+      "Expert-led technical training and student-tutor matching.",
+    images: [OG_IMAGE_URL],
   },
 };
 
-// Separate Viewport configuration (Next.js 14+ requirement)
 export const viewport: Viewport = {
-  colorScheme: 'light',
-  themeColor: '#f8fafc', // Matches bg-slate-50
-}
+  width: "device-width",
+  initialScale: 1,
+  colorScheme: "light",
+  themeColor: "#f8fafc",
+};
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const organizationSchema = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "GyanHub",
+    url: SITE_URL,
+    logo: LOGO_URL,
+  };
+
+  const websiteSchema = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "GyanHub",
+    url: SITE_URL,
+  };
+
   return (
-    // Added suppressHydrationWarning to fix the Next.js console error
-    <html lang="en" className="light" style={{ colorScheme: 'light' }} suppressHydrationWarning>
+    <html
+      lang="en"
+      className="light"
+      style={{ colorScheme: "light" }}
+      suppressHydrationWarning
+    >
       <head>
         <meta name="color-scheme" content="light only" />
-        <meta 
-          httpEquiv="Content-Security-Policy" 
-          content="upgrade-insecure-requests; block-all-mixed-content; default-src * 'unsafe-inline' 'unsafe-eval'; connect-src * 'unsafe-inline'; img-src * data: blob:; frame-src *;" 
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationSchema),
+          }}
+        />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(websiteSchema),
+          }}
         />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 text-slate-900 flex flex-col min-h-screen`}>
+
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-50 text-slate-900 min-h-screen flex flex-col overflow-x-hidden`}
+      >
         <Navbar />
-        
-        <main className="w-full flex-grow">
+
+        <main className="flex-grow w-full">
           {children}
         </main>
-        
+
         <Footer />
       </body>
     </html>

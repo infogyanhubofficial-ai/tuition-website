@@ -33,6 +33,7 @@ interface AppNotification {
   time: string;
   type: 'urgent' | 'warning' | 'info' | 'success';
   icon: any;
+  actionUrl: string; // Added to route the user
 }
 
 export default function Navbar() {
@@ -63,7 +64,8 @@ export default function Navbar() {
   const actionDropdownRef = useRef<HTMLDivElement>(null);
   const tuitionDropdownRef = useRef<HTMLDivElement>(null);
 
-  const supabase = createClient();
+  // Use useState to guarantee the Supabase client is a singleton and survives re-renders
+  const [supabase] = useState(() => createClient());
 
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
@@ -149,7 +151,8 @@ export default function Navbar() {
           text: `You have an upcoming online course "${(nextClass as any).title}" on ${(nextClass as any).date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`,
           time: new Date().toISOString(), // Stick it to top
           type: 'urgent',
-          icon: Calendar
+          icon: Calendar,
+          actionUrl: '/dashboard?tab=Online Courses'
         });
       }
 
@@ -161,7 +164,8 @@ export default function Navbar() {
             text: `You have a remaining due of Rs. ${e.remaining_amount} for your "${e.course_name}" enrollment.`,
             time: e.created_at,
             type: 'warning',
-            icon: AlertCircle
+            icon: AlertCircle,
+            actionUrl: '/dashboard?tab=Online Courses'
           });
         }
       });
@@ -175,7 +179,8 @@ export default function Navbar() {
             text: `Your application to "${subj || 'vacancy'}" was ${app.status}.`,
             time: app.created_at,
             type: app.status === 'accepted' ? 'success' : 'warning',
-            icon: BriefcaseBusiness
+            icon: BriefcaseBusiness,
+            actionUrl: '/dashboard'
           });
         }
       });
@@ -188,7 +193,8 @@ export default function Navbar() {
             text: `${tName || 'Tutor'} ${req.status} your coaching request.`,
             time: req.created_at,
             type: req.status === 'accepted' ? 'success' : 'warning',
-            icon: Users
+            icon: Users,
+            actionUrl: '/dashboard?tab=My Requests'
           });
         }
       });
@@ -199,7 +205,8 @@ export default function Navbar() {
           text: `${req.student_name} requested you for coaching.`,
           time: req.created_at,
           type: 'info',
-          icon: Users
+          icon: Users,
+          actionUrl: '/dashboard?tab=Student Requests'
         });
       });
 
@@ -211,7 +218,8 @@ export default function Navbar() {
           text: `${tName} applied to your vacancy: "${subj}".`,
           time: app.created_at,
           type: 'info',
-          icon: BriefcaseBusiness
+          icon: BriefcaseBusiness,
+          actionUrl: '/dashboard'
         });
       });
 
@@ -222,21 +230,24 @@ export default function Navbar() {
           text: `You have purchased ${o.order_name} recordings.`,
           time: o.created_at,
           type: 'info' as const,
-          icon: ShoppingBag
+          icon: ShoppingBag,
+          actionUrl: '/dashboard?tab=Recording Courses'
         })),
         ...enrollments.map(e => ({
           id: `enr-${e.id}`,
           text: `You have enrolled in ${e.course_name} online course.`,
           time: e.created_at,
           type: 'info' as const,
-          icon: BookOpen
+          icon: BookOpen,
+          actionUrl: '/dashboard?tab=Online Courses'
         })),
         ...certs.map(c => ({
           id: `cert-${c.id}`,
           text: `You have earned a certificate: ${c.syllabus_name || c.name}.`,
           time: c.issue_date,
           type: 'success' as const,
-          icon: Award
+          icon: Award,
+          actionUrl: '/dashboard?tab=My Certificates'
         }))
       ];
 
@@ -257,32 +268,45 @@ export default function Navbar() {
     let mounted = true;
 
     const fetchSessionAndTutorStatus = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        if (mounted) {
-          setUser(null);
-          setIsTutor(false);
-          setLoadingUser(false);
-        }
-        return;
-      }
-
-      if (mounted) setUser(user);
-
-      // Trigger notification fetch immediately after fetching user
-      fetchUserActivity(user);
-
       try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+        // FIX: Ignore lock steal errors gracefully without crashing execution
+        if (authError && (authError.message.includes("Lock broken") || authError.message.includes("steal"))) {
+          return;
+        }
+        
+        if (!user) {
+          if (mounted) {
+            setUser(null);
+            setIsTutor(false);
+            setLoadingUser(false);
+          }
+          return;
+        }
+
+        if (mounted) setUser(user);
+
+        // Trigger notification fetch immediately after fetching user
+        fetchUserActivity(user);
+
         const { data, error } = await supabase
           .from('tutors')
           .select('id')
           .eq('user_id', user.id)
           .maybeSingle();
 
-        if (error) console.error("Supabase Error checking tutor status:", error.message);
+        // FIX: Ensure we don't log the benign Web Lock AbortError
+        if (error && !error.message.includes("Lock broken") && !error.message.includes("steal")) {
+          console.error("Supabase Error checking tutor status:", error.message);
+        }
+        
         if (mounted) setIsTutor(!!data);
-      } catch (err) {
+      } catch (err: any) {
+        // FIX: Safely swallow Uncaught Promise Rejections generated by the Web Locks API
+        if (err?.name === 'AbortError' || err?.message?.includes("Lock broken") || err?.message?.includes("steal")) {
+          return; 
+        }
         console.error("Unexpected error:", err);
       } finally {
         if (mounted) setLoadingUser(false);
@@ -291,8 +315,11 @@ export default function Navbar() {
 
     fetchSessionAndTutorStatus();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (mounted) {
+        // FIX: Prevent double-fetch on mount which causes lock collisions
+        if (event === 'INITIAL_SESSION') return; 
+
         if (session?.user) {
           fetchSessionAndTutorStatus();
         } else {
@@ -627,7 +654,14 @@ export default function Navbar() {
                                 const IconComp = n.icon || Bell;
 
                                 return (
-                                  <div key={n.id} className={`p-4 rounded-[16px] border flex gap-4 items-start transition-colors shadow-sm ${bgClass}`}>
+                                  <div 
+                                    key={n.id} 
+                                    onClick={() => {
+                                      setShowNotifications(false);
+                                      if (n.actionUrl) router.push(n.actionUrl);
+                                    }}
+                                    className={`p-4 rounded-[16px] border flex gap-4 items-start transition-all shadow-sm hover:shadow-md cursor-pointer transform hover:-translate-y-0.5 ${bgClass}`}
+                                  >
                                     <div className={`p-2 rounded-full shrink-0 bg-white shadow-sm border border-slate-100/50 ${iconColor}`}>
                                       <IconComp size={16} />
                                     </div>

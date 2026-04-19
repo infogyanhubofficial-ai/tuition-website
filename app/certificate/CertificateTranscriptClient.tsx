@@ -136,7 +136,7 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
 
   const cert = certs[selectedIndex];
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
-  const linkedInUrl = `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(cert.syllabus_name || 'Professional Certification')}&organizationName=GyanHub&certUrl=${encodeURIComponent(shareUrl)}&certId=${cert.certificate_code || cert.id}`;
+  const linkedInUrl = `https://www.linkedin.com/dashboard/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(cert.syllabus_name || 'Professional Certification')}&organizationName=GyanHub&certUrl=${encodeURIComponent(shareUrl)}&certId=${cert.certificate_code || cert.id}`;
 
   const syllabusData = cert.syllabi; 
   const duration = syllabusData?.duration || cert.duration || 'Not specified';

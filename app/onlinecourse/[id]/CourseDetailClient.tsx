@@ -5,6 +5,7 @@ import { useEffect, useState, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import NepaliDate from 'nepali-date-converter'; 
+import { createClient } from "@/lib/supabase/client"; 
 import { 
   Calendar, Clock, BadgeCheck, ShieldCheck,
   User, SearchX, Sparkles, Zap, HelpCircle, CheckCircle2, Users,
@@ -79,9 +80,11 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
   const [avatars, setAvatars] = useState<StudentAvatar[]>([]);
   const [avatarsLoading, setAvatarsLoading] = useState(true);
   
-  // Seats configuration: Starts at 15 available (out of 20 total)
+  // DB-driven Seats configuration: Starts at 15 available
   const [seats, setSeats] = useState(15); 
-  const [lastUpdated, setLastUpdated] = useState(1);
+  
+  // Live Offer Countdown Timer State
+  const [offerTime, setOfferTime] = useState({ hours: 0, mins: 0, secs: 0 });
 
   const [courseCountdown, setCourseCountdown] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
   const [scrollProgress, setScrollProgress] = useState(0);
@@ -100,34 +103,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     setCourseTag(tags[Math.floor(Math.random() * tags.length)]);
   }, []);
 
-  // Persist seat count across reloads so the user sees the drop when they go back
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedSeats = localStorage.getItem(`seats_${decodedCourseName}`);
-      if (savedSeats) {
-        setSeats(parseInt(savedSeats, 10));
-      }
-    }
-  }, [decodedCourseName]);
-
-  // Simulated Time Update
-  useEffect(() => {
-    const timeInterval = setInterval(() => {
-      setLastUpdated(prev => prev < 15 ? prev + Math.floor(Math.random() * 3 + 1) : 2);
-    }, 25000);
-    return () => clearInterval(timeInterval);
-  }, []);
-
   const handleBookSeat = () => {
-    // Decrease seats on click and stop at 1
-    setSeats(prev => {
-      const newSeats = prev > 1 ? prev - 1 : 1;
-      if (typeof window !== "undefined") {
-        localStorage.setItem(`seats_${decodedCourseName}`, newSeats.toString());
-      }
-      return newSeats;
-    });
-
     // Encodes the string back to handle spaces safely in the URL
     router.push(`/onlinecourse/${encodeURIComponent(decodedCourseName)}/enroll`);
   };
@@ -179,6 +155,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     });
   }, [course?.faqs]);
 
+  // Scroll Progress
   useEffect(() => {
     let ticking = false;
     const handleScroll = () => {
@@ -196,6 +173,7 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Course Start Countdown
   useEffect(() => {
     if (!course?.start_datetime) return;
     const courseTimer = setInterval(() => {
@@ -212,23 +190,73 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
     return () => clearInterval(courseTimer);
   }, [course?.start_datetime]);
 
+  // --- NEW: 48-Hour Resetting Offer Timer ---
   useEffect(() => {
-    async function fetchCourse() {
+    const offerTimer = setInterval(() => {
+      const now = new Date().getTime();
+      // Calculate a consistent 48-hour window based on epoch time so it remains synced
+      const resetInterval = 48 * 60 * 60 * 1000;
+      const timeRemaining = resetInterval - (now % resetInterval);
+
+      setOfferTime({
+        hours: Math.floor(timeRemaining / (1000 * 60 * 60)),
+        mins: Math.floor((timeRemaining % (1000 * 60 * 60)) / (1000 * 60)),
+        secs: Math.floor((timeRemaining % (1000 * 60)) / 1000),
+      });
+    }, 1000);
+    return () => clearInterval(offerTimer);
+  }, []);
+
+  // Fetch Course + DB Seats Logic
+  useEffect(() => {
+    async function fetchCourseAndSeats() {
       try {
-        // Pass the properly encoded, cleaned string to the fetch API
         const res = await fetch(`/api/online_courses/${encodeURIComponent(decodedCourseName)}`);
         if (!res.ok) throw new Error("Course not found");
-        setCourse(await res.json());
-      } catch (err) { setError(true); } 
-      finally { setLoading(false); }
+        const courseData = await res.json();
+        setCourse(courseData);
+
+        const supabase = createClient();
+        
+        // 1. Get the latest active batch
+        const { data: batchData } = await supabase
+          .from('course_batches')
+          .select('batch_no')
+          .eq('course_id', courseData.id)
+          .eq('is_active', true)
+          .order('batch_no', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // 2. Count enrollments for that batch
+        let query = supabase
+          .from('enrollments')
+          .select('*', { count: 'exact', head: true })
+          .eq('course_id', courseData.id);
+
+        if (batchData?.batch_no) {
+          query = query.eq('batch_no', batchData.batch_no);
+        }
+
+        const { count, error: countError } = await query;
+
+        if (!countError && count !== null) {
+          setSeats(15 - (count % 15));
+        }
+
+      } catch (err) { 
+        setError(true); 
+      } finally { 
+        setLoading(false); 
+      }
     }
-    fetchCourse();
+    fetchCourseAndSeats();
   }, [decodedCourseName]);
 
   useEffect(() => {
     async function fetchAvatars() {
       try {
-        const res = await fetch('/api/profile');
+        const res = await fetch('/api/dashboard');
         if (res.ok) {
           const data = await res.json();
           setAvatars(Array.isArray(data) ? data.filter(p => p.full_name || p.avatar_url) : []);
@@ -256,7 +284,6 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
   // PRICING
   const finalPrice = course.fee || 0;
   const discount = course.discount || 0;
-  const originalPrice = discount > 0 ? Math.round(finalPrice / (1 - (discount / 100))) : finalPrice;
   const formatPrice = (price: number) => new Intl.NumberFormat('en-IN').format(price);
 
   const displayAvatars = avatars.slice(0, 4);
@@ -272,9 +299,8 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
       <p className="text-sm font-medium text-slate-500 mb-6">Earn a verified certificate upon completion to showcase your skills to employers.</p>
       
       <Link href="https://www.gyanhub.com.np/certificate?name=Bhim%20Bahadur%20Thapa&email=thapanibas2018%40gmail.com" target="_blank" className="block relative group w-full cursor-pointer rounded-2xl overflow-hidden border border-slate-100 shadow-sm">
-        {/* REPLACED: New Sample Image Fallback added here and removed the Preview Unavailable block */}
         <img 
-          src={course.certificate_url || "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Sample_Certificate.webp"} 
+          src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/Sample_Certificate.webp" 
           className="w-full object-cover group-hover:scale-105 group-hover:blur-sm transition-all duration-500" 
           alt="Course Certificate Verification" 
           loading="lazy" 
@@ -380,9 +406,8 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
             </div>
 
             <div className="flex flex-col sm:flex-row gap-4">
-                <EnrollButton onClick={handleBookSeat} className="flex-1 sm:flex-none justify-center">Secure My Spot</EnrollButton>
+                <EnrollButton onClick={handleBookSeat} className="flex-1 sm:flex-none justify-center">🎓 Reserve My Discounted Seat</EnrollButton>
                 
-                {/* --- ADDED SYLLABUS BUTTON HERE --- */}
                 {course.syllabus_url && (
                   <a 
                     href={course.syllabus_url} 
@@ -393,8 +418,6 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
                     <BookOpen className="w-5 h-5 text-white" /> <span className="text-white">View Syllabus</span>
                   </a>
                 )}
-                {/* ---------------------------------- */}
-                
             </div>
           </div>
 
@@ -591,7 +614,61 @@ export function CourseDetailClient({ params }: { params: Promise<{ id: string }>
 
           {/* Right Sidebar */}
           <div className="xl:col-span-1">
-             <div className="sticky top-24">
+             <div className="sticky top-24 space-y-8">
+                
+                {/* --- UPGRADED HIGH-CONVERTING DISCOUNT SEAT BLOCK --- */}
+                <div className="bg-white p-8 rounded-[3rem] border-2 border-orange-200 shadow-2xl relative overflow-hidden">
+                   
+                   {/* Animated Background Glow */}
+                   <div className="absolute -top-10 -right-10 w-40 h-40 bg-orange-500/20 rounded-full blur-3xl animate-pulse"></div>
+                   
+                   <div className="flex items-center gap-2 mb-2 relative z-10">
+                     <Zap className="w-5 h-5 text-orange-500 fill-orange-500" />
+                     <h3 className="text-xl font-black text-slate-900">Limited Time Offer</h3>
+                   </div>
+                   
+                   {/* 48-Hour Resetting Countdown */}
+                   <p className="text-slate-500 text-sm font-medium mb-5 relative z-10">
+                     Offer expires in: <span className="font-mono font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-100">
+                       {String(offerTime.hours).padStart(2, '0')}h : {String(offerTime.mins).padStart(2, '0')}m : {String(offerTime.secs).padStart(2, '0')}s
+                     </span>
+                   </p>
+
+                   {/* High Contrast Seat Counter */}
+                   <div className="mb-6 bg-red-50 p-4 rounded-2xl border border-red-100 relative overflow-hidden">
+                     <div className="absolute top-0 left-0 w-1 h-full bg-red-500"></div>
+                     <div className="flex flex-col">
+                         <p className="text-sm font-bold text-red-600 mb-1 flex items-center gap-1.5">
+                           <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></span>
+                           Filling fast today!
+                         </p>
+                         <p className="text-xl font-black text-slate-900">Only <span className="text-red-600 text-4xl">{seats}</span> seats left</p>
+                     </div>
+                   </div>
+
+                   {/* Button with Pulse Effect */}
+                   <div className="relative group mb-5">
+                       <div className="absolute -inset-1 bg-gradient-to-r from-orange-600 to-amber-500 rounded-2xl blur opacity-30 group-hover:opacity-60 transition duration-1000 group-hover:duration-200 animate-pulse"></div>
+                       <EnrollButton onClick={handleBookSeat} className="relative w-full flex justify-center items-center gap-2 !py-4 text-[17px]">
+                          🎓 Reserve My Discounted Seat
+                       </EnrollButton>
+                   </div>
+
+                   {/* Trust Badges */}
+                   <div className="flex flex-col items-center gap-3 border-t border-slate-100 pt-5">
+                      <div className="flex items-center gap-2 text-xs text-slate-600 font-bold bg-slate-50 px-4 py-2 rounded-full border border-slate-200 shadow-sm w-full justify-center">
+                         <Users className="w-4 h-4 text-emerald-500" />
+                         Trusted by 2000+ students
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-slate-500 font-medium">
+                         <ShieldCheck className="w-4 h-4 text-blue-500" />
+                         Guidance by experts at GyanHub
+                      </div>
+                   </div>
+
+                </div>
+                {/* ---------------------------------------------------- */}
+
                 <CertificateCard />
              </div>
           </div>

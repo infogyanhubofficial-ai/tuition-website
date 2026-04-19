@@ -10,7 +10,7 @@ import {
   DollarSign, Trash2, Save, GraduationCap,
   Briefcase, User, ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle, AlertCircle,
   CheckCircle, Flame, Sparkles, Link as LinkIcon, RotateCcw, Home, Award, ShoppingBag, PlayCircle,
-  ChevronDown, ChevronUp, Video, Info, Shield
+  ChevronDown, ChevronUp, Video, Info, Shield, ArrowRight
 } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -62,7 +62,7 @@ interface Tutor {
   hour_rate?: string | number | null;
   location?: string;
   bio?: string;
-  experience?: string;
+  experience?: string | number | null;
   contact_num?: string;
   cv_url?: string;
   id_url?: string;
@@ -155,6 +155,8 @@ interface CourseBatch {
   google_classroom_link?: string;
   whatsapp_group_link?: string;
   is_active: boolean;
+  start_datetime?: string;
+  timing?: string;
 }
 
 interface RecordingInfo {
@@ -166,6 +168,15 @@ interface RecordingInfo {
   rating: number;
   enrolled_students: number;
   learning_outcomes: string[];
+}
+
+interface GlobalRecording {
+  id: string;
+  course_name: string;
+  course_hours: string;
+  standard_fee: number;
+  discount: number;
+  cover_pic_url: string;
 }
 
 interface OnlineCourseExt {
@@ -236,6 +247,7 @@ export default function ProfilePage() {
   const [studentMyRequests, setStudentMyRequests] = useState<StudentRequest[]>([]);
 
   const [latestCourse, setLatestCourse] = useState<OnlineCourse | null>(null);
+  const [globalRecordings, setGlobalRecordings] = useState<GlobalRecording[]>([]);
 
   const [tutorProfile, setTutorProfile] = useState<Tutor | null>(null);
   const [tutorApplications, setTutorApplications] = useState<TutorApplicationJoin[]>([]);
@@ -246,7 +258,7 @@ export default function ProfilePage() {
   const pendingVerificationOrders = useMemo(() =>
     orders.filter(o => o.status.toLowerCase() === 'pending' || o.status.toLowerCase() === 'processing'), [orders]);
   const pendingCoursePayments = useMemo(() => enrollments.filter(e => e.remaining_amount > 0), [enrollments]);
-  const activeCourseAccess = useMemo(() => enrollments.filter(e => e.remaining_amount === 0), [enrollments]);
+  const activeCourseAccess = useMemo(() => enrollments, [enrollments]); // All valid enrollments count as active access visually.
   const recordingOrdersVerified = useMemo(() =>
     orders.filter(o => o.order_type === 'recording' && o.status.toLowerCase() === 'verified'), [orders]);
 
@@ -355,6 +367,13 @@ export default function ProfilePage() {
 
     const { data: tData } = await supabase.from('tutors').select('*').eq('verified', true).limit(10);
     if (tData) setVerifiedTutors(tData as any);
+
+    const { data: recData } = await supabase
+      .from('recordings')
+      .select('id, course_name, course_hours, standard_fee, discount, cover_pic_url')
+      .eq('is_active', true)
+      .limit(3);
+    if (recData) setGlobalRecordings(recData as any);
   }, [supabase]);
 
   const fetchTutorData = useCallback(async (uid: string) => {
@@ -442,7 +461,10 @@ export default function ProfilePage() {
 
   const scrollToChatbox = () => {
     setActiveTab('Support Chatbot');
-    setTimeout(() => document.getElementById('chatbox-section')?.scrollIntoView({ behavior: 'smooth' }), 100);
+    setTimeout(() => {
+      const el = document.getElementById('chatbox-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
   };
 
   const openApplicationsModal = (vacancyId: number | null = null) => {
@@ -493,6 +515,9 @@ export default function ProfilePage() {
       }
       if (dataToSave.hour_rate !== null && dataToSave.hour_rate !== undefined)
         dataToSave.hour_rate = Number(dataToSave.hour_rate);
+      if (dataToSave.experience !== null && dataToSave.experience !== undefined)
+        dataToSave.experience = Number(dataToSave.experience);
+
       const { data: existing } = await supabase.from('tutors').select('id').eq('user_id', userId).maybeSingle();
       let error;
       if (existing?.id) { const res = await supabase.from('tutors').update(dataToSave).eq('id', existing.id); error = res.error; }
@@ -593,10 +618,9 @@ export default function ProfilePage() {
                 {userName?.charAt(0).toUpperCase() || 'G'}
               </div>
             )}
-            <p className="flex items-center gap-3 text-[22px] font-extrabold tracking-tight">
+            <p className="flex items-center gap-2 text-[22px] font-extrabold tracking-tight">
               <span className="bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 bg-clip-text text-transparent">{userName}</span>
-              <span className="text-slate-400 font-semibold">'s</span>
-              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">GyanHub</span>
+              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Gyan Hub</span>
               {dashboardMode !== 'home' && (
                 <span className={`ml-2 text-[10px] uppercase tracking-[0.12em] px-3 py-1 rounded-md font-semibold border backdrop-blur-sm ${isTutorMode ? 'bg-green-100/60 text-green-700 border-green-200' : 'bg-blue-100/60 text-blue-700 border-blue-200'}`}>
                   {isTutorMode ? 'Tutor Mode' : 'Student Mode'}
@@ -771,7 +795,7 @@ export default function ProfilePage() {
 
                 {/* STUDENT VIEWS */}
                 {dashboardMode === 'student' && !hasTutorProfile && activeTab === 'Dashboard' && (
-                  <DashboardView userId={userId} userName={userName} count={applicantCount} course={latestCourse} verifiedTutors={verifiedTutors} onShowApplications={() => openApplicationsModal()} />
+                  <DashboardView userId={userId} userName={userName} count={applicantCount} course={latestCourse} verifiedTutors={verifiedTutors} onShowApplications={() => openApplicationsModal()} globalRecordings={globalRecordings} />
                 )}
                 {dashboardMode === 'student' && !hasTutorProfile && activeTab === 'Posted Vacancies' && (
                   <VacanciesView vacancies={vacancies} onUpdate={handleUpdateVacancy} onDelete={handleDeleteVacancy} onViewApplicants={openApplicationsModal} />
@@ -782,7 +806,7 @@ export default function ProfilePage() {
 
                 {/* TUTOR VIEWS */}
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'Dashboard' && (
-                  <TutorDashboardView profile={tutorProfile} userId={userId} userName={userName} userEmail={userEmail} applicationsCount={tutorApplications.length} requestsCount={studentRequests.length} course={latestCourse} urgentVacancies={urgentVacancies} onShowApplications={() => openApplicationsModal()} onShowRequests={() => setActiveTab('Student Requests')} onFixProfile={() => setActiveTab('My Info')} />
+                  <TutorDashboardView profile={tutorProfile} userId={userId} userName={userName} userEmail={userEmail} applicationsCount={tutorApplications.length} requestsCount={studentRequests.length} course={latestCourse} urgentVacancies={urgentVacancies} onShowApplications={() => openApplicationsModal()} onShowRequests={() => setActiveTab('Student Requests')} onFixProfile={() => setActiveTab('My Info')} globalRecordings={globalRecordings} />
                 )}
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'Available Vacancies' && (
                   <AvailableVacanciesView vacancies={allVacancies} />
@@ -809,7 +833,7 @@ export default function ProfilePage() {
   );
 }
 
-// ─── CHAT BOX (FIXED — was undefined) ────────────────────────────────────────
+// ─── CHAT BOX ────────────────────────────────────────────────────────────────
 
 function ChatBox({ userId, userName, isTutor }: { userId: string | null; userName: string; isTutor: boolean }) {
   const supabase = createClient();
@@ -822,7 +846,7 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
     if (!userId) return;
     const fetchMessages = async () => {
       const { data } = await supabase
-        .from('support_messages')
+        .from('messages')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: true });
@@ -833,10 +857,13 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
     const channel = supabase
       .channel(`support_chat_${userId}`)
       .on('postgres_changes', {
-        event: 'INSERT', schema: 'public', table: 'support_messages',
+        event: 'INSERT', schema: 'public', table: 'messages',
         filter: `user_id=eq.${userId}`
       }, (payload) => {
-        setMessages(prev => [...prev, payload.new as ChatMessage]);
+        setMessages(prev => {
+          if (prev.some(m => m.id === payload.new.id)) return prev;
+          return [...prev, payload.new as ChatMessage];
+        });
       })
       .subscribe();
 
@@ -852,11 +879,31 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
     setSending(true);
     const content = input.trim();
     setInput('');
-    await supabase.from('support_messages').insert([{
+
+    // Optimistic UI Update Fix
+    const tempId = Date.now().toString();
+    const tempMsg: ChatMessage = {
+      id: tempId,
       user_id: userId,
-      sender_role: isTutor ? 'tutor' : 'user',
+      sender_role: isTutor ? 'tutor' : 'student',
+      content,
+      created_at: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, tempMsg]);
+
+    const { data } = await supabase.from('messages').insert([{
+      user_id: userId,
+      sender_role: isTutor ? 'tutor' : 'student',
       content
-    }]);
+    }]).select();
+
+    if (data && data.length > 0) {
+      setMessages(prev => {
+        const filtered = prev.filter(m => m.id !== tempId && m.id !== data[0].id);
+        return [...filtered, data[0] as ChatMessage];
+      });
+    }
+    
     setSending(false);
   };
 
@@ -933,7 +980,49 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
   );
 }
 
-// ─── COURSE CARD (REWRITTEN with always-visible 3-button system) ──────────────
+// ─── RECOMMENDED RECORDINGS BOX ───────────────────────────────────────────────
+
+function RecommendedRecordingsBox({ recordings }: { recordings: GlobalRecording[] }) {
+  const router = useRouter();
+  if (!recordings || recordings.length === 0) return null;
+  return (
+    <div className="glass-panel rounded-xl p-6 shadow-soft flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2">
+          <PlayCircle size={16} className="text-indigo-500" /> Top Recordings
+        </h3>
+        <Link href="/recording" className="text-[10px] font-black uppercase text-indigo-600 hover:underline flex items-center gap-1">
+          See All <ArrowRight size={14} />
+        </Link>
+      </div>
+      <div className="flex flex-col gap-3">
+        {recordings.map(r => {
+          const finalPrice = r.discount > 0 ? Math.round(r.standard_fee * (1 - r.discount / 100)) : r.standard_fee;
+          return (
+            <div key={r.id} onClick={() => router.push('/recording')} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg hover:border-indigo-200 transition-colors cursor-pointer group">
+              <div className="flex items-center gap-3">
+                {r.cover_pic_url ? (
+                  <img src={r.cover_pic_url} className="w-12 h-12 rounded-md object-cover border border-slate-100" alt={r.course_name} />
+                ) : (
+                  <div className="w-12 h-12 rounded-md bg-indigo-50 flex items-center justify-center border border-indigo-100">
+                    <PlayCircle size={20} className="text-indigo-300"/>
+                  </div>
+                )}
+                <div className="flex flex-col">
+                  <p className="text-sm font-black text-slate-900 line-clamp-1 group-hover:text-indigo-700 transition-colors">{r.course_name}</p>
+                  <p className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10}/> {r.course_hours}</p>
+                </div>
+              </div>
+              <p className="text-sm font-black text-slate-900 shrink-0 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">Rs. {finalPrice}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── COURSE CARD ──────────────────────────────────────────────────────────────
 
 type AccessTier = 'BLOCKED_NO_PAY' | 'BLOCKED_VERIFY' | 'PARTIAL_ACTIVE' | 'PARTIAL_OVERDUE' | 'FULL_ACCESS';
 
@@ -972,6 +1061,22 @@ function LockedLinkButton({ label, icon, reason, onPayClick }: {
   );
 }
 
+const formatNepaliDate = (dateString: string) => {
+  try {
+    const d = new Date(dateString);
+    return new Intl.DateTimeFormat('ne-NP', {
+      calendar: 'nepali',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long'
+    }).format(d);
+  } catch (e) {
+    // Graceful fallback to prevent crashes if locale not fully supported
+    return new Date(dateString).toLocaleDateString();
+  }
+};
+
 function CourseCard({ course, type, matched, batch, pendingVerificationOrders, router }: {
   course: Enrollment | Order;
   type: 'online' | 'recording';
@@ -981,6 +1086,12 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   router: any;
 }) {
   const [expiredModalData, setExpiredModalData] = useState<{ isOpen: boolean; link: string }>({ isOpen: false, link: '' });
+  const [nowTick, setNowTick] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ── RECORDING TYPE ──
   if (type === 'recording') {
@@ -1047,18 +1158,19 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   // ── ONLINE COURSE TYPE ──
   const enroll = course as Enrollment;
 
-  // Resolve links from batch table (matched by batch_no)
+  // Resolve links and dates overriding online_courses info with batch info
+  const effectiveStartDatetime = batch?.start_datetime || enroll.starting_date || matched?.start_datetime;
+  const effectiveTiming = batch?.timing || matched?.timing;
   const onlineLink = batch?.online_class_link || null;
   const classroomLink = batch?.google_classroom_link || null;
   const whatsappLink = batch?.whatsapp_group_link || null;
 
   // Date calculations
-  const enrollmentDate = new Date(enroll.starting_date);
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const enrollStart = new Date(enroll.starting_date); enrollStart.setHours(0, 0, 0, 0);
+  const enrollStart = new Date(effectiveStartDatetime); enrollStart.setHours(0, 0, 0, 0);
   const isFutureOrToday = todayStart.getTime() <= enrollStart.getTime();
-  const daysSinceStart = Math.floor((Date.now() - enrollStart.getTime()) / (1000 * 60 * 60 * 24));
-  const isFinished = daysSinceStart > 30;
+  const daysSinceStart = Math.floor((nowTick.getTime() - enrollStart.getTime()) / (1000 * 60 * 60 * 24));
+  const isFinished = (batch && batch.is_active === false) || daysSinceStart > 30;
 
   const isUnverifiedPayment = pendingVerificationOrders.some(o =>
     o.order_name.toLowerCase() === enroll.course_name.toLowerCase()
@@ -1093,15 +1205,32 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   })();
 
   // ── Countdown ──
-  const countdownStr = (() => {
-    if (isFutureOrToday) {
-      const d = Math.ceil((enrollStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24));
-      return d === 0 ? 'Orientation today' : `Starts in ${d} days`;
+  const getCountdownStr = () => {
+    const startObj = new Date(effectiveStartDatetime);
+    const diffMs = startObj.getTime() - nowTick.getTime();
+    
+    if (diffMs > 0) {
+      const d = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const h = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+      const m = Math.floor((diffMs / (1000 * 60)) % 60);
+      const s = Math.floor((diffMs / 1000) % 60);
+      return `${d}D ${h}H ${m}MIN ${s}S TO ORIENTATION SESSION`;
     } else if (!isFinished) {
-      return daysSinceStart === 0 ? 'Started today' : `Started ${daysSinceStart} days ago`;
+      let target = new Date(nowTick);
+      target.setHours(20, 0, 0, 0); // Default to 8:00 PM today
+      if (nowTick.getTime() > target.getTime()) {
+        target.setDate(target.getDate() + 1); // Move to 8:00 PM tomorrow if past
+      }
+      const diff8PM = target.getTime() - nowTick.getTime();
+      const h = Math.floor((diff8PM / (1000 * 60 * 60)) % 24);
+      const m = Math.floor((diff8PM / (1000 * 60)) % 60);
+      const s = Math.floor((diff8PM / 1000) % 60);
+      return `${h}H ${m}MIN ${s}S FOR ONLINE CLASS`;
     }
     return '';
-  })();
+  };
+  const countdownStr = getCountdownStr();
+  const isOrientation = new Date(effectiveStartDatetime).getTime() > nowTick.getTime();
 
   const payRoute = (price: number) =>
     router.push(`/order?order_type=course&courseName=${encodeURIComponent(enroll.course_name)}&price=${price}`);
@@ -1121,7 +1250,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
       <div className="p-6 md:p-8 flex flex-col flex-grow relative z-10 w-full justify-between">
         <div>
           {/* Badges */}
-          <div className="flex flex-col items-start gap-2 mb-4">
+          <div className="flex flex-col items-start gap-3 mb-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Live Online
@@ -1131,8 +1260,8 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
               </span>
             </div>
             {countdownStr && (
-              <div className="inline-block w-fit bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md">
-                <Calendar className="w-3 h-3 inline mr-1 -mt-0.5" />{countdownStr}
+              <div className="inline-flex items-center w-fit bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg shadow-sm">
+                <Calendar className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />{countdownStr}
               </div>
             )}
             <h3 className="font-black text-2xl text-slate-900 leading-tight group-hover:text-blue-900 transition-colors break-words mt-1">{enroll.course_name}</h3>
@@ -1141,6 +1270,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
           {/* Meta */}
           <div className="flex flex-wrap gap-2 sm:gap-6 mb-6 text-sm font-bold text-blue-600">
             {matched?.tutor_name && <span className="flex items-center gap-1.5 shrink-0"><User className="w-4 h-4" />{matched.tutor_name}</span>}
+            {matched?.duration && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><Clock className="w-4 h-4" />{matched.duration}</span>}
             {matched?.category && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><BookOpen className="w-4 h-4" />{matched.category}</span>}
             {batch?.batch_no && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><Users className="w-4 h-4" />Batch {batch.batch_no}</span>}
             {matched?.difficulty_level && <span className="flex items-center gap-1.5 text-purple-500 shrink-0"><Star className="w-4 h-4" />{matched.difficulty_level}</span>}
@@ -1150,11 +1280,11 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
           <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-wrap gap-6 shadow-inner">
             <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
               <Calendar className="w-4 h-4 text-emerald-500" />
-              <span>Start: {new Date(enroll.starting_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+              <span>Start: {new Date(effectiveStartDatetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ({formatNepaliDate(effectiveStartDatetime)})</span>
             </div>
             <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
               <Clock className="w-4 h-4 text-blue-500" />
-              <span>Timing: {matched?.timing || 'N/A'}</span>
+              <span>Timing: {effectiveTiming || 'N/A'}</span>
             </div>
           </div>
 
@@ -1207,7 +1337,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 <Info className="w-6 h-6 shrink-0" />
                 <div>
                   <p className="text-sm font-medium leading-tight mb-1">
-                    Remaining due: <strong>Rs. {enroll.remaining_amount}</strong>. Pay after orientation on <strong>{enrollmentDate.toLocaleDateString()}</strong>.
+                    Remaining due: <strong>Rs. {enroll.remaining_amount}</strong>. Pay after orientation on <strong>{new Date(effectiveStartDatetime).toLocaleDateString()}</strong>.
                   </p>
                   <p className="text-xs font-bold text-blue-600/80">Google Classroom & WhatsApp unlock after full payment.</p>
                 </div>
@@ -1239,6 +1369,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
             {/* Button 1: Online Class Link */}
             {(() => {
               const locked = !canUseOnline;
+              const buttonLabel = isOrientation ? 'Join Orientation Session' : 'Join Online Class';
               const lockedReason =
                 accessTier === 'BLOCKED_NO_PAY' ? 'Pay the 10% seat booking fee to unlock the live class link.' :
                 accessTier === 'BLOCKED_VERIFY' ? 'Your payment is being verified. Access unlocks within 24 hours.' :
@@ -1256,7 +1387,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
               if (locked) {
                 return (
                   <LockedLinkButton
-                    label="Join Live Class"
+                    label={buttonLabel}
                     icon={<Video className="w-4 h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'BLOCKED_NO_PAY' ? () => payRoute(tenPercentFee) : accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
@@ -1279,7 +1410,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 <a href={onlineLink} target="_blank" rel="noopener noreferrer"
                   className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-black text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-md transition-all hover:scale-[1.02] min-w-0"
                 >
-                  <Video className="w-4 h-4 shrink-0" /> Join Live Class
+                  <Video className="w-4 h-4 shrink-0" /> {buttonLabel}
                 </a>
               );
             })()}
@@ -1380,9 +1511,14 @@ function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatc
 
   return (
     <div className="space-y-10 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">
-        {isOnline ? 'Online Classes' : 'Recordings'}
-      </h2>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">
+          {isOnline ? 'Online Classes' : 'Recordings'}
+        </h2>
+        <Link href={isOnline ? "/onlinecourse" : "/recording"} className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-lg font-black text-sm transition-colors shadow-sm">
+          Explore More {isOnline ? 'Courses' : 'Recordings'} <ExternalLink size={16} />
+        </Link>
+      </div>
       <div className="flex flex-col gap-8 w-full">
         {isOnline ? (
           enrollments.length === 0 ? (
@@ -1549,12 +1685,14 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white rounded-xl w-full max-w-lg overflow-hidden shadow-strong flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
-          <h3 className="text-xl font-black text-slate-800">Transaction Receipt</h3>
-          <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-100 text-slate-500"><X size={20} /></button>
-        </div>
-        <div className="p-6 md:p-8 space-y-6 overflow-y-auto custom-scrollbar flex-grow">
+      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white rounded-xl w-full max-w-lg shadow-strong flex flex-col max-h-[90vh] relative overflow-y-auto custom-scrollbar">
+        
+        {/* Absolutely positioned cross symbol prevents cutting off by overflow-hidden */}
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full shadow-sm hover:bg-slate-200 text-slate-600 z-[60] transition-colors">
+          <X size={20} />
+        </button>
+
+        <div className="p-8 space-y-6 pt-14">
           <div className="text-center p-5 bg-gradient-to-b from-slate-50 to-white border border-slate-100 rounded-lg">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{order.order_type} PURCHASE</p>
             <h4 className="text-2xl font-black text-slate-900 leading-tight break-words">{order.order_name}</h4>
@@ -1568,12 +1706,10 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
               <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Date</p>
               <p className="font-bold text-slate-700 text-lg mt-1">{new Date(order.created_at).toLocaleDateString()}</p>
             </div>
-            {remainingDue > 0 && (
-              <div className="col-span-2 p-4 bg-rose-50 rounded-lg border border-rose-100 flex justify-between items-center">
-                <p className="text-[10px] uppercase font-black text-rose-600 tracking-widest">Remaining Due Balance</p>
-                <p className="font-black text-rose-700">Rs. {remainingDue}</p>
-              </div>
-            )}
+            <div className={`col-span-2 p-4 rounded-lg border flex justify-between items-center ${remainingDue > 0 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
+              <p className={`text-[10px] uppercase font-black tracking-widest ${remainingDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>Remaining Due Balance</p>
+              <p className={`font-black ${remainingDue > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{remainingDue > 0 ? `Rs. ${remainingDue}` : 'No due remaining for this course'}</p>
+            </div>
             <div className="col-span-2 p-4 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
               <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Status</p>
               <StatusBadge status={order.status} />
@@ -1667,7 +1803,7 @@ function ClassExpiredModal({ onClose, classroomLink }: { onClose: () => void; cl
         <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
         <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner"><PlayCircle size={32} /></div>
         <h3 className="text-xl font-black text-slate-800 mb-2">Class is Finished</h3>
-        <p className="text-sm font-medium text-slate-600/80 mb-8">The live sessions have concluded. Explore recordings for your revision.</p>
+        <p className="text-sm font-medium text-slate-600/80 mb-8">Class is finished, please refer to recordings available in next button.</p>
         <button onClick={() => { onClose(); window.open(classroomLink || '/recording', '_blank'); }} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-black shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-[1.02] transition-transform">
           Explore Recordings
         </button>
@@ -1825,14 +1961,23 @@ function LatestCourseCard({ course, isTutor }: { course: OnlineCourse; isTutor: 
   const originalPrice = course.discount > 0 ? Math.round(course.fee / (1 - course.discount / 100)) : course.fee;
   return (
     <div onClick={() => window.location.href = `/onlinecourse/${encodeURIComponent(course.title)}`}
-      className={`glass-panel rounded-xl overflow-hidden flex flex-col h-full shadow-soft ${isTutor ? 'hover:border-green-400' : 'hover:border-blue-400'} hover:shadow-strong transition-all duration-500 cursor-pointer group relative p-6`}
+      className={`glass-panel rounded-xl overflow-hidden flex flex-col h-full shadow-soft ${isTutor ? 'hover:border-green-400' : 'hover:border-blue-400'} hover:shadow-strong transition-all duration-500 cursor-pointer group relative`}
     >
-      <div className="absolute top-4 right-4 bg-orange-500/10 text-orange-600 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md border border-orange-200">Featured</div>
-      {course.discount > 0 && (
-        <div className="absolute top-12 right-[-35px] bg-red-500 text-white font-black text-[10px] uppercase px-10 py-1.5 rotate-45 shadow-lg z-20 tracking-widest">{course.discount}% OFF</div>
-      )}
-      <div className="flex flex-col justify-between w-full h-full pt-6">
-        <h4 className="font-black text-2xl mb-4 tracking-tight leading-tight break-words pr-8">{course.title}</h4>
+      {/* Cover Image */}
+      <div className="relative w-full h-44 bg-slate-100 overflow-hidden shrink-0 border-b border-slate-100">
+        <div className="absolute top-3 right-3 bg-orange-500/90 backdrop-blur-sm text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md shadow-sm z-20">Featured</div>
+        {course.discount > 0 && (
+          <div className="absolute top-5 left-[-35px] bg-red-500 text-white font-black text-[10px] uppercase px-10 py-1.5 rotate-[-45deg] shadow-lg z-20 tracking-widest">{course.discount}% OFF</div>
+        )}
+        {course.cover_pic ? (
+          <img src={course.cover_pic} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-slate-300 bg-slate-100"><BookOpen size={40} /></div>
+        )}
+      </div>
+
+      <div className="flex flex-col justify-between w-full h-full p-6">
+        <h4 className="font-black text-xl mb-4 tracking-tight leading-tight break-words">{course.title}</h4>
         <div className="flex flex-col gap-2 mb-6 border-b border-slate-100 pb-4">
           {[
             { val: course.tutor_name, icon: User, label: 'Instructor' },
@@ -1841,22 +1986,24 @@ function LatestCourseCard({ course, isTutor }: { course: OnlineCourse; isTutor: 
             { val: course.timing, icon: Clock, label: 'Timing' },
             { val: course.difficulty_level, icon: Star, label: 'Level' },
           ].filter(i => i.val).map(({ val, icon: Icon, label }) => (
-            <p key={label} className="text-sm font-bold text-slate-600 flex items-center gap-2">
+            <p key={label} className="text-xs font-bold text-slate-600 flex items-center gap-2">
               <Icon size={14} className={`shrink-0 ${isTutor ? 'text-green-500' : 'text-blue-500'}`} /> {label}: {val}
             </p>
           ))}
         </div>
-        <div className="flex flex-wrap items-end gap-3 mt-auto">
-          <p className="text-slate-900 font-black text-3xl tracking-tighter">Rs. {offerPrice.toLocaleString()}</p>
-          {course.discount > 0 && <p className="text-slate-400/80 font-bold text-sm line-through mb-1.5">Rs. {originalPrice.toLocaleString()}</p>}
+        <div className="flex flex-wrap items-end justify-between gap-3 mt-auto">
+          <div className="flex items-end gap-3">
+            <p className="text-slate-900 font-black text-2xl tracking-tighter">Rs. {offerPrice.toLocaleString()}</p>
+            {course.discount > 0 && <p className="text-slate-400/80 font-bold text-xs line-through mb-1">Rs. {originalPrice.toLocaleString()}</p>}
+          </div>
+          <button onClick={(e) => { e.stopPropagation(); window.location.href='/onlinecourse'; }} className={`p-2.5 rounded-lg border ${isTutor ? 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'} transition-colors shadow-sm hover:-translate-y-0.5`} title="See all online courses">
+            <ExternalLink size={16} />
+          </button>
         </div>
       </div>
     </div>
   );
 }
-
-// ─── STUB COMPONENTS (keep your existing implementations for these) ────────────
-// These components are referenced in ProfilePage — implement them based on your existing code.
 
 function ApplicationsModal({ applications, onClose, onReject, onUpdateStatus }: any) {
   return (
@@ -1916,7 +2063,7 @@ function TutorApplicationsModal({ applications, onClose }: any) {
   );
 }
 
-function DashboardView({ userId, userName, count, course, verifiedTutors, onShowApplications }: any) {
+function DashboardView({ userId, userName, count, course, verifiedTutors, onShowApplications, globalRecordings }: any) {
   return (
     <div className="space-y-8 w-full pb-10">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -1928,13 +2075,28 @@ function DashboardView({ userId, userName, count, course, verifiedTutors, onShow
         )}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {course && <LatestCourseCard course={course} isTutor={false} />}
-        {verifiedTutors?.length > 0 && (
-          <div className="glass-panel rounded-xl p-6 shadow-soft flex flex-col gap-4">
-            <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> Find Tutors</h3>
-            <Link href="/tutors" className="w-full text-center bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-black py-4 rounded-xl transition-colors text-sm">Browse {verifiedTutors.length}+ Verified Tutors</Link>
+        {course && (
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center px-1">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                <Sparkles size={16} className="text-orange-500" /> Featured Online Course
+              </h3>
+              <Link href="/onlinecourse" className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1">
+                See All <ArrowRight size={14} />
+              </Link>
+            </div>
+            <LatestCourseCard course={course} isTutor={false} />
           </div>
         )}
+        <div className="flex flex-col gap-6">
+          {verifiedTutors?.length > 0 && (
+            <div className="glass-panel rounded-xl p-6 shadow-soft flex flex-col gap-4">
+              <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> Find Tutors</h3>
+              <Link href="/tutors" className="w-full text-center bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-black py-4 rounded-xl transition-colors text-sm">Browse {verifiedTutors.length}+ Verified Tutors</Link>
+            </div>
+          )}
+          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} />}
+        </div>
       </div>
       {verifiedTutors?.length > 0 && <TutorsMarquee tutors={verifiedTutors} />}
     </div>
@@ -2031,7 +2193,7 @@ function StudentMyRequestsView({ requests, onCancel, onChatAdmin }: any) {
               {req.preferred_mode && <span className="flex items-center gap-1"><Monitor size={13} />{req.preferred_mode}</span>}
               {req.tutors?.location && <span className="flex items-center gap-1"><MapPin size={13} />{req.tutors.location}</span>}
             </div>
-            {req.message && <p className="text-sm text-slate-600 mt-3 italic">"{req.message}"</p>}
+            {req.message && <p className="text-sm text-slate-600 mt-3 italic bg-slate-50 rounded-lg p-3 border border-slate-100">"{req.message}"</p>}
             <div className="mt-3"><StatusBadge status={req.status} /></div>
           </div>
           <div className="flex gap-2 shrink-0 items-start">
@@ -2044,7 +2206,7 @@ function StudentMyRequestsView({ requests, onCancel, onChatAdmin }: any) {
   );
 }
 
-function TutorDashboardView({ profile, userId, userName, userEmail, applicationsCount, requestsCount, course, urgentVacancies, onShowApplications, onShowRequests, onFixProfile }: any) {
+function TutorDashboardView({ profile, userId, userName, userEmail, applicationsCount, requestsCount, course, urgentVacancies, onShowApplications, onShowRequests, onFixProfile, globalRecordings }: any) {
   const completeness = profile ? [profile.bio, profile.education, profile.experience, profile.contact_num, profile.location, profile.hour_rate, profile.mode_of_teaching].filter(Boolean).length : 0;
   const pct = Math.round((completeness / 7) * 100);
 
@@ -2070,15 +2232,30 @@ function TutorDashboardView({ profile, userId, userName, userEmail, applications
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="flex flex-col gap-4">
-          <button onClick={onShowApplications} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(16,185,129,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-            <Briefcase size={20} /> View My Applications
-          </button>
-          <button onClick={onShowRequests} className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(59,130,246,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-            <Users size={20} /> View Student Requests
-          </button>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4">
+            <button onClick={onShowApplications} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(16,185,129,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+              <Briefcase size={20} /> View My Applications
+            </button>
+            <button onClick={onShowRequests} className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(59,130,246,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+              <Users size={20} /> View Student Requests
+            </button>
+          </div>
+          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} />}
         </div>
-        {course && <LatestCourseCard course={course} isTutor={true} />}
+        {course && (
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center px-1">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
+                <Sparkles size={16} className="text-orange-500" /> Featured Online Course
+              </h3>
+              <Link href="/onlinecourse" className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1">
+                See All <ArrowRight size={14} />
+              </Link>
+            </div>
+            <LatestCourseCard course={course} isTutor={true} />
+          </div>
+        )}
       </div>
 
       {urgentVacancies?.length > 0 && (
@@ -2155,7 +2332,7 @@ function StudentRequestsView({ requests, onUpdateStatus, onChatAdmin }: any) {
       ) : requests.map((req: StudentRequest) => (
         <div key={req.id} className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft flex flex-col sm:flex-row justify-between gap-4">
           <div>
-            <p className="font-black text-slate-900 text-base">{req.student_name}</p>
+            <p className="font-black text-slate-900 text-base">{req.tutors?.name || 'Tutor'}</p>
             <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-500 font-medium">
               <span className="flex items-center gap-1"><Phone size={13} />{req.phone}</span>
               <span className="flex items-center gap-1"><GraduationCap size={13} />{req.grade}</span>
@@ -2195,12 +2372,15 @@ function MyInfoView({ profile, onSave }: any) {
 
   const fields = [
     { key: 'name', label: 'Full Name', type: 'text' },
-    { key: 'education', label: 'Education', type: 'text' },
-    { key: 'experience', label: 'Experience', type: 'text' },
-    { key: 'hour_rate', label: 'Hourly Rate (Rs.)', type: 'number' },
+    { key: 'subject', label: 'Subjects (comma separated)', type: 'text' },
     { key: 'location', label: 'Location', type: 'text' },
+    { key: 'experience', label: 'Experience (Years)', type: 'number' },
+    { key: 'education', label: 'Education', type: 'text' },
+    { key: 'hour_rate', label: 'Hourly Rate (Rs.)', type: 'number' },
     { key: 'contact_num', label: 'Contact Number', type: 'text' },
     { key: 'mode_of_teaching', label: 'Mode of Teaching', type: 'text' },
+    { key: 'cv_url', label: 'CV URL', type: 'text' },
+    { key: 'id_url', label: 'ID Card URL', type: 'text' },
   ];
 
   return (
@@ -2211,12 +2391,22 @@ function MyInfoView({ profile, onSave }: any) {
           {fields.map(({ key, label, type }) => (
             <div key={key} className="flex flex-col gap-1.5">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
-              <input
-                type={type}
-                value={(form as any)[key] || ''}
-                onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 focus:bg-blue-50/30 bg-slate-50 transition-all"
-              />
+              {key === 'subject' ? (
+                <input
+                  type="text"
+                  value={form.subject ? (Array.isArray(form.subject) ? form.subject.join(', ') : form.subject) : ''}
+                  onChange={e => setForm(p => ({ ...p, subject: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                  className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 focus:bg-blue-50/30 bg-slate-50 transition-all"
+                  placeholder="Math, Science, English"
+                />
+              ) : (
+                <input
+                  type={type}
+                  value={(form as any)[key] || ''}
+                  onChange={e => setForm(p => ({ ...p, [key]: type === 'number' ? (e.target.value ? Number(e.target.value) : '') : e.target.value }))}
+                  className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 focus:bg-blue-50/30 bg-slate-50 transition-all"
+                />
+              )}
             </div>
           ))}
         </div>
