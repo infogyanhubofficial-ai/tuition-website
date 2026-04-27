@@ -982,12 +982,14 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
 }
 
 // --- SECTION: BOOKINGS ---
+// --- SECTION: BOOKINGS ---
 function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  const [searchQuery, setSearchQuery] = useState(""); // <-- NEW: Search state
   
   // Payment Editing State
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
@@ -996,6 +998,15 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   
   // Add hidden enrollments state
   const [hiddenBookingIds, setHiddenBookingIds] = useState<Set<string>>(new Set());
+
+  // PAGINATION STATE
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
+
+  // 🔥 FIX: Pagination Logic moved to the top level, before any early returns
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCourse, selectedBatch, dateSort, statusFilter, hiddenBookingIds, searchQuery]); // <-- NEW: Added searchQuery to dependencies
 
   const toggleConfirmation = async (enrollmentId: string, currentStatus: boolean) => {
     try {
@@ -1047,7 +1058,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
           <p className="text-slate-500 font-medium mt-1">Select an online course to view its batches and enrollments.</p>
         </div>
         
-        {/* CHANGED: Flex-col gap-4 to make items appear one per line */}
         <div className="flex flex-col gap-4">
           {courses.map(course => {
             const bookingCount = enrollments.filter(e => e.course_id === course.id).length;
@@ -1137,12 +1147,25 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   }
 
   // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH
-  // Filter enrollments by course and chosen batch, and apply hidden filter
+  // Filter enrollments by course, chosen batch, search query, and hidden filter
   let courseEnrollments = enrollments.filter(e => {
     if (e.course_id !== selectedCourse.id) return false;
     if (hiddenBookingIds.has(e.id)) return false;
-    if (selectedBatch === 'unassigned') return !e.batch_no;
-    return e.batch_no === selectedBatch;
+    
+    // Batch Check
+    if (selectedBatch === 'unassigned' && e.batch_no) return false;
+    if (selectedBatch !== 'unassigned' && e.batch_no !== selectedBatch) return false;
+
+    // <-- NEW: Search logic check -->
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = e.full_name?.toLowerCase().includes(q);
+      const matchEmail = e.email?.toLowerCase().includes(q);
+      const matchPhone = e.whatsapp_number?.toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchPhone) return false;
+    }
+
+    return true;
   });
 
   if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter(e => e.confirmed);
@@ -1152,6 +1175,10 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     const timeA = new Date(a.created_at).getTime(); const timeB = new Date(b.created_at).getTime();
     return dateSort === 'desc' ? timeB - timeA : timeA - timeB;
   });
+
+  const totalPages = Math.ceil(courseEnrollments.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedEnrollments = courseEnrollments.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   const handleCopyCSV = () => {
     const header = "Name,Phone,Email\n";
@@ -1163,23 +1190,37 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setSelectedBatch(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
-          <div>
-            <h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2>
-            <p className="text-sm font-medium text-slate-500">
-              {selectedBatch === 'unassigned' ? 'Unassigned Enrollments' : `Batch ${selectedBatch} Enrollments`}
-            </p>
+      
+      {/* <-- NEW: Redesigned Header & Search Bar --> */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSelectedBatch(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2>
+              <p className="text-sm font-medium text-slate-500">
+                {selectedBatch === 'unassigned' ? 'Unassigned Enrollments' : `Batch ${selectedBatch} Enrollments`}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-4 items-center">
           {hiddenBookingIds.size > 0 && (
             <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
               <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
             </button>
           )}
+        </div>
 
+        <div className="flex flex-wrap gap-4 items-center">
+          <div className="relative flex-1 min-w-[250px]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text" 
+              placeholder="Search by name, email, or phone number..." 
+              value={searchQuery} 
+              onChange={(e) => setSearchQuery(e.target.value)} 
+              className="w-full pl-11 pr-4 py-3 bg-white rounded-xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700 text-sm" 
+            />
+          </div>
           <select className="bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={dateSort} onChange={e => setDateSort(e.target.value as 'desc' | 'asc')}>
             <option value="desc">Date: Newest First</option><option value="asc">Date: Oldest First</option>
           </select>
@@ -1197,55 +1238,81 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
         </button>
       </div>
 
-      {/* COMPACT NO-SCROLL TABLE */}
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden w-full">
-        <table className="w-full text-left border-collapse table-auto">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              <th className="p-4 w-[25%]">Applicant Details</th>
-              <th className="p-4 w-[15%]">Date</th>
-              <th className="p-4 w-[30%]">Remarks</th>
-              <th className="p-4 w-[12%]">Payment</th>
-              <th className="p-4 w-[10%]">Confirmed</th>
-              <th className="p-4 text-right w-[8%]">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {courseEnrollments.map(enr => (
-              <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                <td className="p-4 align-top">
-                  <p className="font-bold text-slate-900 leading-tight">{enr.full_name}</p>
-                  <p className="text-xs text-slate-500 mt-1 truncate" title={enr.email}>{enr.email}</p>
-                  <p className="text-xs text-slate-500 mt-0.5 font-medium">WA: {enr.whatsapp_number}</p>
-                </td>
-                <td className="p-4 align-top text-sm text-slate-500 font-medium">
-                  {new Date(enr.created_at).toLocaleDateString()}
-                </td>
-                <td className="p-4 align-top">
-                  {/* Highly responsive box for Remarks with no scrollbars required */}
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap break-words h-auto min-w-[200px]">
-                      {enr.remarks || <span className="italic text-slate-400">No remarks provided.</span>}
-                  </div>
-                </td>
-                <td className="p-4 align-top whitespace-nowrap">
-                  <p className="text-sm font-bold text-slate-800">Paid: Rs.{enr.paid_amount || 0}</p>
-                  <p className="text-xs font-bold text-red-500 mt-0.5">Due: Rs.{enr.remaining_amount || 0}</p>
-                </td>
-                <td className="p-4 align-top">
-                  <ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Yes' : 'No'} activeColor="bg-green-500" activeText="text-green-600" />
-                </td>
-                <td className="p-4 align-top text-right">
-                  <div className="flex justify-end gap-1 flex-wrap">
-                    <button onClick={() => openPaymentEdit(enr)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors" title="Edit Payment"><DollarSign size={16} /></button>
-                    <button onClick={() => handleHide(enr.id)} className="p-1.5 text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Hide"><EyeOff size={16} /></button>
-                    <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
-                  </div>
-                </td>
+      {/* COMPACT NO-SCROLL TABLE WITH PAGINATION */}
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden w-full flex flex-col">
+        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
+          <table className="w-full text-left border-collapse table-auto">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="p-4 w-[25%]">Applicant Details</th>
+                <th className="p-4 w-[15%]">Date</th>
+                <th className="p-4 w-[30%]">Remarks</th>
+                <th className="p-4 w-[12%]">Payment</th>
+                <th className="p-4 w-[10%]">Confirmed</th>
+                <th className="p-4 text-right w-[8%]">Actions</th>
               </tr>
-            ))}
-            {courseEnrollments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {paginatedEnrollments.map(enr => (
+                <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td className="p-4 align-top">
+                    <p className="font-bold text-slate-900 leading-tight">{enr.full_name}</p>
+                    <p className="text-xs text-slate-500 mt-1 truncate" title={enr.email}>{enr.email}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 font-medium">WA: {enr.whatsapp_number}</p>
+                  </td>
+                  <td className="p-4 align-top text-sm text-slate-500 font-medium">
+                    {new Date(enr.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="p-4 align-top">
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap break-words h-auto min-w-[200px]">
+                        {enr.remarks || <span className="italic text-slate-400">No remarks provided.</span>}
+                    </div>
+                  </td>
+                  <td className="p-4 align-top whitespace-nowrap">
+                    <p className="text-sm font-bold text-slate-800">Paid: Rs.{enr.paid_amount || 0}</p>
+                    <p className="text-xs font-bold text-red-500 mt-0.5">Due: Rs.{enr.remaining_amount || 0}</p>
+                  </td>
+                  <td className="p-4 align-top">
+                    <ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Yes' : 'No'} activeColor="bg-green-500" activeText="text-green-600" />
+                  </td>
+                  <td className="p-4 align-top text-right">
+                    <div className="flex justify-end gap-1 flex-wrap">
+                      <button onClick={() => openPaymentEdit(enr)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors" title="Edit Payment"><DollarSign size={16} /></button>
+                      <button onClick={() => handleHide(enr.id)} className="p-1.5 text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Hide"><EyeOff size={16} /></button>
+                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {paginatedEnrollments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* PAGINATION FOOTER */}
+        {courseEnrollments.length > 0 && (
+          <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+            <span className="text-sm font-medium text-slate-500">
+              Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, courseEnrollments.length)} of {courseEnrollments.length} entries
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* PAYMENT EDIT MODAL */}
@@ -1475,6 +1542,11 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     certificate_code: '', existing_image: '', file: null as File | null
   });
 
+  // 🔥 FIX: Pagination Logic moved to the top level 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   const generateCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = 'Gyan-';
@@ -1532,10 +1604,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
