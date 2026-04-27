@@ -2,6 +2,23 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
+  const url = request.nextUrl.clone();
+
+  // ==========================================
+  // 🚨 TEMPORARY MAINTENANCE MODE 🚨
+  // Comment out or delete this block tomorrow to restore the site
+  // ==========================================
+  if (url.pathname !== '/maintenance') {
+    url.pathname = '/maintenance';
+    return NextResponse.redirect(url);
+  } else {
+    // If they are on the maintenance page, render it and skip Supabase auth
+    return NextResponse.next();
+  }
+  // ==========================================
+
+
+  // --- ORIGINAL SUPABASE LOGIC BELOW ---
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -23,8 +40,6 @@ export async function middleware(request: NextRequest) {
 
   // 1. Refresh session
   const { data: { user } } = await supabase.auth.getUser();
-
-  const url = request.nextUrl.clone();
 
   // 2. PREVENT LOOPS: If they are ALREADY on the login page, let them be.
   if (url.pathname === '/login') {
