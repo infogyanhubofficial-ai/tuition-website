@@ -3,22 +3,36 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
+  const hostname = request.nextUrl.hostname;
 
   // ==========================================
   // 🚨 TEMPORARY MAINTENANCE MODE 🚨
-  // Comment out or delete this block tomorrow to restore the site
   // ==========================================
-  if (url.pathname !== '/maintenance') {
-    url.pathname = '/maintenance';
-    return NextResponse.redirect(url);
-  } else {
-    // If they are on the maintenance page, render it and skip Supabase auth
+
+  const isLocalDev =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.');
+
+  const isLiveDomain =
+    hostname === 'gyanhub.com.np' ||
+    hostname === 'www.gyanhub.com.np';
+
+  if (!isLocalDev && isLiveDomain) {
+    if (url.pathname !== '/maintenance') {
+      url.pathname = '/maintenance';
+      return NextResponse.redirect(url);
+    }
+
     return NextResponse.next();
   }
+
+  // ==========================================
+  // ORIGINAL SUPABASE LOGIC
   // ==========================================
 
-
-  // --- ORIGINAL SUPABASE LOGIC BELOW ---
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -26,27 +40,32 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() { return request.cookies.getAll(); },
+        getAll() {
+          return request.cookies.getAll();
+        },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set(name, value, options);
+          });
         },
       },
     }
   );
 
-  // 1. Refresh session
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // 2. PREVENT LOOPS: If they are ALREADY on the login page, let them be.
   if (url.pathname === '/login') {
     return supabaseResponse;
   }
 
-  // 3. PROTECT PROFILE: Redirect to /login if not authenticated
   if (!user && url.pathname.startsWith('/dashboard')) {
     url.pathname = '/login';
     return NextResponse.redirect(url);
@@ -57,13 +76,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - api/auth (Supabase auth internal routes)
-     */
     '/((?!_next/static|_next/image|favicon.ico|api/auth|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

@@ -13,7 +13,6 @@ import {
 type OrderMode = "cv_phone" | "badge" | "course" | "recording" | "unknown";
 
 // --- IMAGE COMPRESSION UTILITY ---
-// Compresses image to WebP format for maximum storage savings
 const compressImage = (file: File): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -26,7 +25,6 @@ const compressImage = (file: File): Promise<File> => {
         const ctx = canvas.getContext('2d');
         if (!ctx) return reject(new Error('Failed to get canvas context'));
 
-        // Max dimensions for the screenshot to save space
         const MAX_WIDTH = 1200;
         const MAX_HEIGHT = 1200;
         let width = img.width;
@@ -48,11 +46,9 @@ const compressImage = (file: File): Promise<File> => {
         canvas.height = height;
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Export as WebP with 0.5 quality for extreme compression
         canvas.toBlob(
           (blob) => {
             if (!blob) return reject(new Error('Canvas is empty'));
-            // Rename file extension to .webp
             const newFileName = file.name.replace(/\.[^/.]+$/, ".webp");
             const compressedFile = new File([blob], newFileName, {
               type: 'image/webp',
@@ -71,7 +67,6 @@ const compressImage = (file: File): Promise<File> => {
 };
 
 function CheckoutContent() {
-  // 0. FIX: SCROLL TO TOP ON MOUNT
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: "instant" });
   }, []);
@@ -83,7 +78,7 @@ function CheckoutContent() {
   // 1. SAFELY PARSE URL PARAMS
   const urlType = searchParams.get("type")?.toLowerCase() || ""; 
   const requestType = searchParams.get("request_type")?.toLowerCase() || ""; 
-  const orderType = searchParams.get("order_type")?.toLowerCase() || ""; 
+  const orderTypeParam = searchParams.get("order_type")?.toLowerCase() || ""; 
   const tutorId = searchParams.get("tutor_id") || "";
   
   const urlName = searchParams.get("name") || "";
@@ -91,13 +86,16 @@ function CheckoutContent() {
   const urlPhone = searchParams.get("phone") || "";
   const urlTutorName = searchParams.get("tutor_name") || searchParams.get("tutorName") || "";
   const urlCourseName = searchParams.get("courseName") || searchParams.get("course_name") || "";
-  const urlPrice = searchParams.get("price") || "0";
+  const urlPrice = searchParams.get("price") || "0"; 
+  
+  const urlEnrollmentId = searchParams.get("enrollment_id") || searchParams.get("enrollmentId") || null;
+  const urlLockedPrice = searchParams.get("locked_price") || null;
 
   // 2. DETERMINE ORDER MODE
   let currentMode: OrderMode = "unknown";
   if (urlType === "recording") currentMode = "recording";
-  else if (orderType.includes("course") || requestType === "course") currentMode = "course";
-  else if (orderType.includes("verif") || orderType.includes("batch") || orderType.includes("badge")) currentMode = "badge";
+  else if (orderTypeParam.includes("course") || requestType === "course") currentMode = "course";
+  else if (orderTypeParam.includes("verif") || orderTypeParam.includes("batch") || orderTypeParam.includes("badge")) currentMode = "badge";
   else if (requestType === "cv" || requestType === "phone") currentMode = "cv_phone"; 
 
   // 3. FORM STATE
@@ -115,19 +113,21 @@ function CheckoutContent() {
   // 5. DYNAMIC DATA STATE
   const [fetchedTutorName, setFetchedTutorName] = useState(urlTutorName);
   const [isFetchingData, setIsFetchingData] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [fetchedLockedPrice, setFetchedLockedPrice] = useState<number | null>(null);
 
   // 6. INITIALIZATION & DATA FETCHING
   useEffect(() => {
     const initializeCheckout = async () => {
       setIsFetchingData(true);
       try {
-        if (!urlName || !urlEmail) {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
-            if (!urlName) setFullName(user.user_metadata?.full_name || '');
-            if (!urlEmail) setEmail(user.email || '');
-          }
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          setCurrentUserId(user.id);
+          if (!urlName) setFullName(user.user_metadata?.full_name || '');
+          if (!urlEmail) setEmail(user.email || '');
         }
+
         if (tutorId && !urlTutorName && currentMode === 'cv_phone') {
           const { data, error } = await supabase
             .from('tutors')
@@ -138,6 +138,27 @@ function CheckoutContent() {
           if (data) setFetchedTutorName(data.full_name || data.name || `Tutor #${tutorId}`);
           else setFetchedTutorName(`Tutor #${tutorId}`);
         }
+
+        if (currentMode === 'course' && urlCourseName) {
+          const { data: syllabus } = await supabase
+            .from('syllabi_v2')
+            .select('id')
+            .ilike('name', urlCourseName)
+            .single();
+
+          if (syllabus) {
+            const { data: storefront } = await supabase
+              .from('online_courses_v2')
+              .select('fee')
+              .eq('syllabus_id', syllabus.id)
+              .single();
+            
+            if (storefront && storefront.fee) {
+              setFetchedLockedPrice(storefront.fee); 
+            }
+          }
+        }
+
       } catch (error) {
         console.error("Initialization Error:", error);
       } finally {
@@ -145,9 +166,10 @@ function CheckoutContent() {
       }
     };
     initializeCheckout();
-  }, [tutorId, urlTutorName, urlName, urlEmail, currentMode, supabase]);
+  }, [tutorId, urlTutorName, urlName, urlEmail, urlCourseName, currentMode, supabase]);
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
+  // Centralized standard brand colors: Blue for primary action, Emerald for positive/secure status, Slate for structure
   const getOrderConfig = () => {
     switch (currentMode) {
       case "recording":
@@ -155,39 +177,43 @@ function CheckoutContent() {
           title: "Recording Video Access",
           orderName: urlCourseName || "Selected Course",
           price: parseInt(urlPrice) || 0,
-          icon: <PlayCircle className="w-5 h-5 text-indigo-600 shrink-0" />,
+          dbOrderType: "recording",
+          icon: <PlayCircle className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: `You are purchasing instant access to "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
-          noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
-          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
+          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
         };
       case "course":
         return {
           title: "Online Course Enrollment",
           orderName: urlCourseName || "Selected Course",
-          price: parseInt(urlPrice) || 0,
-          icon: <GraduationCap className="w-5 h-5 text-indigo-600 shrink-0" />,
+          price: parseInt(urlPrice) || 0, 
+          dbOrderType: "Online Course",
+          icon: <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for the online class within 24 hours.`,
-          noticeStyle: "bg-blue-50 border-blue-200/60 text-blue-800",
-          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
+          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
         };
       case "badge":
         return {
           title: "Verification Badge (1-Year)",
           orderName: fullName || urlName || "Your Profile Verification",
           price: 500,
-          icon: <ShieldCheck className="w-5 h-5 text-indigo-600 shrink-0" />,
+          dbOrderType: "other",
+          icon: <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "You must submit original documents later. Badge won't be verified otherwise and payment is non-refundable.",
-          noticeStyle: "bg-amber-50 border-amber-200/60 text-amber-800",
-          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5" />
+          noticeStyle: "bg-slate-50 border-slate-200 text-slate-700",
+          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-slate-500" />
         };
       case "cv_phone":
         return {
           title: "CV & Contact Detail Unlock",
           orderName: fetchedTutorName || `Tutor #${tutorId || 'Unknown'}`,
           price: 1000,
-          icon: <FileText className="w-5 h-5 text-indigo-600 shrink-0" />,
+          dbOrderType: "tutoring",
+          icon: <FileText className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
-          noticeStyle: "bg-emerald-50 border-emerald-200/60 text-emerald-800",
+          noticeStyle: "bg-emerald-50/50 border-emerald-100 text-emerald-800",
           noticeIcon: <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
         };
       default:
@@ -195,9 +221,10 @@ function CheckoutContent() {
           title: "Unknown Service",
           orderName: "Unknown",
           price: 0,
+          dbOrderType: "other",
           icon: <Info className="w-5 h-5 text-slate-400 shrink-0" />,
           notice: "Invalid request. Please go back and try again.",
-          noticeStyle: "bg-slate-50 border-slate-200/60 text-slate-800",
+          noticeStyle: "bg-slate-50 border-slate-200 text-slate-700",
           noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5" />
         };
     }
@@ -213,7 +240,6 @@ function CheckoutContent() {
 
   // 9. SUBMIT HANDLER
   const handleSubmit = async () => {
-    // Check and point users to missing fields
     if (!isNameValid) { alert("Please enter your Full Name."); document.getElementById("fullName")?.focus(); return; }
     if (!isEmailValid) { alert("Please enter a valid Email Address."); document.getElementById("email")?.focus(); return; }
     if (!isPhoneValid) { alert("Please enter a valid Contact Number (at least 10 digits)."); document.getElementById("contactNumber")?.focus(); return; }
@@ -224,30 +250,45 @@ function CheckoutContent() {
 
     setIsUploading(true);
     try {
-      // --- COMPRESS THE IMAGE BEFORE UPLOAD ---
       const compressedScreenshot = await compressImage(screenshot);
-
       const fileExt = compressedScreenshot.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
       const filePath = `receipts/${fileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('others')
-        .upload(filePath, compressedScreenshot); // Upload the compressed file
+        .upload(filePath, compressedScreenshot);
         
       if (uploadError) throw uploadError;
 
-      // Inserting exact columns per the DB Schema
-      const { error: dbError } = await supabase.from('orders').insert([{
-        full_name: fullName,
-        email: email,
-        contact_number: contactNumber,
-        order_type: currentMode,
+      let finalEnrollmentId = searchParams.get("enrollment_id")?.trim() || searchParams.get("enrollmentId")?.trim() || null;
+
+      if (!finalEnrollmentId && config.dbOrderType === "Online Course") {
+        const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
+          search_email: email.trim()
+        });
+
+        if (rpcId && !rpcError) {
+          finalEnrollmentId = rpcId;
+        } else {
+          alert("We couldn't find your enrollment record. Please make sure you used the same email address as your enrollment form.");
+          setIsUploading(false);
+          return; 
+        }
+      }
+
+      const paidAmount = config.price; 
+      const finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+
+      const { error: dbError } = await supabase.from('orders_v2').insert([{
+        user_id: currentUserId || null,
+        enrollment_id: finalEnrollmentId,
+        order_type: config.dbOrderType,         
         order_name: config.orderName,
-        price: config.price,
-        screenshot_url: uploadData.path,
-        agreed_refund_policy: agreeRefund,
-        agreed_privacy_policy: agreePrivacy
+        locked_price: finalLockedPrice,
+        paid_amount: paidAmount,        
+        payment_screenshots: [uploadData.path],
+        status: 'pending'
       }]);
       
       if (dbError) throw dbError;
@@ -257,7 +298,6 @@ function CheckoutContent() {
         setShowRecordingSuccess(true);
       } else {
         alert("Order submitted successfully!");
-        // --- UPDATED REDIRECT TO /dashboard ---
         router.push("/dashboard"); 
       }
       
@@ -269,127 +309,127 @@ function CheckoutContent() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-24 relative selection:bg-blue-100">
-      {/* FLOATING WHATSAPP BUTTON */}
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 relative selection:bg-blue-100">
+      {/* Floating Support Button softened slightly */}
       <a 
         href="https://wa.me/9763695665" 
         target="_blank" 
         rel="noopener noreferrer" 
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#25D366] text-white px-5 py-3.5 rounded-full shadow-xl hover:-translate-y-1 hover:shadow-2xl hover:bg-[#20b858] transition-all font-bold group border border-[#20b858]/50"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-500 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:bg-emerald-600 transition-all font-semibold group border border-emerald-400"
       >
-        <MessageCircle className="w-6 h-6" />
+        <MessageCircle className="w-5 h-5" />
         <span className="hidden sm:inline">Immediate Support</span>
       </a>
 
-      {/* HEADER */}
-      <header className="bg-white border-b border-slate-200 px-4 py-4 md:px-8 flex items-center justify-between sticky top-0 z-40">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-4 py-3 md:px-8 flex items-center justify-between sticky top-0 z-40">
         <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
-          <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="font-medium">Back</span>
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          <span className="font-medium text-sm">Back</span>
         </button>
-        <div className="flex items-center gap-2 text-slate-700">
+        <div className="flex items-center gap-1.5 text-slate-700">
           <Lock className="w-4 h-4 text-emerald-600" />
-          <span className="font-medium text-sm">Secure Checkout</span>
+          <span className="font-semibold text-sm">Secure Checkout</span>
         </div>
         <div className="w-16"></div>
       </header>
 
-      {/* MAIN CONTENT */}
-      <main className="max-w-6xl mx-auto px-4 md:px-8 pt-8 md:pt-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+      {/* Main Content layout */}
+      <main className="max-w-6xl mx-auto px-4 md:px-8 pt-6 md:pt-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           
-          {/* LEFT COLUMN */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* Contact Information */}
-            <section className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+            {/* Section 1: Contact Details */}
+            <section className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
                 <User className="w-5 h-5 text-blue-600" /> Contact Information
               </h2>
-              <div className="space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="fullName" className="block text-sm font-medium text-slate-700 mb-1.5">Full Name <span className="text-red-500">*</span></label>
-                    <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden">
+                    <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
                       <div className="pl-4 text-slate-400"><User className="w-4 h-4" /></div>
                       <input 
                         id="fullName"
                         type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe"
-                        className="w-full px-3 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                        className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email Address <span className="text-red-500">*</span></label>
-                    <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden">
+                    <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
                       <div className="pl-4 text-slate-400"><Mail className="w-4 h-4" /></div>
                       <input 
                         id="email"
                         type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
-                        className="w-full px-3 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                        className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                       />
                     </div>
                   </div>
                 </div>
                 <div>
                   <label htmlFor="contactNumber" className="block text-sm font-medium text-slate-700 mb-1.5">Contact Number <span className="text-red-500">*</span></label>
-                  <div className="flex items-center border border-slate-300 rounded-xl focus-within:ring-4 focus-within:ring-blue-600/10 focus-within:border-blue-600 bg-white transition-all overflow-hidden group">
-                    <span className="flex items-center gap-2 text-slate-500 px-4 py-3 border-r border-slate-200 font-medium bg-slate-50">
+                  <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
+                    <span className="flex items-center gap-1.5 text-slate-500 px-3 py-2.5 border-r border-slate-200 font-medium bg-slate-50">
                       <Phone className="w-4 h-4" /> +977
                     </span>
                     <input 
                       id="contactNumber"
                       type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="98XXXXXXXX"
-                      className="w-full px-4 py-3 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                      className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
                     />
                   </div>
                 </div>
               </div>
             </section>
 
-            {/* Payment Method */}
-            <section className="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            {/* Section 2: Payment Method */}
+            <section className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-emerald-600" /> Payment Method
                 </h2>
-                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg w-fit">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md w-fit">
                   <Lock className="w-3.5 h-3.5" /> 100% Secure Checkout
                 </div>
               </div>
 
-              <div className="border-2 border-emerald-500/20 bg-emerald-50/50 rounded-2xl p-6 relative overflow-hidden flex flex-col items-center justify-center text-center">
-                <p className="text-sm font-semibold text-slate-600 mb-4">Scan QR to pay securely via Fonepay</p>
+              {/* Softer QR background styling */}
+              <div className="border border-emerald-100 bg-emerald-50/30 rounded-xl p-5 relative overflow-hidden flex flex-col items-center justify-center text-center">
+                <p className="text-sm font-medium text-slate-600 mb-3">Scan QR to pay securely via Fonepay</p>
                 <img 
                   src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/Bank%20QR.jpg" 
                   alt="Fonepay Accepted Here" 
-                  className="w-full max-w-[280px] h-auto drop-shadow-sm object-contain mix-blend-multiply"
+                  className="w-full max-w-[240px] h-auto object-contain mix-blend-multiply opacity-90"
                 />
               </div>
 
-              <div className="mt-8">
-                <div className="bg-blue-50/50 border border-blue-100 p-5 rounded-2xl leading-relaxed mb-6 flex gap-3">
+              <div className="mt-6">
+                <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl leading-relaxed mb-5 flex gap-3">
                   <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-                  <p className="text-[14.5px] text-slate-700">
-                    You have to deposit <strong className="text-slate-900">{amountInWords}</strong> and upload a screenshot below. Payment will be verified and the service activated within 24 hours. Support: <strong className="text-blue-700">9763695665</strong>.
+                  <p className="text-sm text-slate-700 font-medium">
+                    You have to deposit <strong className="text-slate-900">{amountInWords}</strong> and upload a screenshot below. Payment will be verified and the service activated within 24 hours. Support: <strong className="text-blue-600">9763695665</strong>.
                   </p>
                 </div>
 
-                <label className="block text-sm font-bold text-slate-800 mb-3">Upload Payment Screenshot <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-semibold text-slate-800 mb-2">Upload Payment Screenshot <span className="text-red-500">*</span></label>
                 <div className="flex items-center justify-center w-full">
-                  <label htmlFor="dropzone-file" className={`flex flex-col items-center justify-center w-full h-36 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-200 ${screenshot ? 'border-emerald-500 bg-emerald-50 hover:bg-emerald-100' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'}`}>
+                  <label htmlFor="dropzone-file" className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ${screenshot ? 'border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50' : 'border-slate-300 bg-slate-50/50 hover:bg-slate-50'}`}>
                     <div className="flex flex-col items-center justify-center pt-5 pb-6">
                       {screenshot ? (
                         <>
-                          <FileCheck className="w-10 h-10 text-emerald-500 mb-2" />
-                          <p className="text-sm text-emerald-700 font-bold">{screenshot.name}</p>
+                          <FileCheck className="w-8 h-8 text-emerald-500 mb-2" />
+                          <p className="text-sm text-emerald-700 font-semibold">{screenshot.name}</p>
                           <p className="text-xs text-emerald-600/70 mt-1 font-medium">Click to change file</p>
                         </>
                       ) : (
                         <>
-                          <UploadCloud className="w-10 h-10 text-slate-400 mb-3" />
-                          <p className="mb-1 text-sm text-slate-600"><span className="font-bold text-blue-600">Click to upload</span> or drag and drop</p>
-                          <p className="text-xs text-slate-400 font-medium">PNG, JPG or JPEG (Will be compressed to WEBP automatically)</p>
+                          <UploadCloud className="w-8 h-8 text-slate-400 mb-2" />
+                          <p className="mb-1 text-sm text-slate-600"><span className="font-semibold text-blue-600">Click to upload</span> or drag and drop</p>
+                          <p className="text-xs text-slate-400 font-medium">PNG, JPG or JPEG (Will be compressed automatically)</p>
                         </>
                       )}
                     </div>
@@ -403,93 +443,86 @@ function CheckoutContent() {
             </section>
           </div>
 
-          {/* RIGHT COLUMN */}
           <div className="lg:col-span-5">
-            <div className="sticky top-24 bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-6">
+            {/* Sidebar / Order Summary */}
+            <div className="sticky top-20 bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-5">
               
-              <h2 className="text-xl font-bold pb-4 border-b border-slate-100 text-slate-900 flex items-center gap-2">
+              <h2 className="text-lg font-bold pb-3 border-b border-slate-100 text-slate-900 flex items-center gap-2">
                 <Receipt className="w-5 h-5 text-blue-600" /> Order Summary
               </h2>
               
-              {/* ATTRACTIVE ORDER TYPE & NAME */}
-              <div className="bg-gradient-to-br from-indigo-50 via-blue-50/50 to-white border border-indigo-100/80 rounded-2xl p-6 space-y-5 shadow-sm">
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-5 space-y-4">
                 
-                {/* Order Type */}
-                <div className="flex flex-col gap-2">
-                  <span className="text-indigo-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
                     <Tag className="w-3.5 h-3.5" /> Order Type
                   </span>
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2">
                     {config.icon}
-                    <strong className="text-slate-900 font-black text-lg leading-tight">
+                    <span className="text-slate-900 font-bold text-base leading-tight">
                       {config.title}
-                    </strong>
+                    </span>
                   </div>
                 </div>
 
-                <div className="w-full h-px bg-indigo-100/60"></div>
+                <div className="w-full h-px bg-slate-200"></div>
 
-                {/* Order Name */}
-                <div className="flex flex-col gap-2">
-                  <span className="text-indigo-500 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-slate-500 text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
                     <FileText className="w-3.5 h-3.5" /> Reference Name
                   </span>
                   {isFetchingData ? (
-                    <div className="flex items-center gap-2 text-indigo-600">
+                    <div className="flex items-center gap-2 text-slate-500">
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm font-semibold">Loading data...</span>
+                      <span className="text-sm font-medium">Loading data...</span>
                     </div>
                   ) : (
-                    <div className="inline-flex w-fit px-3 py-1.5 bg-indigo-100/50 text-indigo-800 rounded-lg border border-indigo-200/50">
-                      <strong className="font-bold whitespace-normal break-words leading-tight">
-                        {config.orderName}
-                      </strong>
+                    <div className="text-slate-800 font-semibold text-sm whitespace-normal break-words leading-tight">
+                      {config.orderName}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* RECORDINGS HIGHLIGHT (Google Classroom Notice) */}
               {currentMode === 'recording' && (
-                <div className="bg-emerald-50 border-2 border-emerald-500/20 p-5 rounded-2xl flex gap-3 shadow-sm mb-2">
-                  <GraduationCap className="w-6 h-6 text-emerald-600 shrink-0" />
-                  <p className="text-sm font-bold text-emerald-900 leading-snug">
+                <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl flex gap-3 mb-1">
+                  <GraduationCap className="w-5 h-5 text-slate-600 shrink-0" />
+                  <p className="text-sm font-medium text-slate-700 leading-snug">
                     You will be added to Google Classroom where you will find all class recordings and study materials immediately after payment.
                   </p>
                 </div>
               )}
 
-              {/* Dynamic Standard Notice Box */}
               {currentMode !== 'recording' && (
-                <div className={`border rounded-2xl p-4 flex gap-3 shadow-sm ${config.noticeStyle}`}>
+                <div className={`border rounded-xl p-4 flex gap-3 ${config.noticeStyle}`}>
                   {config.noticeIcon}
                   <p className="text-sm leading-relaxed font-medium">{config.notice}</p>
                 </div>
               )}
 
-              <div className="pt-2">
-                <div className="flex items-center justify-between mb-6 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <span className="text-slate-600 font-bold">Total Amount</span>
-                  <span className="text-2xl font-black text-slate-900 tracking-tight">
+              <div className="pt-1">
+                <div className="flex items-center justify-between mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <span className="text-slate-600 font-semibold">Total Amount</span>
+                  <span className="text-xl font-bold text-slate-900 tracking-tight">
                     Rs. {config.price.toLocaleString()}
                   </span>
                 </div>
 
-                <div className="space-y-3.5 mb-6">
-                  <label htmlFor="agreeRefund" className="flex items-start gap-3 cursor-pointer group">
+                <div className="space-y-3 mb-6">
+                  <label htmlFor="agreeRefund" className="flex items-start gap-2.5 cursor-pointer group">
                     <div className="relative flex items-center justify-center mt-0.5">
                       <input id="agreeRefund" type="checkbox" checked={agreeRefund} onChange={(e) => setAgreeRefund(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
-                    <span className="text-[13px] text-slate-600 leading-snug group-hover:text-slate-800 transition-colors">
-                      I have read and agree to the <a href="/refund" className="text-blue-600 hover:underline font-semibold" target="_blank">Refund & Return Policy</a>.
+                    <span className="text-sm text-slate-600 leading-snug group-hover:text-slate-800 transition-colors font-medium">
+                      I have read and agree to the <a href="/refund" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">Refund & Return Policy</a>.
                     </span>
                   </label>
-                  <label htmlFor="agreePrivacy" className="flex items-start gap-3 cursor-pointer group">
+                  <label htmlFor="agreePrivacy" className="flex items-start gap-2.5 cursor-pointer group">
                     <div className="relative flex items-center justify-center mt-0.5">
                       <input id="agreePrivacy" type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
-                    <span className="text-[13px] text-slate-600 leading-snug group-hover:text-slate-800 transition-colors">
-                      I have read and agree to the <a href="/privacy-policy" className="text-blue-600 hover:underline font-semibold" target="_blank">User's data policy</a>.
+                    <span className="text-sm text-slate-600 leading-snug group-hover:text-slate-800 transition-colors font-medium">
+                      I have read and agree to the <a href="/privacy-policy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">User's data policy</a>.
                     </span>
                   </label>
                 </div>
@@ -497,13 +530,13 @@ function CheckoutContent() {
                 <button 
                   disabled={isUploading || isFetchingData}
                   onClick={handleSubmit}
-                  className={`w-full py-4 rounded-2xl font-bold text-lg transition-all flex justify-center items-center gap-2 ${
+                  className={`w-full py-3.5 rounded-xl font-semibold text-base transition-all flex justify-center items-center gap-2 ${
                     (isUploading || isFetchingData)
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                      : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800 shadow-lg shadow-blue-600/20 hover:shadow-blue-600/40 hover:-translate-y-0.5" 
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                      : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md" 
                   }`}
                 >
-                  {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</> : <><Lock className="w-5 h-5" /> Complete Order</>}
+                  {isUploading ? <><Loader2 className="w-5 h-5 animate-spin" /> Processing...</> : <><Lock className="w-4 h-4" /> Complete Order</>}
                 </button>
               </div>
 
@@ -513,27 +546,26 @@ function CheckoutContent() {
         </div>
       </main>
 
-      {/* --- SUCCESS MODAL FOR RECORDINGS --- */}
+      {/* Success Modal */}
       {showRecordingSuccess && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[28px] p-8 max-w-md w-full shadow-2xl text-center flex flex-col items-center animate-in zoom-in-95 duration-200">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6 shadow-sm border-4 border-white">
-              <CheckCircle2 className="w-8 h-8" />
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xl text-center flex flex-col items-center animate-in zoom-in-95 duration-200">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mb-5 border border-emerald-100">
+              <CheckCircle2 className="w-7 h-7" />
             </div>
             
-            <h3 className="text-2xl font-black text-slate-900 mb-2">Thank you!</h3>
-            <p className="text-slate-600 font-medium mb-5 leading-relaxed">
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Thank you!</h3>
+            <p className="text-slate-600 font-medium mb-5 leading-relaxed text-sm">
               Thank you for choosing GyanHub for the recording course of <strong className="text-slate-900">"{urlCourseName}"</strong>.
             </p>
             
-            <div className="bg-blue-50 border border-blue-100 p-4.5 rounded-[16px] text-sm text-blue-800 mb-8 text-left w-full">
-              You will get an invitation to join Google Classroom in your email within half an hour. For any queries or problems, please message us at <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className="font-bold underline text-blue-900">9763695665 on WhatsApp</a>.
+            <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl text-sm text-slate-700 mb-6 text-left w-full font-medium">
+              You will get an invitation to join Google Classroom in your email within half an hour. For any queries or problems, please message us at <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className="font-semibold text-blue-600 hover:underline">9763695665 on WhatsApp</a>.
             </div>
             
-            {/* --- UPDATED REDIRECT AND BUTTON TEXT --- */}
             <button 
               onClick={() => router.push("/dashboard")} 
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-[14px] transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 rounded-xl transition-all shadow-sm active:scale-[0.98]"
             >
               Go to Dashboard
             </button>
@@ -550,7 +582,7 @@ export default function CheckoutPage() {
   if (!isMounted) return null;
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500 gap-4"><Loader2 className="w-8 h-8 animate-spin text-blue-600" /><p className="font-medium text-slate-600">Loading secure checkout...</p></div>}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500 gap-3"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /><p className="font-medium text-sm text-slate-600">Loading secure checkout...</p></div>}>
       <CheckoutContent />
     </Suspense>
   );

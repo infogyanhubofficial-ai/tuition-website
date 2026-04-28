@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -9,14 +8,37 @@ import {
   X, Edit2, Check, MapPin, Clock, Copy,
   DollarSign, Trash2, Save, GraduationCap,
   Briefcase, User, ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle, AlertCircle,
-  CheckCircle, Flame, Sparkles, Link as LinkIcon, RotateCcw, Home, Award, ShoppingBag, PlayCircle,
-  ChevronDown, ChevronUp, Video, Info, Shield, ArrowRight
+  CheckCircle, Flame, Sparkles, RotateCcw, Home, Award, ShoppingBag, PlayCircle,
+  ChevronDown, ChevronUp, Video, Info, ArrowRight, Menu
 } from "lucide-react";
-import { motion, AnimatePresence, Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 
-// ─── TYPES ───────────────────────────────────────────────────────────────────
+// --- DESIGN TOKENS ---
+const tokens = {
+  radius: {
+    card: "rounded-2xl",
+    button: "rounded-xl",
+    badge: "rounded-lg",
+  },
+  padding: {
+    small: "p-4 sm:p-5",
+    main: "p-4 sm:p-6",
+    hero: "p-6 sm:p-8 md:p-10",
+  },
+  shadow: {
+    card: "shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-slate-200/60 bg-gradient-to-b from-white to-slate-50/40",
+    hover: "hover:shadow-[0_15px_35px_rgba(30,58,138,0.06)] hover:-translate-y-1 hover:border-blue-500/30 transition-all duration-300 ease-in-out",
+  },
+  colors: {
+    primary: "blue-700",
+    accent: "orange-500",
+    surface: "bg-white",
+    background: "bg-[#F8FAFC]",
+  }
+};
 
+// --- TYPES ---
 interface Vacancy {
   id: number;
   subject: string;
@@ -41,6 +63,7 @@ interface Vacancy {
 interface OnlineCourse {
   id: string;
   title: string;
+  course_code?: string;
   cover_pic: string;
   start_datetime: string;
   timing?: string;
@@ -182,6 +205,7 @@ interface GlobalRecording {
 interface OnlineCourseExt {
   id: string;
   title: string;
+  course_code?: string;
   category?: string;
   difficulty_level?: string;
   cover_pic: string;
@@ -197,41 +221,35 @@ interface OnlineCourseExt {
   syllabus?: any;
 }
 
-// ─── MOTION VARIANTS ─────────────────────────────────────────────────────────
-
-const staggerContainer: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } }
-};
-
-const staggerItem: Variants = {
-  hidden: { opacity: 0, y: 20, scale: 0.98 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
-};
-
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
-
+// --- MAIN PAGE ---
 export default function ProfilePage() {
   const router = useRouter();
   const supabase = createClient();
-
+  
+  // States
   const [activeTab, setActiveTab] = useState('Overview');
   const [loading, setLoading] = useState(true);
-
-  const [isApplicationsOpen, setIsApplicationsOpen] = useState(false);
-  const [appFilterId, setAppFilterId] = useState<number | null>(null);
+  
+  // Dropdown / Navigation States
   const [isExploreOpen, setIsExploreOpen] = useState(false);
   const [isCoursesOpen, setIsCoursesOpen] = useState(true);
-
+  const [isTuitionServicesOpen, setIsTuitionServicesOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [dashboardMode, setDashboardMode] = useState<'home' | 'student' | 'tutor'>('home');
+  
+  // Lifted Modal States (to allow hiding floating elements globally)
+  const [isApplicationsOpen, setIsApplicationsOpen] = useState(false);
+  const [appFilterId, setAppFilterId] = useState<number | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<Order | null>(null);
+  const [globalExpiredClassLink, setGlobalExpiredClassLink] = useState<string | null>(null);
+  
+  // Data States
   const [hasTutorProfile, setHasTutorProfile] = useState(false);
-
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>('');
   const [userName, setUserName] = useState<string>('User');
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [userWhatsapp, setUserWhatsapp] = useState<string>('');
-
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
@@ -239,28 +257,29 @@ export default function ProfilePage() {
   const [courseBatches, setCourseBatches] = useState<CourseBatch[]>([]);
   const [recordingsList, setRecordingsList] = useState<RecordingInfo[]>([]);
   const [onlineCourseDetails, setOnlineCourseDetails] = useState<OnlineCourseExt[]>([]);
-
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
   const [verifiedTutors, setVerifiedTutors] = useState<Tutor[]>([]);
   const [appliedTutors, setAppliedTutors] = useState<ApplicationJoin[]>([]);
   const [applicantCount, setApplicantCount] = useState(0);
   const [studentMyRequests, setStudentMyRequests] = useState<StudentRequest[]>([]);
-
   const [latestCourse, setLatestCourse] = useState<OnlineCourse | null>(null);
   const [globalRecordings, setGlobalRecordings] = useState<GlobalRecording[]>([]);
-
   const [tutorProfile, setTutorProfile] = useState<Tutor | null>(null);
   const [tutorApplications, setTutorApplications] = useState<TutorApplicationJoin[]>([]);
   const [allVacancies, setAllVacancies] = useState<Vacancy[]>([]);
   const [urgentVacancies, setUrgentVacancies] = useState<Vacancy[]>([]);
   const [studentRequests, setStudentRequests] = useState<StudentRequest[]>([]);
 
+  // Derived Properties
   const pendingVerificationOrders = useMemo(() =>
     orders.filter(o => o.status.toLowerCase() === 'pending' || o.status.toLowerCase() === 'processing'), [orders]);
   const pendingCoursePayments = useMemo(() => enrollments.filter(e => e.remaining_amount > 0), [enrollments]);
-  const activeCourseAccess = useMemo(() => enrollments, [enrollments]); // All valid enrollments count as active access visually.
+  const activeCourseAccess = useMemo(() => enrollments, [enrollments]);
   const recordingOrdersVerified = useMemo(() =>
     orders.filter(o => o.order_type === 'recording' && o.status.toLowerCase() === 'verified'), [orders]);
+
+  // Derived Modal Tracker for Floating UI Management
+  const isAnyModalOpen = isApplicationsOpen || !!selectedTransaction || !!globalExpiredClassLink;
 
   useEffect(() => { document.title = `GyanHub | ${activeTab}`; }, [activeTab]);
 
@@ -280,29 +299,133 @@ export default function ProfilePage() {
   const fetchNeutralData = useCallback(async (email: string, uid: string) => {
     if (!email || !uid) return;
     try {
-      const [ordersRes, certsRes, enrollRes, recordingsRes] = await Promise.all([
-        supabase.from('orders').select('*').ilike('email', email).order('created_at', { ascending: false }),
-        supabase.from('certificates').select('*').ilike('email', email),
-        supabase.from('enrollments').select('*').or(`user_id.eq.${uid},email.ilike.${email}`).order('created_at', { ascending: false }),
-        supabase.from('recordings').select('course_name, recording_link, cover_pic_url, category, course_hours, rating, enrolled_students, learning_outcomes')
-      ]);
+      const { data: ordersV2, error: ordersError } = await supabase
+        .from('orders_v2')
+        .select('*')
+        .eq('user_id', uid)
+        .order('created_at', { ascending: false });
+      if (ordersError) setOrdersError(ordersError.message);
+      else if (ordersV2) {
+        const mappedOrders = ordersV2.map(o => ({
+          id: o.id,
+          full_name: 'You',
+          email: email,
+          contact_number: '',
+          order_type: o.order_type,
+          order_name: o.order_name,
+          price: o.paid_amount || 0,
+          screenshot_url: o.payment_screenshots?.[0] || '',
+          status: o.status || 'pending',
+          created_at: o.created_at,
+          enrollment_id: o.enrollment_id,
+          locked_price: o.locked_price
+        }));
+        setOrders(mappedOrders as any);
+        setOrdersError(null);
+      }
+      const { data: certs } = await supabase.from('certificates').select('*').ilike('email', email);
+      if (certs) setCertificates(certs as any);
+      const { data: recordings } = await supabase.from('recordings').select('*');
+      if (recordings) setRecordingsList(recordings as any);
+      
+      const { data: enrollsV2 } = await supabase
+        .from('enrollments_v2')
+        .select('*')
+        .or(`user_id.eq.${uid},email.ilike.${email}`)
+        .order('created_at', { ascending: false });
 
-      if (ordersRes.error) setOrdersError(ordersRes.error.message);
-      else if (ordersRes.data) { setOrders(ordersRes.data as any); setOrdersError(null); }
-
-      if (certsRes.data) setCertificates(certsRes.data as any);
-      if (recordingsRes.data) setRecordingsList(recordingsRes.data as any);
-
-      if (enrollRes.data && enrollRes.data.length > 0) {
-        const enrolls = enrollRes.data as Enrollment[];
-        setEnrollments(enrolls);
-        const courseIds = Array.from(new Set(enrolls.map(e => e.course_id)));
-        const [coursesRes, batchesRes] = await Promise.all([
-          supabase.from('online_courses').select('id, title, category, difficulty_level, cover_pic, tutor_name, duration, timing, fee, discount, start_datetime, learning_outcomes, syllabus_url, syllabus, faqs').in('id', courseIds),
-          supabase.from('course_batches').select('*').in('course_id', courseIds)
-        ]);
-        if (coursesRes.data) setOnlineCourseDetails(coursesRes.data as any);
-        if (batchesRes.data) setCourseBatches(batchesRes.data as any);
+      if (enrollsV2 && enrollsV2.length > 0) {
+        const batchIds = Array.from(new Set(enrollsV2.map(e => e.batch_id)));
+        const { data: batchesV2 } = await supabase
+          .from('course_batches_v2')
+          .select('*')
+          .in('id', batchIds);
+          
+        const relatedSyllabusIds: string[] = [];
+        if (batchesV2) {
+          batchesV2.forEach(b => {
+            if (b.syllabus_id) relatedSyllabusIds.push(b.syllabus_id);
+            if (b.course_id) relatedSyllabusIds.push(b.course_id); 
+          });
+        }
+        
+        const { data: coursesV2 } = await supabase
+          .from('online_courses_v2')
+          .select('*')
+          .in('syllabus_id', relatedSyllabusIds);
+          
+        const { data: syllabiV2 } = await supabase
+          .from('syllabi_v2')
+          .select('*')
+          .in('id', relatedSyllabusIds);
+          
+        const mappedEnrollments = enrollsV2.map(env2 => {
+          const batch = batchesV2?.find(b => b.id === env2.batch_id);
+          const targetSyllabusId = batch?.syllabus_id || batch?.course_id;
+          const syllabus = syllabiV2?.find(s => s.id === targetSyllabusId);
+          const courseStorefront = coursesV2?.find(c => c.syllabus_id === targetSyllabusId);
+          
+          const relatedOrders = ordersV2?.filter(o => o.enrollment_id === env2.id && o.status !== 'rejected') || [];
+          const paid = relatedOrders.reduce((sum, o) => sum + (o.paid_amount || 0), 0);
+          const lockedPrice = relatedOrders.length > 0 ? relatedOrders[0].locked_price : (courseStorefront?.fee || 0);
+          const remaining = Math.max(0, lockedPrice - paid);
+          
+          return {
+            id: env2.id,
+            user_id: env2.user_id || uid,
+            course_id: targetSyllabusId || '',
+            email: env2.email,
+            course_name: syllabus?.name || courseStorefront?.title || 'Unknown Course',
+            status: env2.is_confirmed ? 'confirmed' : 'pending',
+            paid_amount: paid,
+            remaining_amount: remaining,
+            starting_date: batch?.start_datetime || new Date().toISOString(),
+            batch_no: batch?.batch_no || 1,
+            created_at: env2.created_at,
+          };
+        });
+        setEnrollments(mappedEnrollments);
+        
+        const mappedBatches = batchesV2?.map(b => ({
+          course_id: b.syllabus_id || b.course_id, 
+          batch_no: b.batch_no || 1,
+          online_class_link: b.online_class_link,
+          google_classroom_link: b.google_classroom_link,
+          whatsapp_group_link: b.whatsapp_group_link,
+          is_active: b.is_active !== false,
+          start_datetime: b.start_datetime,
+          timing: b.timing
+        })) || [];
+        setCourseBatches(mappedBatches);
+        
+        const mappedCourses = coursesV2?.map(c => {
+          const s = syllabiV2?.find(syl => syl.id === c.syllabus_id);
+          let activeBatch = batchesV2?.find(b => b.syllabus_id === c.syllabus_id && b.batch_no === c.active_batch_no);
+          if (!activeBatch) {
+            activeBatch = batchesV2?.find(b => b.syllabus_id === c.syllabus_id);
+          }
+          return {
+            id: c.syllabus_id,
+            title: s?.name || c.name || 'Course',
+            course_code: s?.course_code || '',
+            category: s?.category,
+            difficulty_level: s?.difficulty_level,
+            cover_pic: s?.cover_pic || '',
+            tutor_name: '',
+            duration: s?.duration || '',
+            timing: activeBatch?.timing || 'TBA',
+            fee: c.fee,
+            discount: c.discount || 0,
+            start_datetime: activeBatch?.start_datetime || new Date().toISOString(),
+            learning_outcomes: s?.learning_outcomes || [],
+            faqs: s?.faqs || [],
+            syllabus_url: s?.syllabus_pdf,
+            syllabus: s
+          };
+        }) || [];
+        setOnlineCourseDetails(mappedCourses as any);
+      } else {
+        setEnrollments([]);
       }
     } catch (err) {
       console.warn("Neutral tables fetch exception:", err);
@@ -314,18 +437,18 @@ export default function ProfilePage() {
       let vacancyQuery = supabase.from('vacancies').select('*').order('created_at', { ascending: false });
       if (email && email.trim() !== '') vacancyQuery = vacancyQuery.or(`user_id.eq.${uid},email.ilike.${email}`);
       else vacancyQuery = vacancyQuery.eq('user_id', uid);
-
+      
       const { data: vData } = await vacancyQuery;
       const activeVacs = (vData || []).filter((v: any) => v.status === true);
       const vIds = activeVacs.map((v: any) => v.id);
-
+      
       if (vIds.length > 0) {
         const { data: appData } = await supabase
           .from('vacancy_applications')
           .select(`id, status, vacancy_id, created_at, applicant_name, user_id, vacancies ( subject, location ), tutors ( id, user_id, name, avatar_url, education, hour_rate, location )`)
           .in('vacancy_id', vIds)
           .order('created_at', { ascending: false });
-
+          
         if (appData) {
           const appCountMap: Record<number, number> = {};
           appData.forEach((app: any) => { appCountMap[app.vacancy_id] = (appCountMap[app.vacancy_id] || 0) + 1; });
@@ -343,7 +466,7 @@ export default function ProfilePage() {
         setAppliedTutors([]);
         setApplicantCount(0);
       }
-
+      
       const { data: myReqs } = await supabase
         .from('student_requests')
         .select('id, created_at, tutor_id, status, grade, preferred_mode, message, tutors(name, hour_rate, location)')
@@ -356,31 +479,105 @@ export default function ProfilePage() {
   }, [supabase]);
 
   const fetchGlobalData = useCallback(async () => {
-    const { data: cData } = await supabase
-      .from('online_courses')
-      .select('id, title, fee, start_datetime, cover_pic, discount, tutor_name, duration, timing, difficulty_level')
-      .gte('start_datetime', new Date().toISOString())
-      .order('start_datetime', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (cData) setLatestCourse(cData as any);
+    try {
+      const { data: coursesV2 } = await supabase
+        .from('online_courses_v2')
+        .select('*')
+        .eq('is_active', true);
+        
+      if (coursesV2 && coursesV2.length > 0) {
+        const rand = coursesV2[Math.floor(Math.random() * coursesV2.length)];
+        let courseTitle = rand.name || 'Featured Course';
+        let courseCode = '';
+        let coverPic = '';
+        let tutorName = 'Expert Tutor';
+        let duration = 'Flexible';
+        let difficulty = 'All Levels';
+        let batchTiming = 'TBA';
+        let batchStart = new Date().toISOString();
+        
+        if (rand.syllabus_id) {
+          const { data: sData } = await supabase
+            .from('syllabi_v2')
+            .select('*')
+            .eq('id', rand.syllabus_id)
+            .maybeSingle();
+          if (sData) {
+            courseTitle = sData.name || courseTitle;
+            courseCode = sData.course_code || '';
+            coverPic = sData.cover_pic || '';
+            duration = sData.duration || duration;
+            difficulty = sData.difficulty_level || difficulty;
+            if (sData.tutor_id) {
+              const { data: tData } = await supabase
+                .from('online_tutors')
+                .select('name')
+                .eq('id', sData.tutor_id)
+                .maybeSingle();
+              if (tData?.name) tutorName = tData.name;
+            }
+          }
+          let { data: bData } = await supabase
+            .from('course_batches_v2')
+            .select('timing, start_datetime')
+            .eq('syllabus_id', rand.syllabus_id)
+            .eq('batch_no', rand.active_batch_no || 1)
+            .maybeSingle();
 
-    const { data: tData } = await supabase.from('tutors').select('*').eq('verified', true).limit(10);
-    if (tData) setVerifiedTutors(tData as any);
-
-    const { data: recData } = await supabase
-      .from('recordings')
-      .select('id, course_name, course_hours, standard_fee, discount, cover_pic_url')
-      .eq('is_active', true)
-      .limit(3);
-    if (recData) setGlobalRecordings(recData as any);
+          if (!bData) {
+            const { data: bDataFallback } = await supabase
+              .from('course_batches_v2')
+              .select('timing, start_datetime')
+              .eq('syllabus_id', rand.syllabus_id)
+              .limit(1)
+              .maybeSingle();
+            bData = bDataFallback;
+          }
+          if (bData) {
+            batchTiming = bData.timing || 'TBA';
+            batchStart = bData.start_datetime || batchStart;
+          }
+        }
+        setLatestCourse({
+          id: rand.syllabus_id || 'featured',
+          title: courseTitle,
+          course_code: courseCode,
+          fee: rand.fee || 0,
+          discount: rand.discount || 0,
+          cover_pic: coverPic,
+          start_datetime: batchStart, 
+          tutor_name: tutorName,
+          duration: duration,
+          timing: batchTiming,
+          difficulty_level: difficulty
+        } as any);
+      } else {
+        const { data: v1Data } = await supabase
+          .from('online_courses')
+          .select('*')
+          .limit(1)
+          .maybeSingle();
+        if (v1Data) setLatestCourse(v1Data as any);
+      }
+      
+      const { data: tData } = await supabase.from('tutors').select('*').eq('verified', true).limit(10);
+      if (tData) setVerifiedTutors(tData as any);
+      
+      const { data: recData } = await supabase
+        .from('recordings')
+        .select('id, course_name, course_hours, standard_fee, discount, cover_pic_url')
+        .eq('is_active', true)
+        .limit(3);
+      if (recData) setGlobalRecordings(recData as any);
+    } catch (err) {
+      console.error("Global Data Fetch Error:", err);
+    }
   }, [supabase]);
 
   const fetchTutorData = useCallback(async (uid: string) => {
     try {
       const { data: profile } = await supabase.from('tutors').select('*').eq('user_id', uid).maybeSingle();
       let currentTutorId: number | null = null;
-
       if (profile) {
         setTutorProfile(profile as any);
         setHasTutorProfile(true);
@@ -390,21 +587,18 @@ export default function ProfilePage() {
       } else {
         setHasTutorProfile(false);
       }
-
       const { data: allVacData } = await supabase.from('vacancies').select('*').order('created_at', { ascending: false });
       if (allVacData) {
         const activeVacs = allVacData.filter((v: any) => v.status === true);
         setAllVacancies(activeVacs);
         setUrgentVacancies(activeVacs.filter((v: any) => v.urgent === true));
       }
-
       const { data: tutorAppsData } = await supabase
         .from('vacancy_applications')
         .select(`id, status, created_at, vacancy_id, vacancies(id, subject, location)`)
         .eq('user_id', uid)
         .order('created_at', { ascending: false });
       if (tutorAppsData) setTutorApplications(tutorAppsData as any);
-
       if (currentTutorId) {
         const { data: requestsData } = await supabase
           .from('student_requests').select('*').eq('tutor_id', currentTutorId).order('created_at', { ascending: false });
@@ -517,7 +711,6 @@ export default function ProfilePage() {
         dataToSave.hour_rate = Number(dataToSave.hour_rate);
       if (dataToSave.experience !== null && dataToSave.experience !== undefined)
         dataToSave.experience = Number(dataToSave.experience);
-
       const { data: existing } = await supabase.from('tutors').select('id').eq('user_id', userId).maybeSingle();
       let error;
       if (existing?.id) { const res = await supabase.from('tutors').update(dataToSave).eq('id', existing.id); error = res.error; }
@@ -551,48 +744,152 @@ export default function ProfilePage() {
   const isTutorMode = dashboardMode === 'tutor';
   const isStudentMode = dashboardMode === 'student';
 
+  const getRoleColors = () => {
+    if (isTutorMode) return { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-200' };
+    if (isStudentMode) return { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200' };
+    return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+  };
+  const roleColors = getRoleColors();
+
+  // Unified rendering function for both Desktop Sidebar and Mobile Drawer
+  const renderSidebarLinks = (onMobileClose?: () => void) => {
+    const handleTabClick = (tab: string) => {
+      setActiveTab(tab);
+      if (onMobileClose) onMobileClose();
+    };
+
+    return (
+      <div className="space-y-1">
+        {dashboardMode === 'home' && (
+          <NavButton icon={<Home size={20} />} label="Overview" active={activeTab === 'Overview'} onClick={() => handleTabClick('Overview')} colorTheme="blue" />
+        )}
+
+        {dashboardMode === 'tutor' && (
+          hasTutorProfile ? (
+            <>
+              <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => handleTabClick('Dashboard')} colorTheme="violet" />
+              <NavButton icon={<Briefcase size={20} />} label="Job Board" active={activeTab === 'Available Vacancies'} onClick={() => handleTabClick('Available Vacancies')} colorTheme="violet" />
+              <NavButton icon={<Users size={20} />} label="Student Requests" active={activeTab === 'Student Requests'} onClick={() => handleTabClick('Student Requests')} colorTheme="violet" />
+              <NavButton icon={<User size={20} />} label="My Info" active={activeTab === 'My Info'} onClick={() => handleTabClick('My Info')} colorTheme="violet" />
+            </>
+          ) : (
+            <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={true} onClick={() => { if(onMobileClose) onMobileClose(); }} colorTheme="violet" />
+          )
+        )}
+
+        {dashboardMode === 'student' && (
+          hasTutorProfile ? (
+            <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={true} onClick={() => { if(onMobileClose) onMobileClose(); }} colorTheme="emerald" />
+          ) : (
+            <>
+              <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => handleTabClick('Dashboard')} colorTheme="emerald" />
+              <NavButton icon={<FileText size={20} />} label="My Postings" active={activeTab === 'Posted Vacancies'} onClick={() => handleTabClick('Posted Vacancies')} colorTheme="emerald" />
+              <NavButton icon={<Users size={20} />} label="My Requests" active={activeTab === 'My Requests'} onClick={() => handleTabClick('My Requests')} colorTheme="emerald" />
+            </>
+          )
+        )}
+
+        <div className="h-px bg-slate-200/60 my-5 mx-4" />
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-5 mb-3">My Learning Hub</p>
+
+        <div className="flex flex-col w-full">
+          <button
+            onClick={() => setIsCoursesOpen(!isCoursesOpen)}
+            className={`w-full flex items-center justify-between px-5 py-2.5 ${tokens.radius.button} text-sm font-bold transition-colors duration-200 ${(activeTab === 'Online Courses' || activeTab === 'Recording Courses') ? 'bg-blue-50 text-blue-700 border-l-[3px] border-blue-600' : 'text-slate-600 hover:bg-slate-100 border-l-[3px] border-transparent'}`}
+          >
+            <div className="flex items-center gap-3">
+              <BookOpen size={18} className={(activeTab === 'Online Courses' || activeTab === 'Recording Courses') ? "text-blue-600" : "text-slate-400"} />
+              <span>My Courses</span>
+            </div>
+            {isCoursesOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          <AnimatePresence>
+            {isCoursesOpen && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-1 pl-11 pr-4 overflow-hidden pt-1 pb-2">
+                <button onClick={() => handleTabClick('Online Courses')} className={`text-[13px] font-bold py-1.5 text-left transition-colors ${activeTab === 'Online Courses' ? 'text-blue-700' : 'text-slate-500 hover:text-blue-600'}`}>Live Classes</button>
+                <button onClick={() => handleTabClick('Recording Courses')} className={`text-[13px] font-bold py-1.5 text-left transition-colors ${activeTab === 'Recording Courses' ? 'text-blue-700' : 'text-slate-500 hover:text-blue-600'}`}>Recordings</button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <NavButton icon={<Award size={18} />} label="My Certificates" active={activeTab === 'My Certificates'} onClick={() => handleTabClick('My Certificates')} colorTheme="blue" />
+        <NavButton icon={<DollarSign size={18} />} label="Transactions" active={activeTab === 'Transactions'} onClick={() => handleTabClick('Transactions')} colorTheme="blue" />
+        <NavButton icon={<MessageCircle size={18} />} label="Support Chatbot" active={activeTab === 'Support Chatbot'} onClick={() => handleTabClick('Support Chatbot')} colorTheme="blue" />
+
+        <div className="h-px bg-slate-200/60 my-5 mx-4" />
+
+        <button onClick={() => setIsExploreOpen(!isExploreOpen)} className={`w-full flex items-center justify-between px-5 py-2.5 ${tokens.radius.button} text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors border-l-[3px] border-transparent`}>
+          <div className="flex items-center gap-3">
+            <Compass size={18} className="text-slate-400" />
+            <span>Explore More</span>
+          </div>
+          {isExploreOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        <AnimatePresence>
+          {isExploreOpen && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-1 pl-11 pr-4 overflow-hidden pb-2">
+              <Link href="/onlinecourse" className="text-[13px] font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Live Courses</Link>
+              <Link href="/recording" className="text-[13px] font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Recordings</Link>
+              <Link href="/become-a-tutor" className="text-[13px] font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Become a Tutor</Link>
+              <Link href="/post-tuition" className="text-[13px] font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Post a Vacancy</Link>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className={`w-full flex items-center gap-3 px-5 py-2.5 ${tokens.radius.button} text-sm font-bold text-slate-600 hover:bg-green-50 hover:text-green-700 transition-colors mt-2 border-l-[3px] border-transparent`}>
+          <Phone size={18} className="text-green-500" />
+          <span>WhatsApp Us</span>
+        </a>
+
+        <div className="h-px bg-slate-200/60 my-5 mx-4" />
+        <button onClick={handleSignOut} className={`w-full flex items-center gap-3 px-5 py-2.5 ${tokens.radius.button} text-sm font-bold text-red-600 hover:bg-red-50 transition-colors border-l-[3px] border-transparent`}>
+          <LogOut size={18} />
+          <span>Signout</span>
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen bg-[#F0F4F8] text-slate-900 pb-32 lg:pb-20 font-sans overflow-x-hidden relative flex flex-col">
+    <div className={`min-h-screen ${tokens.colors.background} text-slate-900 pb-24 lg:pb-12 font-sans overflow-x-hidden flex flex-col`}>
       {pendingVerificationOrders.length > 0 && (
-        <div className="bg-amber-100 border-b border-amber-200 text-amber-800 py-2.5 overflow-hidden relative flex items-center z-50">
-          <div className="animate-marquee whitespace-nowrap flex gap-10 font-black text-xs uppercase tracking-widest">
-            {[1,2,3].map(i => (
+        <div className="bg-amber-100 border-b border-amber-200 text-amber-800 py-2 overflow-hidden relative flex items-center z-50 shadow-sm">
+          <div className="animate-marquee whitespace-nowrap flex gap-10 font-bold text-[10px] sm:text-xs uppercase tracking-wide">
+            {[1, 2, 3].map(i => (
               <span key={i}>Your payment is initiated and will be verified within 24 hours. Please have patience. (तपाईंको भुक्तानी सुरु गरिएको छ र २४ घण्टा भित्र प्रमाणित गरिनेछ। कृपया धैर्य गर्नुहोस्।)</span>
             ))}
           </div>
         </div>
       )}
 
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-[0.02]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
-      <div className="fixed top-0 left-0 w-full h-[500px] bg-gradient-to-br from-blue-100/40 via-transparent to-transparent pointer-events-none -z-10"></div>
-      <div className="fixed bottom-0 right-0 w-full h-[500px] bg-gradient-to-tl from-slate-200/50 via-transparent to-transparent pointer-events-none -z-10"></div>
-
       <style>{`
-        @keyframes marquee { 0% { transform: translateX(0%); } 100% { transform: translateX(-50%); } }
-        .animate-marquee { animation: marquee 30s linear infinite; }
-        .animate-marquee:hover { animation-play-state: paused; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .glass-panel { background: rgba(255, 255, 255, 0.65); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.8); }
-        .shadow-soft { box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.03); }
-        .shadow-medium { box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.06); }
-        .shadow-strong { box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1), 0 0 40px rgba(99, 102, 241, 0.05); }
+        @keyframes marquee { 0% { transform: translateX(0%); } 100% { transform: translateX(-50%); } } 
+        .animate-marquee { animation: marquee 45s linear infinite; } 
+        .animate-marquee:hover { animation-play-state: paused; } 
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; } 
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; } 
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; } 
       `}</style>
 
-      {/* Floating Chat Button */}
-      <div className="fixed bottom-[100px] lg:bottom-10 right-4 lg:right-6 z-[60]">
-        <motion.button
-          onClick={scrollToChatbox}
-          animate={{ y: [0, -8, 0] }}
-          transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-          className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white px-5 py-3.5 rounded-xl shadow-[0_10px_25px_rgba(79,70,229,0.4)] flex items-center gap-2 font-black text-sm hover:scale-105 transition-transform border border-indigo-400/50"
-        >
-          <MessageCircle size={18} className="fill-white/20" /> GyanHub Support
-        </motion.button>
-      </div>
+      {/* Conditionally hide Floating Chat Button when any modal is open */}
+      {!isAnyModalOpen && (
+        <div className="fixed bottom-24 sm:bottom-28 lg:bottom-10 right-4 lg:right-6 z-[60]">
+          <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={scrollToChatbox}
+            className={`bg-blue-700 text-white px-4 sm:px-5 py-3 ${tokens.radius.button} shadow-[0_4px_20px_rgba(29,78,216,0.4)] flex items-center gap-2 font-bold text-xs sm:text-sm hover:bg-blue-800 transition-colors border border-blue-600`}
+          >
+            <MessageCircle size={18} className="fill-white/20" /> Support
+          </motion.button>
+        </div>
+      )}
 
+      {/* Global Modals rendered here */}
       <AnimatePresence>
         {isApplicationsOpen && isStudentMode && (
           <ApplicationsModal
@@ -605,131 +902,132 @@ export default function ProfilePage() {
         {isApplicationsOpen && isTutorMode && hasTutorProfile && (
           <TutorApplicationsModal applications={tutorApplications} onClose={() => setIsApplicationsOpen(false)} />
         )}
+        
+        {selectedTransaction && (
+          <TransactionModal order={selectedTransaction} enrollments={enrollments} onClose={() => setSelectedTransaction(null)} />
+        )}
+        
+        {globalExpiredClassLink && (
+          <ClassExpiredModal onClose={() => setGlobalExpiredClassLink(null)} classroomLink={globalExpiredClassLink} />
+        )}
       </AnimatePresence>
 
-      {/* Navbar */}
-      <nav className="sticky top-0 z-40 bg-white/70 backdrop-blur-2xl border-b border-white/40 h-24 flex items-center px-6 shadow-soft">
-        <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
-          <div className="hidden sm:flex items-center gap-3">
-            {userAvatar ? (
-              <img src={userAvatar} className="w-11 h-11 rounded-lg object-cover shadow-sm border border-slate-200" alt={userName} />
-            ) : (
-              <div className="w-11 h-11 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-lg flex items-center justify-center text-white font-black text-2xl shadow-sm">
-                {userName?.charAt(0).toUpperCase() || 'G'}
+      {/* Mobile Drawer Menu */}
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/60 z-[100] lg:hidden backdrop-blur-sm"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 left-0 bottom-0 w-[280px] bg-white z-[110] lg:hidden overflow-y-auto flex flex-col shadow-2xl"
+            >
+              <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+                <span className="font-extrabold text-slate-800 text-lg flex items-center gap-2">
+                  <Menu size={18} className="text-blue-600" /> Menu
+                </span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-white rounded-full border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors shadow-sm">
+                  <X size={16} />
+                </button>
               </div>
-            )}
-            <p className="flex items-center gap-2 text-[22px] font-extrabold tracking-tight">
-              <span className="bg-gradient-to-r from-slate-900 via-slate-700 to-slate-500 bg-clip-text text-transparent">{userName}</span>
-              <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Gyan Hub</span>
-              {dashboardMode !== 'home' && (
-                <span className={`ml-2 text-[10px] uppercase tracking-[0.12em] px-3 py-1 rounded-md font-semibold border backdrop-blur-sm ${isTutorMode ? 'bg-green-100/60 text-green-700 border-green-200' : 'bg-blue-100/60 text-blue-700 border-blue-200'}`}>
-                  {isTutorMode ? 'Tutor Mode' : 'Student Mode'}
-                </span>
+              <div className="p-3 flex-grow overflow-y-auto custom-scrollbar">
+                {renderSidebarLinks(() => setIsMobileMenuOpen(false))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Navbar - hidden if modal is open but layout space maintained */}
+      {!isAnyModalOpen ? (
+        <nav className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/60 h-[70px] sm:h-20 flex items-center px-4 sm:px-6 shadow-sm">
+          <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
+            <div className="flex items-center gap-2 sm:gap-3">
+              {userAvatar ? (
+                <img src={userAvatar} className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl object-cover border border-slate-200 shadow-sm" alt={userName} />
+              ) : (
+                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-lg sm:text-xl shadow-sm">
+                  {userName?.charAt(0).toUpperCase() || 'G'}
+                </div>
               )}
-            </p>
-          </div>
-
-          <div className="relative hidden md:flex items-center bg-slate-200/50 p-1.5 rounded-lg border border-white shadow-inner backdrop-blur-md">
-            {(['home', 'student', 'tutor'] as const).map(mode => (
-              <button key={mode} onClick={() => { setDashboardMode(mode); setActiveTab(mode === 'home' ? 'Overview' : 'Dashboard'); }} className="relative px-5 py-2 z-10 font-black text-sm transition-colors w-24 text-center">
-                <span className={dashboardMode === mode ? (mode === 'tutor' ? 'text-green-600' : mode === 'student' ? 'text-blue-600' : 'text-slate-800') : 'text-slate-500 hover:text-slate-700'}>
-                  {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                </span>
-                {dashboardMode === mode && <motion.div layoutId="modeSwitch" className="absolute inset-0 bg-white shadow-sm rounded-md -z-10 border border-slate-100" />}
+              <p className="flex items-center gap-1.5 sm:gap-2 text-[16px] sm:text-[20px] font-extrabold tracking-tight">
+                <span className="text-slate-800 hidden sm:inline">{userName}</span>
+                <span className="text-slate-300 font-normal hidden sm:inline">|</span>
+                <span className="text-blue-700 font-bold">GyanHub</span>
+                {dashboardMode !== 'home' && (
+                  <span className={`ml-1 sm:ml-2 text-[8px] sm:text-[10px] uppercase tracking-widest px-2 sm:px-3 py-1 ${tokens.radius.badge} font-bold border shadow-sm ${roleColors.bg} ${roleColors.text} ${roleColors.border}`}>
+                    {isTutorMode ? 'Tutor' : 'Student'}
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="relative hidden lg:flex items-center bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/80 gap-1.5 shadow-inner">
+              <button
+                onClick={() => { setDashboardMode('home'); setActiveTab('Overview'); setIsTuitionServicesOpen(false); }}
+                className={`relative px-5 py-2 z-10 font-bold text-sm transition-all text-center ${tokens.radius.badge} ${
+                  dashboardMode === 'home' ? 'bg-blue-600 shadow-md text-white' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Home
               </button>
-            ))}
+              <div className="relative">
+                <button
+                  onClick={() => setIsTuitionServicesOpen(!isTuitionServicesOpen)}
+                  className={`relative px-5 py-2 z-10 font-bold text-sm transition-all text-center flex items-center gap-2 ${tokens.radius.badge} ${
+                    (dashboardMode === 'student' || dashboardMode === 'tutor') 
+                      ? `shadow-md text-white ${dashboardMode === 'student' ? 'bg-emerald-600' : 'bg-violet-600'}` 
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Tuition Services
+                  {isTuitionServicesOpen ? <ChevronUp size={14} className="text-current" /> : <ChevronDown size={14} className="text-current" />}
+                </button>
+                <AnimatePresence>
+                  {isTuitionServicesOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} transition={{ duration: 0.2 }}
+                      className={`absolute top-full right-0 mt-3 w-48 bg-white border border-slate-100 shadow-[0_10px_40px_rgba(0,0,0,0.08)] ${tokens.radius.card} p-2 flex flex-col gap-1 z-50`}
+                    >
+                      <button
+                        onClick={() => { setDashboardMode('student'); setActiveTab('Dashboard'); setIsTuitionServicesOpen(false); }}
+                        className={`flex items-center gap-3 px-4 py-2.5 ${tokens.radius.button} font-bold text-sm transition-colors ${
+                          dashboardMode === 'student' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-emerald-50 hover:text-emerald-700'
+                        }`}
+                      >
+                        <Users size={16} className={dashboardMode === 'student' ? "text-white" : "text-emerald-500"} /> Student View
+                      </button>
+                      <button
+                        onClick={() => { setDashboardMode('tutor'); setActiveTab('Dashboard'); setIsTuitionServicesOpen(false); }}
+                        className={`flex items-center gap-3 px-4 py-2.5 ${tokens.radius.button} font-bold text-sm transition-colors mt-1 ${
+                          dashboardMode === 'tutor' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-600 hover:bg-violet-50 hover:text-violet-700'
+                        }`}
+                      >
+                        <Briefcase size={16} className={dashboardMode === 'tutor' ? "text-white" : "text-violet-500"} /> Tutor View
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
-        </div>
-      </nav>
+        </nav>
+      ) : (
+        <div className="h-[70px] sm:h-20 w-full shrink-0" /> // Placeholder to prevent jump
+      )}
 
-      <div className="max-w-7xl mx-auto px-6 mt-10 grid grid-cols-1 lg:grid-cols-12 gap-10 relative flex-grow">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 mt-4 sm:mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 relative flex-grow w-full">
         {/* Sidebar */}
         <aside className="hidden lg:block lg:col-span-3">
-          <div className="glass-panel rounded-xl p-4 sticky top-32 space-y-2 shadow-soft h-[calc(100vh-160px)] overflow-y-auto custom-scrollbar">
-            {dashboardMode === 'home' && (
-              <NavButton icon={<Home size={20} />} label="Overview" active={activeTab === 'Overview'} onClick={() => setActiveTab('Overview')} color="text-slate-700" />
-            )}
-            {dashboardMode === 'tutor' && (
-              hasTutorProfile ? (
-                <>
-                  <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} isTutor={true} />
-                  <NavButton icon={<Briefcase size={20} />} label="Job Board" active={activeTab === 'Available Vacancies'} onClick={() => setActiveTab('Available Vacancies')} isTutor={true} />
-                  <NavButton icon={<Users size={20} />} label="Student Requests" active={activeTab === 'Student Requests'} onClick={() => setActiveTab('Student Requests')} isTutor={true} />
-                  <NavButton icon={<User size={20} />} label="My Info" active={activeTab === 'My Info'} onClick={() => setActiveTab('My Info')} isTutor={true} />
-                </>
-              ) : (
-                <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={true} onClick={() => {}} isTutor={true} />
-              )
-            )}
-            {dashboardMode === 'student' && (
-              hasTutorProfile ? (
-                <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={true} onClick={() => {}} isTutor={false} />
-              ) : (
-                <>
-                  <NavButton icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'Dashboard'} onClick={() => setActiveTab('Dashboard')} isTutor={false} />
-                  <NavButton icon={<FileText size={20} />} label="My Postings" active={activeTab === 'Posted Vacancies'} onClick={() => setActiveTab('Posted Vacancies')} isTutor={false} />
-                  <NavButton icon={<Users size={20} />} label="My Requests" active={activeTab === 'My Requests'} onClick={() => setActiveTab('My Requests')} isTutor={false} />
-                </>
-              )
-            )}
-
-            <div className="h-px bg-slate-200/60 my-6 mx-4" />
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-5 mb-2">My Learning Hub</p>
-
-            <div className="flex flex-col w-full">
-              <button
-                onClick={() => setIsCoursesOpen(!isCoursesOpen)}
-                className={`w-full flex items-center justify-between px-5 py-4 rounded-lg text-[14px] font-black transition-all duration-300 ${(activeTab === 'Online Courses' || activeTab === 'Recording Courses') ? 'bg-blue-50/80 text-blue-700 shadow-sm translate-x-1 border border-blue-200/50' : 'text-slate-600/80 hover:bg-white hover:shadow-soft hover:text-slate-900 border border-transparent'}`}
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`p-2 rounded-md transition-colors ${(activeTab === 'Online Courses' || activeTab === 'Recording Courses') ? 'bg-blue-200/50' : 'bg-transparent'}`}>
-                    <BookOpen size={20} />
-                  </div>
-                  <span>My Courses</span>
-                </div>
-                {isCoursesOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </button>
-              <AnimatePresence>
-                {isCoursesOpen && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-1 pl-[60px] pr-4 overflow-hidden pt-1 pb-2">
-                    <button onClick={() => setActiveTab('Online Courses')} className={`text-[13px] font-bold py-2 text-left transition-colors ${activeTab === 'Online Courses' ? 'text-blue-600 border-l-2 border-blue-500 pl-2 -ml-[2px]' : 'text-slate-500 hover:text-blue-600 border-l-2 border-transparent pl-2 -ml-[2px]'}`}>Online Classes</button>
-                    <button onClick={() => setActiveTab('Recording Courses')} className={`text-[13px] font-bold py-2 text-left transition-colors ${activeTab === 'Recording Courses' ? 'text-indigo-600 border-l-2 border-indigo-500 pl-2 -ml-[2px]' : 'text-slate-500 hover:text-indigo-600 border-l-2 border-transparent pl-2 -ml-[2px]'}`}>Recordings</button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <NavButton icon={<Award size={20} />} label="My Certificates" active={activeTab === 'My Certificates'} onClick={() => setActiveTab('My Certificates')} color="text-slate-700" />
-            <NavButton icon={<DollarSign size={20} />} label="Transactions" active={activeTab === 'Transactions'} onClick={() => setActiveTab('Transactions')} color="text-slate-700" />
-            <NavButton icon={<MessageCircle size={20} />} label="Support Chatbot" active={activeTab === 'Support Chatbot'} onClick={() => setActiveTab('Support Chatbot')} color="text-slate-700" />
-
-            <div className="h-px bg-slate-200/60 my-6 mx-4" />
-
-            <button onClick={() => setIsExploreOpen(!isExploreOpen)} className="w-full flex items-center justify-between px-5 py-4 rounded-lg text-[14px] font-black text-slate-600/80 hover:bg-white hover:shadow-soft hover:text-slate-900 transition-all duration-300">
-              <div className="flex items-center gap-4">
-                <div className="p-2 rounded-md bg-slate-100/80"><Compass size={20} className="text-slate-500" /></div>
-                <span>Explore More</span>
-              </div>
-              {isExploreOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-            </button>
-            <AnimatePresence>
-              {isExploreOpen && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="flex flex-col gap-2 pl-[60px] pr-4 overflow-hidden pb-2">
-                  <Link href="/onlinecourse" className="text-sm font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Live Courses</Link>
-                  <Link href="/recording" className="text-sm font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Recordings</Link>
-                  <Link href="/become-a-tutor" className="text-sm font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Become a Tutor</Link>
-                  <Link href="/post-tuition" className="text-sm font-bold text-slate-500 hover:text-blue-600 py-1.5 transition-colors block">Post a Vacancy</Link>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className="w-full flex items-center gap-4 px-5 py-4 rounded-lg text-[14px] font-black text-emerald-600 hover:bg-emerald-50 hover:shadow-soft transition-all duration-300 mt-2">
-              <div className="p-2 rounded-md bg-emerald-100/80"><Phone size={20} className="text-emerald-600" /></div>
-              <span>WhatsApp GyanHub</span>
-            </a>
-
-            <div className="h-px bg-slate-200/60 my-6 mx-4" />
-            <NavButton icon={<LogOut size={20} />} label="Signout" color="text-red-500" onClick={handleSignOut} isTutor={isTutorMode} />
+          <div className={`bg-transparent p-2 sticky top-28 space-y-1 h-[calc(100vh-140px)] overflow-y-auto custom-scrollbar`}>
+            {renderSidebarLinks()}
           </div>
         </aside>
 
@@ -739,29 +1037,30 @@ export default function ProfilePage() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={`${activeTab}-${dashboardMode}`}
-                initial={{ opacity: 0, y: 30, filter: "blur(8px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -20, filter: "blur(8px)" }}
-                transition={{ duration: 0.4, ease: "easeOut" }}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 className="w-full"
               >
                 {/* LOCKED STATES */}
                 {dashboardMode === 'tutor' && !hasTutorProfile && (
-                  <div className="glass-panel p-10 lg:p-16 rounded-xl text-center flex flex-col items-center justify-center min-h-[60vh] shadow-medium relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-20 opacity-5"><Lock size={300} /></div>
-                    <div className="w-24 h-24 bg-red-50 text-red-500 rounded-xl flex items-center justify-center mb-8 shadow-inner rotate-3"><Lock size={40} /></div>
-                    <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tight relative z-10">Tutor Profile Locked</h2>
-                    <p className="text-lg text-slate-600/80 font-medium max-w-md mx-auto mb-10 relative z-10">You need an approved tutor profile to access this dashboard.</p>
-                    <button onClick={() => window.location.href = '/become-a-tutor'} className="bg-gradient-to-r from-emerald-500 to-green-600 text-white px-10 py-4 rounded-lg font-black shadow-[0_10px_30px_-10px_rgba(16,185,129,0.8)] hover:scale-[1.02] transition-all relative z-10">Setup Tutor Profile</button>
+                  <div className={`bg-gradient-to-br from-white to-slate-50 border border-slate-200/60 ${tokens.radius.card} p-6 sm:p-10 lg:p-16 text-center flex flex-col items-center justify-center min-h-[50vh] ${tokens.shadow.card} relative overflow-hidden`}>
+                    <div className="absolute top-0 right-0 p-10 sm:p-20 opacity-[0.03]"><Lock size={200} className="sm:w-[300px] sm:h-[300px]"/></div>
+                    <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-slate-100 text-slate-400 ${tokens.radius.card} flex items-center justify-center mb-6 shadow-inner`}><Lock size={32} /></div>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight relative z-10">Tutor Profile Locked</h2>
+                    <p className="text-sm sm:text-lg text-slate-500 font-medium max-w-sm mx-auto mb-8 relative z-10">You need an approved tutor profile to access this dashboard.</p>
+                    <button onClick={() => window.location.href = '/become-a-tutor'} className={`bg-blue-700 hover:bg-blue-800 text-white px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold shadow-lg transition-colors relative z-10 tracking-wide text-sm sm:text-base`}>Setup Tutor Profile</button>
                   </div>
                 )}
+
                 {dashboardMode === 'student' && hasTutorProfile && (
-                  <div className="glass-panel p-10 lg:p-16 rounded-xl text-center flex flex-col items-center justify-center min-h-[60vh] shadow-medium relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-20 opacity-5"><Briefcase size={300} /></div>
-                    <div className="w-24 h-24 bg-blue-50 text-blue-500 rounded-xl flex items-center justify-center mb-8 shadow-inner -rotate-3"><Briefcase size={40} /></div>
-                    <h2 className="text-4xl font-black text-slate-900 mb-4 tracking-tight relative z-10">Student View Restricted</h2>
-                    <p className="text-lg text-slate-600/80 font-medium max-w-md mx-auto mb-10 relative z-10">You are registered as a Tutor. Please use the Tutor Dashboard.</p>
-                    <button onClick={() => { setDashboardMode('tutor'); setActiveTab('Dashboard'); }} className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-10 py-4 rounded-lg font-black shadow-[0_10px_30px_-10px_rgba(37,99,235,0.8)] hover:scale-[1.02] transition-all relative z-10">Go to Tutor Hub</button>
+                  <div className={`bg-gradient-to-br from-white to-slate-50 border border-slate-200/60 ${tokens.radius.card} p-6 sm:p-10 lg:p-16 text-center flex flex-col items-center justify-center min-h-[50vh] ${tokens.shadow.card} relative overflow-hidden`}>
+                    <div className="absolute top-0 right-0 p-10 sm:p-20 opacity-[0.03]"><Briefcase size={200} className="sm:w-[300px] sm:h-[300px]" /></div>
+                    <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-blue-50 text-blue-700 ${tokens.radius.card} flex items-center justify-center mb-6 shadow-inner`}><Briefcase size={32} /></div>
+                    <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-3 tracking-tight relative z-10">Student View Restricted</h2>
+                    <p className="text-sm sm:text-lg text-slate-500 font-medium max-w-sm mx-auto mb-8 relative z-10">You are registered as a Tutor. Please use the Tutor Dashboard.</p>
+                    <button onClick={() => { setDashboardMode('tutor'); setActiveTab('Dashboard'); }} className={`bg-blue-700 hover:bg-blue-800 text-white px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold shadow-lg transition-colors relative z-10 tracking-wide text-sm sm:text-base`}>Go to Tutor Hub</button>
                   </div>
                 )}
 
@@ -778,42 +1077,71 @@ export default function ProfilePage() {
                     onlineCourseDetails={onlineCourseDetails}
                   />
                 )}
+
                 {activeTab === 'Online Courses' && (
-                  <MyCoursesView activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} orders={orders} recordingsList={recordingsList} router={router} />
+                  <MyCoursesView 
+                    activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} 
+                    courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} 
+                    orders={orders} recordingsList={recordingsList} router={router}
+                    onOpenExpiredModal={setGlobalExpiredClassLink}
+                  />
                 )}
+
                 {activeTab === 'Recording Courses' && (
-                  <MyCoursesView activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} orders={orders} recordingsList={recordingsList} router={router} />
+                  <MyCoursesView 
+                    activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} 
+                    courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} 
+                    orders={orders} recordingsList={recordingsList} router={router}
+                    onOpenExpiredModal={setGlobalExpiredClassLink}
+                  />
                 )}
+
                 {activeTab === 'My Certificates' && <MyCertificatesView certificates={certificates} formatDate={formatDate} />}
-                {activeTab === 'Transactions' && <TransactionsView orders={orders} ordersError={ordersError} enrollments={enrollments} formatDate={formatDate} />}
+
+                {activeTab === 'Transactions' && (
+                  <TransactionsView 
+                    orders={orders} 
+                    ordersError={ordersError} 
+                    enrollments={enrollments} 
+                    formatDate={formatDate} 
+                    selectedTransaction={selectedTransaction}
+                    setSelectedTransaction={setSelectedTransaction}
+                  />
+                )}
+
                 {activeTab === 'Support Chatbot' && (
-                  <div className="space-y-6">
-                    <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">Support Chat</h2>
+                  <div className="space-y-4 sm:space-y-6">
+                    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Support Chat</h2>
                     <ChatBox userId={userId} userName={userName} isTutor={isTutorMode} />
                   </div>
                 )}
 
                 {/* STUDENT VIEWS */}
                 {dashboardMode === 'student' && !hasTutorProfile && activeTab === 'Dashboard' && (
-                  <DashboardView userId={userId} userName={userName} count={applicantCount} course={latestCourse} verifiedTutors={verifiedTutors} onShowApplications={() => openApplicationsModal()} globalRecordings={globalRecordings} />
+                  <DashboardView userId={userId} userName={userName} count={applicantCount} course={latestCourse} verifiedTutors={verifiedTutors} onShowApplications={() => openApplicationsModal()} globalRecordings={globalRecordings} router={router} />
                 )}
+
                 {dashboardMode === 'student' && !hasTutorProfile && activeTab === 'Posted Vacancies' && (
                   <VacanciesView vacancies={vacancies} onUpdate={handleUpdateVacancy} onDelete={handleDeleteVacancy} onViewApplicants={openApplicationsModal} />
                 )}
+
                 {dashboardMode === 'student' && !hasTutorProfile && activeTab === 'My Requests' && (
                   <StudentMyRequestsView requests={studentMyRequests} onCancel={handleCancelMyRequest} onChatAdmin={scrollToChatbox} />
                 )}
 
                 {/* TUTOR VIEWS */}
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'Dashboard' && (
-                  <TutorDashboardView profile={tutorProfile} userId={userId} userName={userName} userEmail={userEmail} applicationsCount={tutorApplications.length} requestsCount={studentRequests.length} course={latestCourse} urgentVacancies={urgentVacancies} onShowApplications={() => openApplicationsModal()} onShowRequests={() => setActiveTab('Student Requests')} onFixProfile={() => setActiveTab('My Info')} globalRecordings={globalRecordings} />
+                  <TutorDashboardView profile={tutorProfile} userId={userId} userName={userName} userEmail={userEmail} applicationsCount={tutorApplications.length} requestsCount={studentRequests.length} course={latestCourse} urgentVacancies={urgentVacancies} onShowApplications={() => openApplicationsModal()} onShowRequests={() => setActiveTab('Student Requests')} onFixProfile={() => setActiveTab('My Info')} globalRecordings={globalRecordings} router={router} />
                 )}
+
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'Available Vacancies' && (
                   <AvailableVacanciesView vacancies={allVacancies} />
                 )}
+
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'Student Requests' && (
                   <StudentRequestsView requests={studentRequests} onUpdateStatus={handleUpdateStudentRequest} onChatAdmin={scrollToChatbox} />
                 )}
+
                 {dashboardMode === 'tutor' && hasTutorProfile && activeTab === 'My Info' && (
                   <MyInfoView profile={tutorProfile} onSave={handleUpdateTutorInfo} />
                 )}
@@ -823,18 +1151,67 @@ export default function ProfilePage() {
         </main>
       </div>
 
-      {/* Mobile Bottom Nav */}
-      <nav className="lg:hidden fixed bottom-6 left-6 right-6 z-50 glass-panel shadow-[0_20px_40px_rgba(0,0,0,0.15)] rounded-xl p-2 flex justify-between items-center px-4">
-        <MobileNavButton icon={<Home size={20} />} label="Home" active={dashboardMode === 'home'} onClick={() => { setDashboardMode('home'); setActiveTab('Overview'); }} color="text-slate-700" />
-        <MobileNavButton icon={<Users size={20} />} label="Student" active={dashboardMode === 'student'} onClick={() => { setDashboardMode('student'); setActiveTab('Dashboard'); }} isTutor={false} />
-        <MobileNavButton icon={<Briefcase size={20} />} label="Tutor" active={dashboardMode === 'tutor'} onClick={() => { setDashboardMode('tutor'); setActiveTab('Dashboard'); }} isTutor={true} />
-      </nav>
+      {/* Conditionally hide Mobile Bottom Nav when any modal is open */}
+      {!isAnyModalOpen && (
+        <nav className="lg:hidden fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white/95 backdrop-blur-md border border-slate-200/80 shadow-[0_8px_32px_rgba(0,0,0,0.12)] rounded-full px-3 py-1.5 flex justify-center gap-2 sm:gap-6 items-center">
+          <MobileNavButton 
+            icon={<Home size={18} />} 
+            label="Home" 
+            active={dashboardMode === 'home'} 
+            onClick={() => { setDashboardMode('home'); setActiveTab('Overview'); setIsTuitionServicesOpen(false); setIsMobileMenuOpen(false); }} 
+            colorTheme="blue" 
+          />
+          
+          <div className="relative flex flex-col items-center">
+            <AnimatePresence>
+              {isTuitionServicesOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }} transition={{ duration: 0.2 }}
+                  className={`absolute bottom-[calc(100%+12px)] left-1/2 -translate-x-1/2 bg-white ${tokens.radius.card} shadow-[0_10px_40px_rgba(0,0,0,0.15)] border border-slate-100 p-1.5 flex flex-col gap-1.5 min-w-[140px] z-50`}
+                >
+                  <button
+                    onClick={() => { setDashboardMode('student'); setActiveTab('Dashboard'); setIsTuitionServicesOpen(false); setIsMobileMenuOpen(false); }}
+                    className={`flex items-center gap-2 p-2.5 ${tokens.radius.button} text-xs font-bold transition-colors ${
+                      dashboardMode === 'student' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 hover:bg-emerald-50'
+                    }`}
+                  >
+                    <Users size={14} className={dashboardMode === 'student' ? 'text-white' : ''} /> Student
+                  </button>
+                  <button
+                    onClick={() => { setDashboardMode('tutor'); setActiveTab('Dashboard'); setIsTuitionServicesOpen(false); setIsMobileMenuOpen(false); }}
+                    className={`flex items-center gap-2 p-2.5 ${tokens.radius.button} text-xs font-bold transition-colors ${
+                      dashboardMode === 'tutor' ? 'bg-violet-600 text-white shadow-md' : 'text-slate-600 hover:bg-violet-50'
+                    }`}
+                  >
+                    <Briefcase size={14} className={dashboardMode === 'tutor' ? 'text-white' : ''} /> Tutor
+                  </button>
+                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-white border-b border-r border-slate-100 transform rotate-45"></div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <MobileNavButton
+              icon={<GraduationCap size={18} />}
+              label="Tuition"
+              active={dashboardMode === 'student' || dashboardMode === 'tutor'}
+              onClick={() => { setIsTuitionServicesOpen(!isTuitionServicesOpen); setIsMobileMenuOpen(false); }}
+              colorTheme={dashboardMode === 'student' ? 'emerald' : dashboardMode === 'tutor' ? 'violet' : 'blue'}
+            />
+          </div>
+
+          <MobileNavButton 
+            icon={<Menu size={18} />} 
+            label="Menu" 
+            active={isMobileMenuOpen} 
+            onClick={() => { setIsMobileMenuOpen(true); setIsTuitionServicesOpen(false); }} 
+            colorTheme="blue" 
+          />
+        </nav>
+      )}
     </div>
   );
 }
 
-// ─── CHAT BOX ────────────────────────────────────────────────────────────────
-
+// ─── CHAT BOX ───
 function ChatBox({ userId, userName, isTutor }: { userId: string | null; userName: string; isTutor: boolean }) {
   const supabase = createClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -853,7 +1230,6 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
       if (data) setMessages(data as any);
     };
     fetchMessages();
-
     const channel = supabase
       .channel(`support_chat_${userId}`)
       .on('postgres_changes', {
@@ -866,7 +1242,6 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
         });
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [userId, supabase]);
 
@@ -879,8 +1254,6 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
     setSending(true);
     const content = input.trim();
     setInput('');
-
-    // Optimistic UI Update Fix
     const tempId = Date.now().toString();
     const tempMsg: ChatMessage = {
       id: tempId,
@@ -890,20 +1263,17 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
       created_at: new Date().toISOString()
     };
     setMessages(prev => [...prev, tempMsg]);
-
     const { data } = await supabase.from('messages').insert([{
       user_id: userId,
       sender_role: isTutor ? 'tutor' : 'student',
       content
     }]).select();
-
     if (data && data.length > 0) {
       setMessages(prev => {
         const filtered = prev.filter(m => m.id !== tempId && m.id !== data[0].id);
         return [...filtered, data[0] as ChatMessage];
       });
     }
-    
     setSending(false);
   };
 
@@ -912,43 +1282,39 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
   };
 
   return (
-    <div id="chatbox-section" className="glass-panel rounded-xl overflow-hidden shadow-medium flex flex-col" style={{ height: '600px' }}>
-      {/* Header */}
-      <div className="p-5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white shrink-0">
-        <h3 className="font-black text-lg flex items-center gap-2">
+    <div id="chatbox-section" className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden ${tokens.shadow.card} flex flex-col h-[500px] sm:h-[600px]`}>
+      <div className={`p-4 sm:p-5 bg-blue-700 text-white shrink-0 shadow-sm`}>
+        <h3 className="font-bold text-lg sm:text-xl flex items-center gap-2">
           <MessageCircle size={20} /> GyanHub Support
         </h3>
-        <p className="text-blue-100 text-xs mt-0.5 font-medium">We typically reply within a few hours. Mon–Sat.</p>
+        <p className="text-blue-100 text-[10px] sm:text-xs mt-1 font-medium tracking-wide">We typically reply within a few hours. Mon–Sat.</p>
       </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 bg-white/50">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 sm:p-6 space-y-4 bg-slate-50/50">
         {messages.length === 0 && (
           <div className="flex flex-col items-center justify-center h-full text-center text-slate-400 py-10">
-            <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4">
-              <MessageCircle size={28} className="text-blue-400" />
+            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4 shadow-inner">
+              <MessageCircle size={24} className="text-blue-400" />
             </div>
-            <p className="font-black text-slate-500 text-base mb-1">Start a conversation</p>
-            <p className="text-sm font-medium max-w-xs">Ask us anything about your courses, payments, or enrollment. We're here to help!</p>
+            <p className="font-bold text-slate-600 text-base sm:text-lg mb-1">Start a conversation</p>
+            <p className="text-xs sm:text-sm font-medium max-w-[250px] sm:max-w-xs text-slate-500">Ask us anything about your courses, payments, or enrollment. We're here to help!</p>
           </div>
         )}
-
         {messages.map((msg) => {
           const isOwn = msg.sender_role !== 'admin';
           return (
             <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
               {!isOwn && (
-                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-xs font-black shrink-0 mr-2 mt-1 shadow-sm">G</div>
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold shrink-0 mr-2 mt-1 shadow-sm">G</div>
               )}
-              <div className={`max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                {!isOwn && <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest px-1">GyanHub Support</span>}
-                <div className={`px-4 py-3 rounded-2xl text-sm font-medium shadow-sm leading-relaxed ${isOwn
-                  ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm'
-                  : 'bg-white text-slate-800 rounded-bl-sm border border-slate-100 shadow-soft'
-                }`}>
+              <div className={`max-w-[80%] sm:max-w-[75%] ${isOwn ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                {!isOwn && <span className="text-[9px] sm:text-[10px] font-bold text-blue-700 uppercase tracking-widest px-1">Support</span>}
+                <div className={`px-3 py-2 sm:px-4 sm:py-3 rounded-2xl text-xs sm:text-sm font-medium shadow-sm leading-relaxed ${isOwn
+                  ? 'bg-blue-600 text-white rounded-br-sm'
+                  : 'bg-white text-slate-800 rounded-bl-sm border border-slate-100'
+                  }`}>
                   {msg.content}
                 </div>
-                <span className={`text-[10px] font-bold px-1 ${isOwn ? 'text-slate-400 text-right' : 'text-slate-400'}`}>
+                <span className={`text-[9px] sm:text-[10px] font-semibold px-1 tracking-wider ${isOwn ? 'text-slate-400 text-right' : 'text-slate-400'}`}>
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -957,63 +1323,61 @@ function ChatBox({ userId, userName, isTutor }: { userId: string | null; userNam
         })}
         <div ref={bottomRef} />
       </div>
-
-      {/* Input */}
-      <div className="p-4 border-t border-slate-100 bg-white flex gap-3 shrink-0">
+      <div className="p-3 sm:p-4 border-t border-slate-200/60 bg-white flex gap-2 sm:gap-3 shrink-0">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type your message…"
           disabled={!userId}
-          className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-blue-400 focus:bg-white transition-all placeholder:text-slate-400 disabled:opacity-50"
+          className={`flex-1 px-3 py-2 sm:px-4 sm:py-3 bg-slate-50 border border-slate-200 ${tokens.radius.button} text-xs sm:text-sm font-medium outline-none focus:border-blue-400 focus:bg-white transition-all placeholder:text-slate-400 disabled:opacity-50`}
         />
         <button
           onClick={handleSend}
           disabled={sending || !input.trim() || !userId}
-          className="bg-gradient-to-br from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white p-3.5 rounded-xl transition-all shadow-sm hover:scale-105 active:scale-95"
+          className={`bg-blue-700 hover:bg-blue-800 disabled:opacity-40 disabled:cursor-not-allowed text-white p-2 sm:p-3.5 ${tokens.radius.button} transition-colors shadow-sm`}
         >
-          <Send size={18} />
+          <Send size={16} className="sm:w-[18px] sm:h-[18px]" />
         </button>
       </div>
     </div>
   );
 }
 
-// ─── RECOMMENDED RECORDINGS BOX ───────────────────────────────────────────────
-
-function RecommendedRecordingsBox({ recordings }: { recordings: GlobalRecording[] }) {
-  const router = useRouter();
+// ─── RECOMMENDED RECORDINGS BOX ───
+function RecommendedRecordingsBox({ recordings, router }: { recordings: GlobalRecording[], router: any }) {
   if (!recordings || recordings.length === 0) return null;
   return (
-    <div className="glass-panel rounded-xl p-6 shadow-soft flex flex-col gap-4">
+    <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-6 ${tokens.shadow.card} flex flex-col gap-4 group hover:border-t-blue-600 transition-colors`}>
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2">
-          <PlayCircle size={16} className="text-indigo-500" /> Top Recordings
+        <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2">
+          <PlayCircle size={14} className="text-blue-600 sm:w-4 sm:h-4" /> Top Recordings
         </h3>
-        <Link href="/recording" className="text-[10px] font-black uppercase text-indigo-600 hover:underline flex items-center gap-1">
-          See All <ArrowRight size={14} />
+        <Link href="/recording" className="text-[9px] sm:text-[10px] font-extrabold uppercase text-blue-700 hover:underline flex items-center gap-1 tracking-wide">
+          See All <ArrowRight size={12} className="sm:w-[14px] sm:h-[14px]"/>
         </Link>
       </div>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2 sm:gap-3">
         {recordings.map(r => {
           const finalPrice = r.discount > 0 ? Math.round(r.standard_fee * (1 - r.discount / 100)) : r.standard_fee;
+          const hoursNum = r.course_hours?.toString().match(/\d+/) ? r.course_hours.toString().match(/\d+/)?.[0] : r.course_hours;
+          const displayHours = hoursNum ? `${hoursNum}+ hrs` : 'N/A';
           return (
-            <div key={r.id} onClick={() => router.push('/recording')} className="flex items-center justify-between p-3 bg-white border border-slate-100 rounded-lg hover:border-indigo-200 transition-colors cursor-pointer group">
-              <div className="flex items-center gap-3">
+            <div key={r.id} onClick={() => router.push(`/recording/${encodeURIComponent(r.course_name)}`)} className={`flex items-center justify-between p-2.5 sm:p-3 bg-white border border-slate-100 ${tokens.radius.badge} shadow-sm hover:shadow-md hover:border-blue-200 hover:-translate-y-0.5 transition-all cursor-pointer`}>
+              <div className="flex items-center gap-2 sm:gap-3">
                 {r.cover_pic_url ? (
-                  <img src={r.cover_pic_url} className="w-12 h-12 rounded-md object-cover border border-slate-100" alt={r.course_name} />
+                  <img src={r.cover_pic_url} className={`w-10 h-10 sm:w-12 sm:h-12 ${tokens.radius.badge} object-cover border border-slate-100`} alt={r.course_name} />
                 ) : (
-                  <div className="w-12 h-12 rounded-md bg-indigo-50 flex items-center justify-center border border-indigo-100">
-                    <PlayCircle size={20} className="text-indigo-300"/>
+                  <div className={`w-10 h-10 sm:w-12 sm:h-12 ${tokens.radius.badge} bg-blue-50 flex items-center justify-center border border-blue-100`}>
+                    <PlayCircle size={18} className="text-blue-400 sm:w-5 sm:h-5" />
                   </div>
                 )}
                 <div className="flex flex-col">
-                  <p className="text-sm font-black text-slate-900 line-clamp-1 group-hover:text-indigo-700 transition-colors">{r.course_name}</p>
-                  <p className="text-xs font-bold text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10}/> {r.course_hours}</p>
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 line-clamp-1 group-hover:text-blue-700 transition-colors">{r.course_name}</p>
+                  <p className="text-[10px] sm:text-xs font-semibold text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10} /> {displayHours}</p>
                 </div>
               </div>
-              <p className="text-sm font-black text-slate-900 shrink-0 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">Rs. {finalPrice}</p>
+              <p className="text-xs sm:text-sm font-bold text-slate-800 shrink-0 bg-slate-50 px-2 py-1 sm:px-2.5 sm:py-1 rounded-md border border-slate-200">Rs. {finalPrice}</p>
             </div>
           );
         })}
@@ -1022,10 +1386,8 @@ function RecommendedRecordingsBox({ recordings }: { recordings: GlobalRecording[
   );
 }
 
-// ─── COURSE CARD ──────────────────────────────────────────────────────────────
-
+// ─── COURSE CARD ───
 type AccessTier = 'BLOCKED_NO_PAY' | 'BLOCKED_VERIFY' | 'PARTIAL_ACTIVE' | 'PARTIAL_OVERDUE' | 'FULL_ACCESS';
-
 function LockedLinkButton({ label, icon, reason, onPayClick }: {
   label: string;
   icon: React.ReactNode;
@@ -1037,7 +1399,7 @@ function LockedLinkButton({ label, icon, reason, onPayClick }: {
     <div className="flex-1 relative min-w-[140px]">
       <button
         onClick={() => setShowTip(t => !t)}
-        className="w-full flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed select-none"
+        className={`w-full flex justify-center items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-3 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-slate-200 cursor-not-allowed select-none transition-colors hover:bg-slate-100`}
       >
         <Lock className="w-3.5 h-3.5 shrink-0" /> {label}
       </button>
@@ -1045,15 +1407,15 @@ function LockedLinkButton({ label, icon, reason, onPayClick }: {
         {showTip && (
           <motion.div
             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }}
-            className="absolute z-30 bottom-[calc(100%+8px)] left-0 right-0 bg-slate-900 text-white text-xs font-bold rounded-lg p-3 shadow-strong"
+            className={`absolute z-30 bottom-[calc(100%+8px)] left-0 right-0 bg-slate-900 text-white text-[10px] sm:text-xs font-semibold ${tokens.radius.badge} p-3 sm:p-4 shadow-xl border border-slate-700`}
           >
-            <p>{reason}</p>
+            <p className="leading-relaxed">{reason}</p>
             {onPayClick && (
-              <button onClick={onPayClick} className="mt-2 w-full bg-blue-500 hover:bg-blue-400 text-white text-xs font-black px-3 py-1.5 rounded-md transition-colors">
+              <button onClick={onPayClick} className={`mt-2 sm:mt-3 w-full bg-blue-600 hover:bg-blue-500 text-white text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 sm:py-2 ${tokens.radius.badge} transition-colors tracking-wide`}>
                 Pay to Unlock
               </button>
             )}
-            <button onClick={() => setShowTip(false)} className="absolute top-1.5 right-1.5 text-slate-400 hover:text-white"><X size={12} /></button>
+            <button onClick={() => setShowTip(false)} className="absolute top-1 right-1 text-slate-400 hover:text-white p-1"><X size={10} className="sm:w-3 sm:h-3" /></button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1072,20 +1434,11 @@ const formatNepaliDate = (dateString: string) => {
       weekday: 'long'
     }).format(d);
   } catch (e) {
-    // Graceful fallback to prevent crashes if locale not fully supported
     return new Date(dateString).toLocaleDateString();
   }
 };
 
-function CourseCard({ course, type, matched, batch, pendingVerificationOrders, router }: {
-  course: Enrollment | Order;
-  type: 'online' | 'recording';
-  matched: any;
-  batch?: CourseBatch;
-  pendingVerificationOrders: Order[];
-  router: any;
-}) {
-  const [expiredModalData, setExpiredModalData] = useState<{ isOpen: boolean; link: string }>({ isOpen: false, link: '' });
+function CourseCard({ course, type, matched, batch, pendingVerificationOrders, router, onOpenExpiredModal }: any) {
   const [nowTick, setNowTick] = useState(new Date());
 
   useEffect(() => {
@@ -1093,7 +1446,14 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
     return () => clearInterval(timer);
   }, []);
 
-  // ── RECORDING TYPE ──
+  const getCoverPic = () => {
+    if (matched?.cover_pic) return matched.cover_pic;
+    if (matched?.cover_pic_url) return matched.cover_pic_url;
+    if (type === 'recording') return (course as Order).screenshot_url; 
+    return null;
+  };
+  const coverPic = getCoverPic();
+
   if (type === 'recording') {
     const record = course as Order;
     const isVerified = record.status.toLowerCase() === 'verified';
@@ -1101,52 +1461,61 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
     const displayHours = rawHours.length > 0 ? `${rawHours[0]}+ hours` : matched?.course_hours || 'N/A';
 
     return (
-      <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-medium hover:shadow-strong transition-all duration-500 flex flex-col group relative w-full">
-        <div className="p-6 md:p-8 flex flex-col flex-grow relative z-10 w-full justify-between">
+      <div className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden ${tokens.shadow.card} ${tokens.shadow.hover} flex flex-col w-full group relative cursor-pointer`} onClick={() => router.push(`/recording/${encodeURIComponent(record.order_name)}`)}>
+        <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-blue-700 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+        {/* Visual Cover Area */}
+        <div className="h-28 sm:h-40 bg-slate-100 relative w-full overflow-hidden shrink-0 border-b border-slate-100">
+          {coverPic ? (
+            <img src={coverPic} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Course Cover" />
+          ) : (
+            <div className="absolute inset-0 bg-slate-100 flex items-center justify-center">
+               <Video className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between">
           <div>
-            <div className="flex justify-between items-start mb-4">
+            <div className="flex justify-between items-start mb-3 sm:mb-4">
               <div className="flex flex-col">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="bg-indigo-100 text-indigo-700 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md flex items-center gap-1">
-                    <PlayCircle className="w-3 h-3" /> Recordings
+                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                  <span className={`bg-slate-100 text-slate-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
+                    <PlayCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Recordings
                   </span>
                   {isVerified
-                    ? <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md">Unlocked</span>
-                    : <span className="bg-amber-100 text-amber-700 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md">Verifying</span>
+                    ? <span className={`bg-blue-50 text-blue-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge}`}>Unlocked</span>
+                    : <span className={`bg-orange-50 text-orange-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge}`}>Verifying</span>
                   }
                 </div>
-                <h3 className="font-black text-2xl text-slate-900 leading-tight group-hover:text-indigo-900 transition-colors break-words">{record.order_name}</h3>
+                <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug sm:leading-tight break-words group-hover:text-blue-700 transition-colors">{record.order_name}</h3>
               </div>
             </div>
-
             {matched && (
-              <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-wrap gap-6 shadow-inner">
-                <div className="flex items-center gap-2 text-sm font-bold text-slate-600"><Clock className="w-4 h-4 text-indigo-400" /><span>{displayHours}</span></div>
-                <div className="flex items-center gap-2 text-sm font-bold text-slate-600"><Star className="w-4 h-4 fill-amber-500 text-amber-500" /><span>{matched.rating || '4.5'} Rating</span></div>
-                {matched.category && <div className="flex items-center gap-2 text-sm font-bold text-slate-600"><BookOpen className="w-4 h-4 text-purple-400" /><span>{matched.category}</span></div>}
+              <div className={`mb-4 sm:mb-6 bg-slate-50 p-3 sm:p-4 ${tokens.radius.badge} border border-slate-100 flex flex-wrap gap-3 sm:gap-6`}>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" /><span>{displayHours}</span></div>
+                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-orange-400 text-orange-400" /><span>{matched.rating || '4.5'} Rating</span></div>
+                {matched.category && <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" /><span>{matched.category}</span></div>}
               </div>
             )}
-
             {matched?.learning_outcomes?.length > 0 && (
-              <div className="mb-6">
-                <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-3">What you'll learn</p>
-                <ul className="text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+              <div className="mb-4 sm:mb-6 hidden sm:block">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2 sm:mb-3">What you'll learn</p>
+                <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
                   {matched.learning_outcomes.slice(0, 4).map((out: string, i: number) => (
-                    <li key={i} className="flex items-start gap-2"><Check className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
+                    <li key={i} className="flex items-start gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-100">
+          <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100">
             {isVerified ? (
-              <a href={matched?.recording_link || '#'} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-8 py-3.5 rounded-lg font-black text-sm shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:scale-[1.02] transition-all">
-                <PlayCircle className="w-5 h-5" /> Watch Recording Now
+              <a href={matched?.recording_link || '#'} onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}>
+                <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5" /> Watch Recording
               </a>
             ) : (
-              <div className="inline-flex bg-amber-50 text-amber-600 px-8 py-3.5 rounded-lg font-bold text-sm border border-amber-200 items-center gap-2">
-                <Lock className="w-4 h-4" /> Pending Verification
+              <div className={`w-full sm:w-auto inline-flex justify-center bg-orange-50 text-orange-800 px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm border border-orange-200 items-center gap-2`}>
+                <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Pending Verification
               </div>
             )}
           </div>
@@ -1155,17 +1524,13 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
     );
   }
 
-  // ── ONLINE COURSE TYPE ──
   const enroll = course as Enrollment;
-
-  // Resolve links and dates overriding online_courses info with batch info
   const effectiveStartDatetime = batch?.start_datetime || enroll.starting_date || matched?.start_datetime;
   const effectiveTiming = batch?.timing || matched?.timing;
   const onlineLink = batch?.online_class_link || null;
   const classroomLink = batch?.google_classroom_link || null;
   const whatsappLink = batch?.whatsapp_group_link || null;
 
-  // Date calculations
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const enrollStart = new Date(effectiveStartDatetime); enrollStart.setHours(0, 0, 0, 0);
   const isFutureOrToday = todayStart.getTime() <= enrollStart.getTime();
@@ -1179,324 +1544,300 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   const totalFee = enroll.paid_amount + enroll.remaining_amount;
   const tenPercentFee = Math.round(totalFee * 0.1);
 
-  // ── Determine access tier ──
   let accessTier: AccessTier;
   if (isUnverifiedPayment) {
     accessTier = 'BLOCKED_VERIFY';
   } else if (enroll.paid_amount === 0) {
     accessTier = 'BLOCKED_NO_PAY';
   } else if (enroll.remaining_amount > 0 && isFutureOrToday) {
-    accessTier = 'PARTIAL_ACTIVE'; // online only unlocked
+    accessTier = 'PARTIAL_ACTIVE';
   } else if (enroll.remaining_amount > 0 && !isFutureOrToday) {
-    accessTier = 'PARTIAL_OVERDUE'; // all locked, urgent due
+    accessTier = 'PARTIAL_OVERDUE';
   } else {
     accessTier = 'FULL_ACCESS';
   }
 
-  // ── Status badge ──
   const statusBadge = (() => {
     switch (accessTier) {
-      case 'BLOCKED_VERIFY': return { label: 'Verification in Progress', classes: 'bg-amber-100 text-amber-700 border-amber-200' };
-      case 'BLOCKED_NO_PAY': return { label: 'Payment Pending', classes: 'bg-rose-100 text-rose-700 border-rose-200' };
-      case 'PARTIAL_ACTIVE': return { label: 'Partially Paid', classes: 'bg-blue-100 text-blue-700 border-blue-200' };
-      case 'PARTIAL_OVERDUE': return { label: 'Urgent Due', classes: 'bg-red-100 text-red-700 border-red-300 animate-pulse' };
-      case 'FULL_ACCESS': return { label: 'Access Active', classes: 'bg-emerald-100 text-emerald-700 border-emerald-200' };
+      case 'BLOCKED_VERIFY': return { label: 'Verification Pending', classes: 'bg-orange-50 text-orange-800 border-orange-200' };
+      case 'BLOCKED_NO_PAY': return { label: 'Payment Pending', classes: 'bg-slate-100 text-slate-700 border-slate-200' };
+      case 'PARTIAL_ACTIVE': return { label: 'Partially Paid', classes: 'bg-blue-50 text-blue-800 border-blue-200' };
+      case 'PARTIAL_OVERDUE': return { label: 'Urgent Due', classes: 'bg-red-50 text-red-800 border-red-200' };
+      case 'FULL_ACCESS': return { label: 'Access Active', classes: 'bg-emerald-50 text-emerald-800 border-emerald-200' };
     }
   })();
 
-  // ── Countdown ──
   const getCountdownStr = () => {
     const startObj = new Date(effectiveStartDatetime);
     const diffMs = startObj.getTime() - nowTick.getTime();
-    
+
     if (diffMs > 0) {
       const d = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const h = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
       const m = Math.floor((diffMs / (1000 * 60)) % 60);
-      const s = Math.floor((diffMs / 1000) % 60);
-      return `${d}D ${h}H ${m}MIN ${s}S TO ORIENTATION SESSION`;
+      return `${d}d ${h}h ${m}m TO START`;
     } else if (!isFinished) {
       let target = new Date(nowTick);
-      target.setHours(20, 0, 0, 0); // Default to 8:00 PM today
+      target.setHours(20, 0, 0, 0);
       if (nowTick.getTime() > target.getTime()) {
-        target.setDate(target.getDate() + 1); // Move to 8:00 PM tomorrow if past
+        target.setDate(target.getDate() + 1);
       }
       const diff8PM = target.getTime() - nowTick.getTime();
       const h = Math.floor((diff8PM / (1000 * 60 * 60)) % 24);
       const m = Math.floor((diff8PM / (1000 * 60)) % 60);
-      const s = Math.floor((diff8PM / 1000) % 60);
-      return `${h}H ${m}MIN ${s}S FOR ONLINE CLASS`;
+      return `${h}h ${m}m TO CLASS`;
     }
     return '';
   };
+
   const countdownStr = getCountdownStr();
   const isOrientation = new Date(effectiveStartDatetime).getTime() > nowTick.getTime();
-
   const payRoute = (price: number) =>
     router.push(`/order?order_type=course&courseName=${encodeURIComponent(enroll.course_name)}&price=${price}`);
-
-  // ── Button rendering helpers ──
   const canUseOnline = accessTier === 'PARTIAL_ACTIVE' || accessTier === 'FULL_ACCESS';
   const canUseAll = accessTier === 'FULL_ACCESS';
 
   return (
-    <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-medium hover:shadow-strong transition-all duration-500 flex flex-col group relative w-full">
-      <AnimatePresence>
-        {expiredModalData.isOpen && (
-          <ClassExpiredModal onClose={() => setExpiredModalData({ isOpen: false, link: '' })} classroomLink={expiredModalData.link} />
+    <div className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden ${tokens.shadow.card} ${tokens.shadow.hover} flex flex-col w-full group relative`}>
+      <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-400 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+      
+      {/* Visual Cover Area */}
+      <div className="h-28 sm:h-40 bg-slate-100 relative w-full overflow-hidden shrink-0 border-b border-slate-100">
+        {coverPic ? (
+          <img src={coverPic} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Course Cover" />
+        ) : (
+          <div className="absolute inset-0 bg-slate-100 flex items-center justify-center">
+             <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
+          </div>
         )}
-      </AnimatePresence>
+      </div>
 
-      <div className="p-6 md:p-8 flex flex-col flex-grow relative z-10 w-full justify-between">
+      <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between">
         <div>
-          {/* Badges */}
-          <div className="flex flex-col items-start gap-3 mb-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Live Online
+          <div className="flex flex-col items-start gap-2 sm:gap-3 mb-3 sm:mb-4">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className={`bg-blue-50 text-blue-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(29,78,216,0.8)]"></span> Live Class
               </span>
-              <span className={`text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-md border ${statusBadge.classes}`}>
+              <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} border ${statusBadge.classes}`}>
                 {statusBadge.label}
               </span>
             </div>
             {countdownStr && (
-              <div className="inline-flex items-center w-fit bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg shadow-sm">
-                <Calendar className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />{countdownStr}
+              <div className={`inline-flex items-center w-fit bg-slate-800 text-white shadow-md text-[10px] sm:text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5 ${tokens.radius.badge}`}>
+                <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5 text-orange-400" />{countdownStr}
               </div>
             )}
-            <h3 className="font-black text-2xl text-slate-900 leading-tight group-hover:text-blue-900 transition-colors break-words mt-1">{enroll.course_name}</h3>
+            <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug sm:leading-tight break-words mt-1">{enroll.course_name}</h3>
           </div>
 
-          {/* Meta */}
-          <div className="flex flex-wrap gap-2 sm:gap-6 mb-6 text-sm font-bold text-blue-600">
-            {matched?.tutor_name && <span className="flex items-center gap-1.5 shrink-0"><User className="w-4 h-4" />{matched.tutor_name}</span>}
-            {matched?.duration && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><Clock className="w-4 h-4" />{matched.duration}</span>}
-            {matched?.category && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><BookOpen className="w-4 h-4" />{matched.category}</span>}
-            {batch?.batch_no && <span className="flex items-center gap-1.5 text-slate-500 shrink-0"><Users className="w-4 h-4" />Batch {batch.batch_no}</span>}
-            {matched?.difficulty_level && <span className="flex items-center gap-1.5 text-purple-500 shrink-0"><Star className="w-4 h-4" />{matched.difficulty_level}</span>}
+          <div className="flex flex-wrap gap-2 sm:gap-6 mb-4 sm:mb-6 text-xs sm:text-sm font-semibold text-slate-600">
+            {matched?.tutor_name && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.tutor_name}</span>}
+            {matched?.duration && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.duration}</span>}
+            {matched?.category && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.category}</span>}
+            {batch?.batch_no && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />Batch {batch.batch_no}</span>}
           </div>
 
-          {/* Info strip */}
-          <div className="mb-6 bg-slate-50 p-4 rounded-lg border border-slate-100 flex flex-wrap gap-6 shadow-inner">
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
-              <Calendar className="w-4 h-4 text-emerald-500" />
-              <span>Start: {new Date(effectiveStartDatetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ({formatNepaliDate(effectiveStartDatetime)})</span>
+          <div className={`mb-4 sm:mb-6 bg-slate-50 p-3 sm:p-4 ${tokens.radius.badge} border border-slate-100 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-6`}>
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+              <span>Start: {new Date(effectiveStartDatetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm font-bold text-slate-600">
-              <Clock className="w-4 h-4 text-blue-500" />
-              <span>Timing: {effectiveTiming || 'N/A'}</span>
+            <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700">
+              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+              <span>Time: {effectiveTiming || 'TBA'}</span>
             </div>
           </div>
 
-          {/* Syllabus */}
           {matched?.learning_outcomes?.length > 0 && (
-            <div className="mb-6">
-              <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-3">Compact Syllabus</p>
-              <ul className="text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+            <div className="mb-4 sm:mb-6 hidden sm:block">
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2 sm:mb-3">Overview</p>
+              <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
                 {matched.learning_outcomes.slice(0, 4).map((out: string, i: number) => (
-                  <li key={i} className="flex items-start gap-2"><Check className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
+                  <li key={i} className="flex items-start gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
                 ))}
               </ul>
               {matched.syllabus_url && (
-                <a href={matched.syllabus_url} target="_blank" rel="noreferrer" className="mt-3 text-[11px] font-black text-blue-600 hover:underline inline-flex items-center gap-1">
-                  View Full Syllabus <ExternalLink size={10} />
+                <a href={matched.syllabus_url} target="_blank" rel="noreferrer" className="mt-3 sm:mt-4 text-[10px] sm:text-[11px] font-extrabold text-blue-700 hover:text-orange-600 hover:underline inline-flex items-center gap-1 uppercase tracking-wide transition-colors">
+                  View Full Syllabus <ExternalLink size={10} className="sm:w-3 sm:h-3" />
                 </a>
               )}
             </div>
           )}
         </div>
 
-        {/* ── ACTION AREA ── */}
-        <div className="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-4">
-
-          {/* Payment alert banners */}
+        <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100 flex flex-col gap-3 sm:gap-4">
           {accessTier === 'BLOCKED_VERIFY' && (
-            <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-lg px-5 py-3.5 text-amber-700">
-              <Clock className="w-5 h-5 shrink-0" />
-              <p className="text-sm font-bold">Your payment is being verified. Links unlock within 24 hours.</p>
+            <div className={`flex items-center gap-2 sm:gap-3 bg-orange-50 border border-orange-200 ${tokens.radius.badge} px-4 py-3 sm:px-5 sm:py-4 text-orange-800 shadow-sm`}>
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 text-orange-500" />
+              <p className="text-xs sm:text-sm font-semibold leading-snug">Payment verifying. Access will unlock shortly.</p>
             </div>
           )}
-
           {accessTier === 'BLOCKED_NO_PAY' && (
-            <div className="bg-rose-50 rounded-lg border border-rose-200 p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-start gap-3 text-rose-800">
-                <AlertCircle className="w-6 h-6 shrink-0" />
-                <p className="text-sm font-medium leading-tight">
-                  Pay <strong>10% seat booking fee (Rs. {tenPercentFee})</strong> now to lock your enrollment and unlock class access.
+            <div className={`bg-slate-50 border border-slate-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 shadow-sm`}>
+              <div className="flex items-start gap-2 sm:gap-3 text-slate-700">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-blue-600" />
+                <p className="text-xs sm:text-sm font-medium leading-tight">
+                  Pay <strong>10% seat booking fee (Rs. {tenPercentFee})</strong> to lock enrollment and get class access.
                 </p>
               </div>
-              <button onClick={() => payRoute(tenPercentFee)} className="w-full md:w-auto shrink-0 bg-rose-600 hover:bg-rose-700 text-white font-black px-6 py-3 rounded-md text-sm whitespace-nowrap transition-colors shadow-sm">
+              <button onClick={() => payRoute(tenPercentFee)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
                 Book Seat (Rs. {tenPercentFee})
               </button>
             </div>
           )}
-
           {accessTier === 'PARTIAL_ACTIVE' && enroll.remaining_amount > 0 && (
-            <div className="bg-blue-50 rounded-lg border border-blue-200 p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-blue-800">
-              <div className="flex items-start gap-3">
-                <Info className="w-6 h-6 shrink-0" />
+            <div className={`bg-blue-50 border border-blue-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 text-blue-900 shadow-sm`}>
+              <div className="flex items-start gap-2 sm:gap-3">
+                <Info className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-blue-600" />
                 <div>
-                  <p className="text-sm font-medium leading-tight mb-1">
-                    Remaining due: <strong>Rs. {enroll.remaining_amount}</strong>. Pay after orientation on <strong>{new Date(effectiveStartDatetime).toLocaleDateString()}</strong>.
+                  <p className="text-xs sm:text-sm font-medium leading-tight mb-1">
+                    Due: <strong>Rs. {enroll.remaining_amount}</strong>. Pay after orientation on <strong>{new Date(effectiveStartDatetime).toLocaleDateString()}</strong>.
                   </p>
-                  <p className="text-xs font-bold text-blue-600/80">Google Classroom & WhatsApp unlock after full payment.</p>
+                  <p className="text-[10px] sm:text-xs font-semibold text-blue-700/80">Classroom & WhatsApp unlock fully upon payment.</p>
                 </div>
               </div>
-              <button onClick={() => payRoute(enroll.remaining_amount)} className="w-full md:w-auto shrink-0 bg-blue-600 hover:bg-blue-700 text-white font-black px-6 py-3 rounded-md text-sm whitespace-nowrap transition-colors shadow-sm">
-                Pay Now (Rs. {enroll.remaining_amount})
+              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+                Pay Now
               </button>
             </div>
           )}
-
           {accessTier === 'PARTIAL_OVERDUE' && (
-            <div className="bg-red-50 rounded-lg border border-red-200 p-5 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-start gap-3 text-red-800">
-                <Flame className="w-6 h-6 shrink-0 mt-0.5 animate-pulse" />
+            <div className={`bg-red-50 border border-red-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 shadow-sm`}>
+              <div className="flex items-start gap-2 sm:gap-3 text-red-800">
+                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 mt-0.5 text-red-600" />
                 <div>
-                  <p className="text-sm font-black leading-tight mb-1">Immediate clearance required for full access.</p>
-                  <p className="text-sm font-medium text-red-700">Remaining due: <strong>Rs. {enroll.remaining_amount}</strong></p>
+                  <p className="text-xs sm:text-sm font-bold leading-tight mb-0.5 sm:mb-1">Immediate clearance required.</p>
+                  <p className="text-xs sm:text-sm font-medium text-red-700">Due: <strong>Rs. {enroll.remaining_amount}</strong></p>
                 </div>
               </div>
-              <button onClick={() => payRoute(enroll.remaining_amount)} className="w-full md:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-black px-6 py-3 rounded-md text-sm whitespace-nowrap transition-colors shadow-sm">
-                Clear Due Now
+              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+                Clear Dues
               </button>
             </div>
           )}
 
-          {/* ── ALWAYS-VISIBLE 3 BUTTONS ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-            {/* Button 1: Online Class Link */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
             {(() => {
               const locked = !canUseOnline;
-              const buttonLabel = isOrientation ? 'Join Orientation Session' : 'Join Online Class';
+              const buttonLabel = isOrientation ? 'Join Orientation' : 'Join Live Class';
               const lockedReason =
                 accessTier === 'BLOCKED_NO_PAY' ? 'Pay the 10% seat booking fee to unlock the live class link.' :
-                accessTier === 'BLOCKED_VERIFY' ? 'Your payment is being verified. Access unlocks within 24 hours.' :
-                accessTier === 'PARTIAL_OVERDUE' ? 'Your class has started but payment is overdue. Clear your dues to regain access.' :
-                'Complete payment to access this link.';
+                  accessTier === 'BLOCKED_VERIFY' ? 'Your payment is being verified. Access unlocks within 24 hours.' :
+                    accessTier === 'PARTIAL_OVERDUE' ? 'Your class has started but payment is overdue. Clear your dues.' :
+                      'Complete payment to access this link.';
 
               if (!onlineLink) {
                 return (
-                  <div className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0">
-                    <Video className="w-4 h-4 shrink-0" /> Link Coming Soon
+                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Link Soon
                   </div>
                 );
               }
-
               if (locked) {
                 return (
                   <LockedLinkButton
                     label={buttonLabel}
-                    icon={<Video className="w-4 h-4" />}
+                    icon={<Video className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'BLOCKED_NO_PAY' ? () => payRoute(tenPercentFee) : accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
                 );
               }
-
               if (isFinished) {
                 return (
                   <button
-                    onClick={() => setExpiredModalData({ isOpen: true, link: classroomLink || '' })}
-                    className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-black text-sm bg-slate-800 text-white hover:bg-slate-700 transition-colors shadow-sm min-w-0"
+                    onClick={() => onOpenExpiredModal(classroomLink || '')}
+                    className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-800 text-white hover:bg-slate-700 transition-colors min-w-0 shadow-sm`}
                   >
-                    <Lock className="w-4 h-4" /> Class Ended
+                    <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Class Ended
                   </button>
                 );
               }
-
               return (
                 <a href={onlineLink} target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-black text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-500 hover:to-indigo-500 shadow-md transition-all hover:scale-[1.02] min-w-0"
+                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-blue-700 text-white hover:bg-blue-800 transition-colors min-w-0 shadow-[0_4px_15px_rgba(29,78,216,0.2)]`}
                 >
-                  <Video className="w-4 h-4 shrink-0" /> {buttonLabel}
+                  <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> {buttonLabel}
                 </a>
               );
             })()}
 
-            {/* Button 2: Google Classroom */}
             {(() => {
               const locked = !canUseAll;
               const lockedReason =
                 accessTier === 'BLOCKED_NO_PAY' ? 'Pay the seat booking fee to access Google Classroom.' :
-                accessTier === 'BLOCKED_VERIFY' ? 'Awaiting payment verification.' :
-                accessTier === 'PARTIAL_ACTIVE' ? 'Pay remaining dues after orientation to unlock Classroom.' :
-                accessTier === 'PARTIAL_OVERDUE' ? 'Clear overdue payment to access Google Classroom.' :
-                'Complete payment to access this resource.';
+                  accessTier === 'BLOCKED_VERIFY' ? 'Awaiting payment verification.' :
+                    accessTier === 'PARTIAL_ACTIVE' ? 'Pay remaining dues after orientation to unlock Classroom.' :
+                      accessTier === 'PARTIAL_OVERDUE' ? 'Clear overdue payment to access Google Classroom.' :
+                        'Complete payment to access this resource.';
 
               if (!classroomLink) {
                 return (
-                  <div className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0">
-                    <BookOpen className="w-4 h-4 shrink-0" /> Classroom Soon
+                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Classroom Soon
                   </div>
                 );
               }
-
               if (locked) {
                 return (
                   <LockedLinkButton
-                    label="Google Classroom"
-                    icon={<BookOpen className="w-4 h-4" />}
+                    label="Classroom"
+                    icon={<BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'PARTIAL_ACTIVE' || accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
                 );
               }
-
               return (
                 <a href={classroomLink} target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors shadow-sm min-w-0"
+                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
                 >
-                  <BookOpen className="w-4 h-4 text-blue-500 shrink-0" /> Google Classroom
+                  <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-500 shrink-0" /> Classroom
                 </a>
               );
             })()}
 
-            {/* Button 3: WhatsApp Group */}
             {(() => {
               const locked = !canUseAll;
               const lockedReason =
                 accessTier === 'BLOCKED_NO_PAY' ? 'Pay the seat booking fee to join the WhatsApp group.' :
-                accessTier === 'BLOCKED_VERIFY' ? 'Awaiting payment verification.' :
-                accessTier === 'PARTIAL_ACTIVE' ? 'Pay remaining dues after orientation to join the group.' :
-                accessTier === 'PARTIAL_OVERDUE' ? 'Clear overdue payment to join the WhatsApp group.' :
-                'Complete payment to access this group.';
+                  accessTier === 'BLOCKED_VERIFY' ? 'Awaiting payment verification.' :
+                    accessTier === 'PARTIAL_ACTIVE' ? 'Pay remaining dues after orientation to join the group.' :
+                      accessTier === 'PARTIAL_OVERDUE' ? 'Clear overdue payment to join the WhatsApp group.' :
+                        'Complete payment to access this group.';
 
               if (!whatsappLink) {
                 return (
-                  <div className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0">
-                    <MessageCircle className="w-4 h-4 shrink-0" /> Group Soon
+                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Group Soon
                   </div>
                 );
               }
-
               if (locked) {
                 return (
                   <LockedLinkButton
-                    label="WhatsApp Group"
-                    icon={<MessageCircle className="w-4 h-4" />}
+                    label="WhatsApp"
+                    icon={<MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'PARTIAL_ACTIVE' || accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
                 );
               }
-
               return (
                 <a href={whatsappLink} target="_blank" rel="noopener noreferrer"
-                  className="flex-1 flex justify-center items-center gap-2 px-4 py-3.5 rounded-lg font-bold text-sm bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-sm min-w-0"
+                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
                 >
-                  <MessageCircle className="w-4 h-4 text-emerald-500 shrink-0" /> WhatsApp Group
+                  <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 shrink-0" /> WhatsApp
                 </a>
               );
             })()}
           </div>
 
-          {/* Always-visible GyanHub WhatsApp support */}
           <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer"
-            className="flex justify-center items-center gap-2 bg-white text-slate-600 hover:bg-slate-50 border border-slate-200 px-6 py-3 rounded-lg font-bold text-sm transition-colors shadow-sm"
+            className={`flex justify-center items-center gap-1.5 sm:gap-2 bg-transparent text-slate-500 hover:text-blue-700 px-4 sm:px-6 py-2 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-colors mt-2 sm:mt-3`}
           >
-            <Phone className="w-4 h-4 text-green-500" /> Contact GyanHub Support
+            <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" /> Contact Support
           </a>
         </div>
       </div>
@@ -1504,39 +1845,44 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   );
 }
 
-// ─── MY COURSES VIEW ──────────────────────────────────────────────────────────
-
-function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatches, pendingVerificationOrders, orders, recordingsList, router }: any) {
+// ─── MY COURSES VIEW ───
+function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatches, pendingVerificationOrders, orders, recordingsList, router, onOpenExpiredModal }: any) {
   const isOnline = activeTab === 'Online Courses';
 
   return (
-    <div className="space-y-10 w-full pb-10">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">
           {isOnline ? 'Online Classes' : 'Recordings'}
         </h2>
-        <Link href={isOnline ? "/onlinecourse" : "/recording"} className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-5 py-2.5 rounded-lg font-black text-sm transition-colors shadow-sm">
-          Explore More {isOnline ? 'Courses' : 'Recordings'} <ExternalLink size={16} />
+        <Link href={isOnline ? "/onlinecourse" : "/recording"} className={`flex items-center gap-1.5 sm:gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 sm:px-6 py-2.5 sm:py-3 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-colors shadow-sm`}>
+          Explore {isOnline ? 'Courses' : 'Recordings'} <ExternalLink size={14} className="sm:w-4 sm:h-4" />
         </Link>
       </div>
-      <div className="flex flex-col gap-8 w-full">
+
+      <div className="flex flex-col gap-5 sm:gap-8 w-full">
         {isOnline ? (
           enrollments.length === 0 ? (
-            <p className="text-slate-500 italic p-12 text-center glass-panel rounded-xl shadow-soft font-bold text-lg">No active online course enrollments found.</p>
-          ) : (
-            enrollments.map((course: Enrollment) => {
-              const matched = onlineCourseDetails.find((oc: OnlineCourseExt) => oc.id === course.course_id || oc.title === course.course_name);
-              const batch = courseBatches.find((b: CourseBatch) => b.course_id === course.course_id && b.batch_no === course.batch_no);
-              return <CourseCard key={course.id} course={course} type="online" matched={matched} batch={batch} pendingVerificationOrders={pendingVerificationOrders} router={router} />;
-            })
+            <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+               <BookOpen size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+               <p className="text-slate-500 font-bold text-sm sm:text-lg">No active online class enrollments.</p>
+            </div>
+          ) : (enrollments.map((course: Enrollment) => {
+            const matched = onlineCourseDetails.find((oc: OnlineCourseExt) => oc.id === course.course_id || oc.title === course.course_name);
+            const batch = courseBatches.find((b: CourseBatch) => b.course_id === course.course_id && b.batch_no === course.batch_no);
+            return <CourseCard key={course.id} course={course} type="online" matched={matched} batch={batch} pendingVerificationOrders={pendingVerificationOrders} router={router} onOpenExpiredModal={onOpenExpiredModal} />;
+          })
           )
         ) : (
           !orders || orders.filter((o: Order) => o.order_type === 'recording').length === 0 ? (
-            <p className="text-slate-500 italic p-12 text-center glass-panel rounded-xl shadow-soft font-bold text-lg">No recording orders found.</p>
+            <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+               <Video size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+               <p className="text-slate-500 font-bold text-sm sm:text-lg">No recording orders found.</p>
+            </div>
           ) : (
             orders.filter((o: Order) => o.order_type === 'recording').map((record: Order) => {
               const matched = recordingsList.find((r: RecordingInfo) => r.course_name.toLowerCase() === record.order_name.toLowerCase());
-              return <CourseCard key={record.id} course={record} type="recording" matched={matched} pendingVerificationOrders={pendingVerificationOrders} router={router} />;
+              return <CourseCard key={record.id} course={record} type="recording" matched={matched} pendingVerificationOrders={pendingVerificationOrders} router={router} onOpenExpiredModal={onOpenExpiredModal} />;
             })
           )
         )}
@@ -1545,13 +1891,12 @@ function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatc
   );
 }
 
-// ─── ACCOUNT OVERVIEW ─────────────────────────────────────────────────────────
-
+// ─── ACCOUNT OVERVIEW ───
 function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, orders, enrollments, certificates, onNavigate, pendingVerificationOrders, pendingCoursePayments, activeCourseAccess, recordingOrdersVerified, onlineCourseDetails }: any) {
   const timelineEvents = [
     ...(orders || []).filter((o: Order) => o.order_type?.toLowerCase() === 'recording').map((o: Order) => ({ id: o.id, type: 'Order', title: `Purchased ${o.order_name} recordings`, date: new Date(o.created_at), status: o.status })),
-    ...(enrollments || []).map((e: Enrollment) => ({ id: e.id, type: 'Enrollment', title: `Enrolled in ${e.course_name} online course`, date: new Date(e.created_at), status: e.remaining_amount === 0 ? 'cleared' : 'pending' })),
-    ...(certificates || []).map((c: Certificate) => ({ id: `cert-${c.id}`, type: 'Certificate', title: `Certificate Earned: ${c.syllabus_name || c.name}`, date: new Date(c.issue_date), status: 'verified' }))
+    ...(enrollments || []).map((e: Enrollment) => ({ id: e.id, type: 'Enrollment', title: `Enrolled in ${e.course_name} class`, date: new Date(e.created_at), status: e.remaining_amount === 0 ? 'cleared' : 'pending' })),
+    ...(certificates || []).map((c: Certificate) => ({ id: `cert-${c.id}`, type: 'Certificate', title: `Certificate: ${c.syllabus_name || c.name}`, date: new Date(c.issue_date), status: 'verified' }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime()).slice(0, 5);
 
   const getNextClassCountdown = () => {
@@ -1569,40 +1914,41 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
   const nextClassInfo = getNextClassCountdown();
 
   return (
-    <div className="space-y-10 w-full pb-10">
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-blue-900 rounded-xl p-8 md:p-10 shadow-strong relative overflow-hidden group border border-slate-800">
-        <div className="absolute -right-20 -top-20 w-80 h-80 bg-blue-500/20 rounded-full blur-[80px] pointer-events-none"></div>
+    <div className="space-y-6 sm:space-y-10 w-full pb-10">
+      <div className={`bg-slate-900 ${tokens.radius.card} p-6 sm:p-8 md:p-12 relative overflow-hidden group shadow-[0_20px_50px_rgba(0,0,0,0.15)]`}>
+        <div className="absolute top-0 right-0 w-64 h-64 sm:w-96 sm:h-96 bg-gradient-to-bl from-blue-700/30 to-blue-500/0 blur-3xl pointer-events-none rounded-full"></div>
         <div className="relative z-10 text-white">
-          <h2 className="text-[10px] uppercase tracking-[0.2em] font-black text-blue-300 mb-3 flex items-center gap-2"><Crown size={14} /> My Learning Hub</h2>
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 break-words">
+          <h2 className="text-[9px] sm:text-[10px] uppercase tracking-widest font-extrabold text-blue-400 mb-3 sm:mb-4 flex items-center gap-1.5 sm:gap-2"><Crown size={12} className="sm:w-[14px] sm:h-[14px]" /> My Learning Hub</h2>
+          <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 sm:gap-8 break-words">
             <div>
-              <h3 className="text-4xl md:text-5xl font-black tracking-tighter mb-2">Welcome back, {userName}</h3>
-              <p className="text-blue-100/80 font-medium">Continue building your skills and credentials.</p>
+              <h3 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tighter mb-2 sm:mb-3 text-white leading-tight">Welcome back, {userName}</h3>
+              <p className="text-white/70 font-medium text-sm sm:text-lg tracking-wide">Continue building your skills and credentials.</p>
             </div>
             {nextClassInfo && (
-              <div className="bg-white/10 backdrop-blur-md border border-white/20 p-5 rounded-lg flex flex-col gap-1 min-w-[200px]">
-                <span className="text-[10px] text-blue-200 font-bold uppercase tracking-widest flex items-center gap-1.5"><Calendar size={12} /> Next Class Countdown</span>
-                <span className="text-xl font-black text-white truncate max-w-[220px]">{nextClassInfo.name}</span>
-                <span className="text-sm font-bold text-blue-300 bg-blue-500/20 w-fit px-3 py-1 rounded-md mt-2">Starts in {nextClassInfo.days} days</span>
+              <div onClick={() => onNavigate('Online Courses')} className={`relative bg-gradient-to-br from-orange-500 to-orange-700 border border-orange-400 p-4 sm:p-6 ${tokens.radius.card} flex flex-col gap-1 w-full lg:min-w-[240px] lg:w-auto shadow-[0_0_30px_rgba(249,115,22,0.3)] overflow-hidden isolate cursor-pointer hover:scale-[1.02] transition-transform`}>
+                <div className="absolute -top-10 -right-10 w-24 h-24 sm:w-32 sm:h-32 bg-orange-300 blur-3xl rounded-full opacity-50 -z-10"></div>
+                <span className="text-[9px] sm:text-[10px] text-orange-100 font-extrabold uppercase tracking-widest flex items-center gap-1.5"><Calendar size={10} className="sm:w-3 sm:h-3" /> Next Class</span>
+                <span className="text-lg sm:text-xl font-bold text-white break-words whitespace-normal leading-tight mt-0.5 sm:mt-1 max-w-full">{nextClassInfo.name}</span>
+                <span className={`text-xs sm:text-sm font-bold text-orange-900 bg-white shadow-sm w-fit px-2 sm:px-3 py-1 sm:py-1.5 ${tokens.radius.badge} mt-2 sm:mt-3`}>Starts in {nextClassInfo.days} days</span>
               </div>
             )}
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-10 border-t border-white/10 pt-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mt-8 sm:mt-12 pt-6 sm:pt-8 border-t border-slate-800">
             {[
-              { icon: GraduationCap, value: activeCourseAccess.length, label: 'Active Courses', color: 'bg-blue-500/20 text-blue-300', tab: 'Online Courses' },
-              { icon: Video, value: recordingOrdersVerified.length, label: 'Recordings', color: 'bg-indigo-500/20 text-indigo-300', tab: 'Recording Courses' },
-              { icon: AlertCircle, value: pendingCoursePayments.length, label: 'Pending Dues', color: 'bg-rose-500/20 text-rose-300', tab: 'Online Courses', dot: pendingCoursePayments.length > 0 },
-              { icon: Award, value: certificates?.length || 0, label: 'Certificates', color: 'bg-emerald-500/20 text-emerald-300', tab: 'My Certificates' },
+              { icon: GraduationCap, value: activeCourseAccess.length, label: 'Live Classes', tab: 'Online Courses' },
+              { icon: Video, value: recordingOrdersVerified.length, label: 'Recordings', tab: 'Recording Courses' },
+              { icon: AlertCircle, value: pendingCoursePayments.length, label: 'Pending Dues', tab: 'Online Courses', dot: pendingCoursePayments.length > 0 },
+              { icon: Award, value: certificates?.length || 0, label: 'Certificates', tab: 'My Certificates' },
             ].map((item, i) => {
               const Icon = item.icon;
               return (
-                <div key={i} onClick={() => onNavigate(item.tab)} className="cursor-pointer bg-white/5 hover:bg-white/10 p-5 rounded-lg transition-all group/card border border-white/5 min-h-[140px] flex flex-col relative">
-                  {item.dot && <span className="absolute top-4 right-4 w-2 h-2 bg-rose-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.8)]"></span>}
-                  <div className={`p-3 ${item.color} rounded-md w-fit mb-4 group-hover/card:scale-110 transition-transform`}><Icon className="w-5 h-5" /></div>
+                <div key={i} onClick={() => onNavigate(item.tab)} className={`cursor-pointer bg-slate-800 hover:bg-slate-700 p-4 sm:p-6 ${tokens.radius.card} transition-colors border-t-4 border-t-transparent hover:border-t-blue-500 border-x border-b border-slate-700 min-h-[100px] sm:min-h-[140px] flex flex-col relative group shadow-sm hover:shadow-[0_10px_30px_rgba(29,78,216,0.15)]`}>
+                  {item.dot && <span className="absolute top-3 right-3 w-2.5 h-2.5 bg-red-500 rounded-full shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse"></span>}
+                  <div className={`p-2 sm:p-3 bg-slate-900 text-blue-400 rounded-xl w-fit mb-2 sm:mb-4 group-hover:scale-110 transition-transform`}><Icon className="w-4 h-4 sm:w-5 sm:h-5" /></div>
                   <div className="mt-auto">
-                    <p className="text-3xl font-black text-white leading-none">{item.value}</p>
-                    <p className="text-[10px] uppercase font-bold tracking-widest text-blue-200 mt-2">{item.label}</p>
+                    <p className="text-2xl sm:text-4xl md:text-5xl font-semibold text-white leading-none tracking-tight">{item.value}</p>
+                    <p className="text-[9px] sm:text-[10px] uppercase font-bold tracking-widest text-slate-400 mt-1.5 sm:mt-3">{item.label}</p>
                   </div>
                 </div>
               );
@@ -1611,28 +1957,27 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
         </div>
       </div>
 
-      <div className="bg-white p-6 md:p-8 rounded-xl border border-slate-100 shadow-soft">
-        <h3 className="text-[13px] font-black text-slate-500/80 uppercase tracking-[0.1em] flex items-center gap-2 mb-6"><Activity size={16} /> Recent Timeline</h3>
+      <div className={`bg-gradient-to-br from-white to-slate-50/50 p-5 sm:p-6 md:p-8 ${tokens.radius.card} border border-slate-200/60 shadow-sm`}>
+        <h3 className="text-[10px] sm:text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2 mb-5 sm:mb-8"><Activity size={14} className="sm:w-4 sm:h-4" /> Recent Timeline</h3>
         {timelineEvents.length === 0 ? (
-          <p className="text-slate-400 text-sm font-bold text-center py-10">No recent activity found.</p>
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-10 sm:py-12 px-4 sm:px-6 border border-dashed border-slate-200 text-center">
+            <p className="text-slate-500 text-sm sm:text-base font-semibold">No recent activity found.</p>
+          </div>
         ) : (
-          <div className="space-y-8 relative before:absolute before:inset-y-0 before:left-4 before:w-px before:bg-gradient-to-b before:from-slate-200 before:to-transparent ml-2">
+          <div className="space-y-6 sm:space-y-8 relative before:absolute before:inset-y-0 before:left-4 before:w-px before:bg-slate-200 ml-1 sm:ml-2">
             {timelineEvents.map((event, idx) => {
-              const isCert = event.type === 'Certificate';
-              const isOrder = event.type === 'Order';
-              const iconBg = isCert ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : isOrder ? 'bg-indigo-50 border-indigo-200 text-indigo-600' : 'bg-blue-50 border-blue-200 text-blue-600';
-              const IconComp = isCert ? Award : isOrder ? ShoppingBag : BookOpen;
+              const IconComp = event.type === 'Certificate' ? Award : event.type === 'Order' ? ShoppingBag : BookOpen;
               return (
-                <div key={`${event.id}-${idx}`} className="relative flex items-start gap-6 group">
-                  <div className={`flex items-center justify-center w-8 h-8 rounded-full border-[2px] border-white shadow-sm shrink-0 z-10 ${iconBg}`}>
-                    <IconComp className="w-3.5 h-3.5" />
+                <div key={`${event.id}-${idx}`} className="relative flex items-start gap-4 sm:gap-6 group">
+                  <div className={`flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-full border-[2px] border-white shadow-sm shrink-0 z-10 bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors`}>
+                    <IconComp className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   </div>
-                  <div className="flex-1 bg-white p-5 rounded-lg border border-slate-100 shadow-soft group-hover:shadow-medium group-hover:-translate-y-0.5 transition-all">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                      <span className={`font-black text-[10px] uppercase tracking-widest px-2.5 py-1 rounded-md ${isCert ? 'bg-emerald-100/50 text-emerald-700' : isOrder ? 'bg-indigo-100/50 text-indigo-700' : 'bg-blue-100/50 text-blue-700'}`}>{event.type}</span>
-                      <time className="text-[10px] font-bold text-slate-400">{event.date.toLocaleDateString()}</time>
+                  <div className={`flex-1 bg-white p-4 sm:p-5 ${tokens.radius.card} border border-slate-100 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                      <span className={`w-fit font-extrabold text-[9px] sm:text-[10px] uppercase tracking-widest px-2 py-0.5 sm:px-2.5 sm:py-1 ${tokens.radius.badge} bg-slate-50 border border-slate-100 text-slate-600`}>{event.type}</span>
+                      <time className="text-[10px] sm:text-xs font-semibold text-slate-400 tracking-wide">{event.date.toLocaleDateString()}</time>
                     </div>
-                    <p className="text-sm font-black text-slate-800 leading-snug break-words">{event.title}</p>
+                    <p className="text-xs sm:text-sm font-bold text-slate-800 leading-snug break-words">{event.title}</p>
                   </div>
                 </div>
               );
@@ -1644,33 +1989,31 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
   );
 }
 
-// ─── TRANSACTIONS VIEW ────────────────────────────────────────────────────────
-
-function TransactionsView({ orders, ordersError, enrollments, formatDate }: any) {
-  const [selectedTransaction, setSelectedTransaction] = useState<Order | null>(null);
-
+// ─── TRANSACTIONS VIEW ───
+function TransactionsView({ orders, ordersError, enrollments, formatDate, selectedTransaction, setSelectedTransaction }: any) {
   return (
-    <div className="space-y-10 w-full pb-10">
-      <AnimatePresence>
-        {selectedTransaction && <TransactionModal order={selectedTransaction} enrollments={enrollments} onClose={() => setSelectedTransaction(null)} />}
-      </AnimatePresence>
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">Transactions</h2>
-      <div className="space-y-4 max-w-4xl">
-        {ordersError && <div className="p-4 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100 font-bold">Error loading billing history. Please refresh.</div>}
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Transactions</h2>
+      
+      <div className="space-y-4 sm:space-y-5 max-w-4xl">
+        {ordersError && <div className="p-4 sm:p-5 bg-red-50 text-red-600 text-xs sm:text-sm rounded-xl border border-red-200 font-bold shadow-sm">Error loading billing history. Please refresh.</div>}
+        
         {(!orders || orders.length === 0) ? (
-          <div className="glass-panel p-10 rounded-xl border-dashed text-center text-slate-400 font-bold shadow-soft">No transactions found.</div>
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-12 sm:py-16 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <p className="text-slate-500 font-semibold text-sm sm:text-lg">No transactions found.</p>
+          </div>
         ) : orders.map((order: Order) => (
-          <div key={order.id} onClick={() => setSelectedTransaction(order)} className="cursor-pointer bg-white p-6 rounded-lg border border-slate-100 shadow-soft flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-medium hover:-translate-y-1 hover:border-indigo-200 transition-all group">
-            <div className="flex items-center gap-5 w-full sm:w-auto">
-              <div className="p-4 bg-slate-50 group-hover:bg-indigo-50 text-slate-400 group-hover:text-indigo-600 rounded-md shrink-0 transition-colors border border-slate-100 shadow-inner"><ShoppingBag className="w-5 h-5" /></div>
+          <div key={order.id} onClick={() => setSelectedTransaction(order)} className={`cursor-pointer bg-white p-4 sm:p-5 md:p-6 ${tokens.radius.card} border border-slate-200/60 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5 transition-all group`}>
+            <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
+              <div className="p-2.5 sm:p-3 bg-slate-50 text-slate-400 rounded-xl shrink-0 border border-slate-100 group-hover:bg-blue-50 group-hover:text-blue-600 group-hover:border-blue-100 transition-colors"><ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" /></div>
               <div className="overflow-hidden">
-                <p className="font-black text-slate-900 text-base leading-tight group-hover:text-indigo-800 transition-colors truncate">{order.order_name}</p>
-                <p className="text-[11px] font-bold text-slate-400 mt-1.5 uppercase tracking-widest">{order.order_type} • {formatDate(order.created_at)}</p>
+                <p className="font-bold text-slate-900 text-base sm:text-lg leading-tight truncate group-hover:text-blue-700 transition-colors">{order.order_name}</p>
+                <p className="text-[9px] sm:text-[11px] font-bold text-slate-400 mt-1 sm:mt-1.5 uppercase tracking-widest">{order.order_type} • {formatDate(order.created_at)}</p>
               </div>
             </div>
-            <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 border-slate-100 pt-4 sm:pt-0 shrink-0">
-              <p className="font-black text-xl text-slate-900">Rs. {order.price}</p>
-              <div className="mt-1.5"><StatusBadge status={order.status} /></div>
+            <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 shrink-0">
+              <p className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">Rs. {order.price}</p>
+              <div className="mt-1 sm:mt-2"><StatusBadge status={order.status} /></div>
             </div>
           </div>
         ))}
@@ -1690,53 +2033,54 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white rounded-xl w-full max-w-lg shadow-strong flex flex-col max-h-[90vh] relative overflow-y-auto custom-scrollbar">
-        
-        {/* Absolutely positioned cross symbol prevents cutting off by overflow-hidden */}
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-slate-100 rounded-full shadow-sm hover:bg-slate-200 text-slate-600 z-[60] transition-colors">
-          <X size={20} />
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
+      <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className={`bg-white ${tokens.radius.card} w-full max-w-xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 flex flex-col my-auto relative`}>
+        <button onClick={onClose} className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-600 z-[60] transition-colors">
+          <X size={16} className="sm:w-[18px] sm:h-[18px]" />
         </button>
-
-        <div className="p-8 space-y-6 pt-14">
-          <div className="text-center p-5 bg-gradient-to-b from-slate-50 to-white border border-slate-100 rounded-lg">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{order.order_type} PURCHASE</p>
-            <h4 className="text-2xl font-black text-slate-900 leading-tight break-words">{order.order_name}</h4>
+        <div className="p-6 sm:p-8 md:p-10 space-y-6 sm:space-y-8 pt-12 sm:pt-16">
+          <div className={`text-center p-4 sm:p-6 bg-slate-50 border border-slate-100 ${tokens.radius.badge}`}>
+            <p className="text-[9px] sm:text-[10px] font-extrabold text-blue-700 uppercase tracking-widest mb-1.5 sm:mb-2">{order.order_type} PURCHASE</p>
+            <h4 className="text-xl sm:text-2xl font-extrabold text-slate-900 leading-tight break-words">{order.order_name}</h4>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-100">
-              <p className="text-[10px] uppercase font-black text-emerald-500 tracking-widest mb-1">Amount Paid</p>
-              <p className="font-black text-2xl text-emerald-700">Rs. {order.price}</p>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <div className={`p-4 sm:p-5 bg-white border border-slate-200 ${tokens.radius.badge} shadow-sm`}>
+              <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest mb-1 sm:mb-2">Amount Paid</p>
+              <p className="font-extrabold text-xl sm:text-2xl tracking-tight text-slate-800">Rs. {order.price}</p>
             </div>
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-              <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest mb-1">Date</p>
-              <p className="font-bold text-slate-700 text-lg mt-1">{new Date(order.created_at).toLocaleDateString()}</p>
+            <div className={`p-4 sm:p-5 bg-white border border-slate-200 ${tokens.radius.badge} shadow-sm`}>
+              <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest mb-1 sm:mb-2">Date</p>
+              <p className="font-semibold text-slate-700 text-sm sm:text-lg tracking-tight mt-0.5 sm:mt-1">{new Date(order.created_at).toLocaleDateString()}</p>
             </div>
-            <div className={`col-span-2 p-4 rounded-lg border flex justify-between items-center ${remainingDue > 0 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
-              <p className={`text-[10px] uppercase font-black tracking-widest ${remainingDue > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>Remaining Due Balance</p>
-              <p className={`font-black ${remainingDue > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>{remainingDue > 0 ? `Rs. ${remainingDue}` : 'No due remaining for this course'}</p>
+            <div className={`col-span-2 p-4 sm:p-5 ${tokens.radius.badge} border flex justify-between items-center shadow-sm ${remainingDue > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+              <p className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-widest ${remainingDue > 0 ? 'text-red-600' : 'text-slate-500'}`}>Remaining Due</p>
+              <p className={`font-extrabold text-sm sm:text-lg tracking-tight ${remainingDue > 0 ? 'text-red-700' : 'text-slate-800'}`}>{remainingDue > 0 ? `Rs. ${remainingDue}` : 'No due remaining'}</p>
             </div>
-            <div className="col-span-2 p-4 bg-slate-50 rounded-lg border border-slate-100 flex justify-between items-center">
-              <p className="text-[10px] uppercase font-black text-slate-500 tracking-widest">Status</p>
+            <div className={`col-span-2 p-4 sm:p-5 bg-white ${tokens.radius.badge} border border-slate-200 shadow-sm flex justify-between items-center`}>
+              <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest">Status</p>
               <StatusBadge status={order.status} />
             </div>
           </div>
           <div>
-            <h4 className="text-[11px] font-black uppercase text-slate-400 tracking-widest mb-3">Payment Screenshot</h4>
+            <h4 className="text-[10px] sm:text-[11px] font-extrabold uppercase text-slate-500 tracking-widest mb-2 sm:mb-3">Payment Screenshot</h4>
             {order.screenshot_url ? (
-              <div className="rounded-lg border-2 border-slate-100 overflow-hidden bg-slate-50 p-2">
+              <div className={`border border-slate-200 overflow-hidden bg-slate-50 p-2 ${tokens.radius.badge} shadow-inner`}>
                 <img
                   src={getScreenshotUrl(order.screenshot_url)}
                   alt="Payment Receipt"
-                  className="w-full object-contain rounded-md max-h-[300px]"
+                  className={`w-full object-contain ${tokens.radius.badge} max-h-[250px] sm:max-h-[350px]`}
                 />
               </div>
             ) : (
-              <div className="p-8 border-2 border-dashed border-slate-200 rounded-lg text-center flex flex-col items-center text-slate-400 bg-slate-50">
-                <SearchX size={32} className="mb-2 opacity-50" />
-                <p className="font-bold text-sm">No screenshot attached</p>
+              <div className={`p-8 sm:p-10 border border-dashed border-slate-200 ${tokens.radius.badge} text-center flex flex-col items-center text-slate-400 bg-slate-50`}>
+                <SearchX size={32} className="mb-2 sm:mb-3 opacity-50 sm:w-9 sm:h-9" />
+                <p className="font-bold text-xs sm:text-sm tracking-wide">No screenshot attached</p>
               </div>
             )}
+            
+            <button onClick={onClose} className={`w-full mt-4 sm:mt-6 py-3 sm:py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold ${tokens.radius.button} transition-colors shadow-sm`}>
+              Close Details
+            </button>
           </div>
         </div>
       </motion.div>
@@ -1744,18 +2088,16 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
   );
 }
 
-// ─── CERTIFICATES VIEW ────────────────────────────────────────────────────────
-
+// ─── CERTIFICATES VIEW ───
 function MyCertificatesView({ certificates, formatDate }: any) {
   return (
-    <div className="space-y-10 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900 ml-2">My Certificates</h2>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">My Certificates</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
         {!certificates || certificates.length === 0 ? (
-          <div className="col-span-full flex flex-col items-center justify-center glass-panel rounded-xl py-16 text-slate-400 border-dashed shadow-soft">
-            <Award size={40} className="mb-3 opacity-30 text-emerald-500" />
-            <p className="text-sm font-bold">No certificates earned yet.</p>
-            <p className="text-xs mt-1">Complete courses to unlock verifiable credentials.</p>
+          <div className="col-span-full flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <Award size={40} className="mb-3 sm:mb-4 text-slate-300 sm:w-12 sm:h-12" />
+            <p className="text-sm sm:text-lg font-bold text-slate-500">No certificates earned yet.</p>
           </div>
         ) : certificates.map((cert: Certificate) => (
           <CertificateCard key={cert.id} cert={cert} formatDate={formatDate} />
@@ -1767,6 +2109,7 @@ function MyCertificatesView({ certificates, formatDate }: any) {
 
 function CertificateCard({ cert, formatDate }: { cert: Certificate; formatDate: (d?: string) => string }) {
   const [copied, setCopied] = useState(false);
+
   const handleShare = () => {
     const url = `${window.location.origin}/certificate?name=${encodeURIComponent(cert.name)}&email=${encodeURIComponent(cert.email)}`;
     navigator.clipboard.writeText(url);
@@ -1775,46 +2118,46 @@ function CertificateCard({ cert, formatDate }: { cert: Certificate; formatDate: 
   };
 
   return (
-    <div className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft hover:shadow-medium hover:-translate-y-1 transition-all group flex flex-col gap-4 relative overflow-hidden h-full">
+    <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-8 ${tokens.shadow.card} ${tokens.shadow.hover} flex flex-col gap-4 sm:gap-6 relative overflow-hidden h-full group`}>
+      <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-blue-700 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
       <div className="flex justify-between items-start z-10 relative">
-        <div className="p-4 bg-emerald-50 text-emerald-600 rounded-lg shadow-sm"><Award size={28} /></div>
+        <div className={`p-3 sm:p-4 bg-blue-50 text-blue-700 ${tokens.radius.button} border border-blue-100 shadow-[0_0_15px_rgba(29,78,216,0.1)]`}><Award size={24} className="sm:w-7 sm:h-7" /></div>
         <div className="text-right">
-          <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest">Issue Date</p>
-          <p className="text-sm font-bold text-slate-700">{formatDate(cert.issue_date)}</p>
+          <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest mb-0.5 sm:mb-1">Issue Date</p>
+          <p className="text-xs sm:text-sm font-bold text-slate-700 tracking-wide">{formatDate(cert.issue_date)}</p>
         </div>
       </div>
-      <div className="z-10 relative flex-grow py-2">
-        <h3 className="text-xl font-black text-slate-900 leading-tight mb-2 group-hover:text-emerald-800 transition-colors break-words">{cert.syllabus_name || cert.name}</h3>
-        <p className="text-sm text-slate-500 font-medium">Issued to: <span className="font-black text-slate-800">{cert.name}</span></p>
+      <div className="z-10 relative flex-grow py-1 sm:py-2">
+        <h3 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-tight mb-2 sm:mb-3 break-words tracking-tight">{cert.syllabus_name || cert.name}</h3>
+        <p className="text-xs sm:text-sm text-slate-500 font-medium">Issued to: <span className="font-bold text-slate-800">{cert.name}</span></p>
       </div>
-      <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 flex justify-between items-center mt-auto z-10 relative">
+      <div className={`bg-white p-3 sm:p-4 ${tokens.radius.badge} border border-slate-200 flex justify-between items-center mt-auto z-10 relative shadow-sm`}>
         <div className="overflow-hidden mr-2">
-          <p className="text-[10px] uppercase font-black text-slate-400 tracking-widest mb-0.5">Certificate ID</p>
-          <p className="text-xs font-black text-slate-700 truncate" title={cert.certificate_code}>{cert.certificate_code}</p>
+          <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest mb-0.5 sm:mb-1">Certificate ID</p>
+          <p className="text-[10px] sm:text-xs font-bold text-slate-700 truncate tracking-wide" title={cert.certificate_code}>{cert.certificate_code}</p>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <a href={`/certificate?name=${encodeURIComponent(cert.name)}&email=${encodeURIComponent(cert.email)}`} target="_blank" rel="noopener noreferrer" className="p-2.5 bg-white text-blue-600 hover:bg-blue-50 rounded-md shadow-sm border border-slate-200 hover:border-blue-200 transition-colors" title="View"><ExternalLink size={16} /></a>
-          <button onClick={handleShare} className="p-2.5 bg-white text-slate-600 hover:bg-slate-50 rounded-md shadow-sm border border-slate-200 transition-colors" title="Copy link">
-            {copied ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+        <div className="flex gap-1.5 sm:gap-2 shrink-0">
+          <a href={`/certificate?name=${encodeURIComponent(cert.name)}&email=${encodeURIComponent(cert.email)}`} target="_blank" rel="noopener noreferrer" className={`p-2 sm:p-2.5 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 ${tokens.radius.badge} border border-slate-200 transition-colors`} title="View"><ExternalLink size={14} className="sm:w-4 sm:h-4" /></a>
+          <button onClick={handleShare} className={`p-2 sm:p-2.5 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-700 ${tokens.radius.badge} border border-slate-200 transition-colors`} title="Copy link">
+            {copied ? <Check size={14} className="sm:w-4 sm:h-4 text-green-500" /> : <Copy size={14} className="sm:w-4 sm:h-4" />}
           </button>
         </div>
       </div>
-      <div className="absolute -right-10 -bottom-10 opacity-5 pointer-events-none group-hover:scale-110 transition-transform duration-700"><Award size={140} /></div>
+      <div className="absolute -right-8 -bottom-8 opacity-[0.02] pointer-events-none group-hover:scale-110 transition-transform duration-700"><Award size={150} className="sm:w-[180px] sm:h-[180px]" /></div>
     </div>
   );
 }
 
-// ─── EXPIRED CLASS MODAL ──────────────────────────────────────────────────────
-
+// ─── EXPIRED CLASS MODAL ───
 function ClassExpiredModal({ onClose, classroomLink }: { onClose: () => void; classroomLink: string }) {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-xl w-full max-w-sm overflow-hidden shadow-strong text-center p-8 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 p-2 text-slate-400 hover:bg-slate-100 rounded-full"><X size={20} /></button>
-        <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-inner"><PlayCircle size={32} /></div>
-        <h3 className="text-xl font-black text-slate-800 mb-2">Class is Finished</h3>
-        <p className="text-sm font-medium text-slate-600/80 mb-8">Class is finished, please refer to recordings available in next button.</p>
-        <button onClick={() => { onClose(); window.open(classroomLink || '/recording', '_blank'); }} className="w-full py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-black shadow-[0_0_20px_rgba(79,70,229,0.3)] hover:scale-[1.02] transition-transform">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className={`bg-white ${tokens.radius.card} w-full max-w-md overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 text-center p-8 sm:p-10 relative`}>
+        <button onClick={onClose} className="absolute top-4 sm:top-5 right-4 sm:right-5 p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors"><X size={16} className="sm:w-[18px] sm:h-[18px]"/></button>
+        <div className="w-12 h-12 sm:w-16 sm:h-16 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6 shadow-inner"><PlayCircle size={24} className="sm:w-8 sm:h-8" /></div>
+        <h3 className="text-xl sm:text-2xl font-extrabold text-slate-900 mb-2 sm:mb-3 tracking-tight">Class is Finished</h3>
+        <p className="text-sm sm:text-base font-medium text-slate-500 mb-6 sm:mb-8 leading-relaxed">Class is finished, please refer to recordings available in the next button.</p>
+        <button onClick={() => { onClose(); window.open(classroomLink || '/recording', '_blank'); }} className={`w-full py-3.5 sm:py-4 bg-blue-700 text-white ${tokens.radius.button} text-sm sm:text-base font-bold transition-colors hover:bg-blue-800 shadow-md tracking-wide`}>
           Explore Recordings
         </button>
       </motion.div>
@@ -1822,43 +2165,58 @@ function ClassExpiredModal({ onClose, classroomLink }: { onClose: () => void; cl
   );
 }
 
-// ─── SHARED UI COMPONENTS ─────────────────────────────────────────────────────
-
-function NavButton({ icon, label, active, onClick, color, isTutor }: any) {
-  const themeColor = isTutor ? 'text-green-700' : isTutor === false ? 'text-blue-700' : color || 'text-slate-700';
-  const themeBg = isTutor ? 'bg-green-50/80 border-green-200/50 shadow-sm' : isTutor === false ? 'bg-blue-50/80 border-blue-200/50 shadow-sm' : 'bg-slate-100/80 border-slate-200/50 shadow-sm';
-  const activeIconBg = isTutor ? 'bg-green-200/50' : isTutor === false ? 'bg-blue-200/50' : 'bg-slate-200/80';
+// ─── SHARED UI COMPONENTS ───
+function NavButton({ icon, label, active, onClick, colorTheme = "blue" }: any) {
+  const getThemeClasses = () => {
+    switch (colorTheme) {
+      case 'emerald': return active ? 'bg-emerald-50 text-emerald-700 border-emerald-500 shadow-sm' : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900';
+      case 'violet': return active ? 'bg-violet-50 text-violet-700 border-violet-500 shadow-sm' : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900';
+      default: return active ? 'bg-blue-50 text-blue-700 border-blue-500 shadow-sm' : 'border-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900';
+    }
+  };
+  const iconThemeClass = () => {
+    if (!active) return 'text-slate-400';
+    switch (colorTheme) {
+      case 'emerald': return 'text-emerald-600';
+      case 'violet': return 'text-violet-600';
+      default: return 'text-blue-600';
+    }
+  };
 
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-4 rounded-lg text-[14px] font-black transition-all duration-300 border border-transparent ${active ? `${themeBg} ${themeColor} translate-x-1` : `text-slate-600/80 hover:bg-white hover:shadow-soft hover:text-slate-900 ${color || ''}`}`}>
-      <div className={`p-2 rounded-md transition-colors ${active ? activeIconBg : 'bg-transparent'}`}>{icon}</div>
+    <button onClick={onClick} className={`w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 sm:py-3.5 ${tokens.radius.button} text-xs sm:text-sm font-bold transition-colors duration-200 border-l-[3px] ${getThemeClasses()}`}>
+      <div className={iconThemeClass()}>{icon}</div>
       <span>{label}</span>
     </button>
   );
 }
 
-function MobileNavButton({ icon, label, active, onClick, color, isTutor }: any) {
-  const themeColor = isTutor ? 'text-green-600' : isTutor === false ? 'text-blue-600' : 'text-slate-700';
-  const activeBg = isTutor ? 'bg-green-100' : isTutor === false ? 'bg-blue-100' : 'bg-slate-200';
+function MobileNavButton({ icon, label, active, onClick, colorTheme = "blue" }: any) {
+  const getThemeClasses = () => {
+    switch (colorTheme) {
+      case 'emerald': return active ? 'text-emerald-700 bg-emerald-50 shadow-sm' : 'text-slate-500 bg-transparent';
+      case 'violet': return active ? 'text-violet-700 bg-violet-50 shadow-sm' : 'text-slate-500 bg-transparent';
+      default: return active ? 'text-blue-700 bg-blue-50 shadow-sm' : 'text-slate-500 bg-transparent';
+    }
+  };
+
   return (
-    <motion.button whileTap={{ scale: 0.85 }} onClick={onClick} className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-all min-w-[60px] ${active ? themeColor : `text-slate-400 ${color || ''}`}`}>
-      <div className={`p-2.5 rounded-md ${active ? activeBg : 'bg-transparent'}`}>{icon}</div>
-      <span className="text-[10px] font-black tracking-widest">{label}</span>
+    <motion.button whileTap={{ scale: 0.95 }} onClick={onClick} className={`flex flex-col items-center gap-0.5 sm:gap-1 p-1.5 sm:p-2 ${tokens.radius.button} transition-colors min-w-[50px] sm:min-w-[60px] ${active ? getThemeClasses().split(' ')[0] : 'text-slate-500'}`}>
+      <div className={`p-1.5 sm:p-2 rounded-full ${getThemeClasses().replace(getThemeClasses().split(' ')[0], '')}`}>{icon}</div>
+      {active && <span className="text-[9px] sm:text-[10px] font-extrabold tracking-widest">{label}</span>}
     </motion.button>
   );
 }
 
-function StatCard({ label, value, icon, isTutor }: any) {
-  const themeText = isTutor ? 'text-green-600' : 'text-blue-600';
-  const themeBg = isTutor ? 'bg-green-100' : 'bg-blue-100';
+function StatCard({ label, value, icon }: any) {
   return (
-    <div className={`glass-panel p-6 rounded-xl flex items-center justify-between h-full hover:-translate-y-1 transition-all duration-500 shadow-soft border border-white/60 relative overflow-hidden group`}>
-      <div className={`absolute -right-4 -top-4 opacity-[0.03] scale-150 group-hover:scale-[2] transition-transform duration-700 ${themeText}`}>{icon}</div>
+    <div className={`bg-gradient-to-br from-white to-slate-50/80 p-5 sm:p-6 ${tokens.radius.card} flex items-center justify-between h-full ${tokens.shadow.card} relative overflow-hidden group border-t-4 border-t-transparent hover:border-t-blue-600 transition-all`}>
+      <div className="absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 bg-blue-500/5 rounded-full blur-2xl -mr-8 -mt-8 sm:-mr-10 sm:-mt-10 pointer-events-none transition-all group-hover:bg-blue-500/10"></div>
       <div className="relative z-10 flex flex-col">
-        <p className="text-[11px] font-bold text-slate-500/80 uppercase tracking-widest mb-1">{label}</p>
-        <p className="text-4xl sm:text-5xl font-black tracking-tighter text-slate-900">{value}</p>
+        <p className="text-[9px] sm:text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 sm:mb-2">{label}</p>
+        <p className="text-3xl sm:text-4xl lg:text-5xl font-semibold tracking-tight text-slate-800">{value}</p>
       </div>
-      <div className={`p-4 ${themeBg} ${themeText} rounded-lg shadow-inner relative z-10 shrink-0`}>{icon}</div>
+      <div className={`p-3 sm:p-4 bg-slate-50 text-slate-400 ${tokens.radius.button} border border-slate-100 relative z-10 shrink-0 group-hover:bg-blue-50 group-hover:text-blue-700 group-hover:scale-110 transition-all shadow-sm`}>{icon}</div>
     </div>
   );
 }
@@ -1867,24 +2225,27 @@ function StatusBadge({ status }: { status: string }) {
   const st = status.toLowerCase();
   const isAccepted = st === 'accepted' || st === 'verified';
   const isRejected = st === 'rejected';
+  
   const colorMap = {
-    bg: isAccepted ? 'bg-green-50' : isRejected ? 'bg-red-50' : 'bg-orange-50',
-    border: isAccepted ? 'border-green-200' : isRejected ? 'border-red-200' : 'border-orange-200',
-    text: isAccepted ? 'text-green-700' : isRejected ? 'text-red-700' : 'text-orange-700',
-    dot: isAccepted ? 'bg-green-500' : isRejected ? 'bg-red-500' : 'bg-orange-500',
+    bg: isAccepted ? 'bg-emerald-50 border-emerald-200' : isRejected ? 'bg-red-50 border-red-200' : 'bg-slate-100 border-slate-200',
+    text: isAccepted ? 'text-emerald-700' : isRejected ? 'text-red-700' : 'text-slate-700',
+    icon: isAccepted ? CheckCircle : isRejected ? X : Clock
   };
+
+  const Icon = colorMap.icon;
+
   return (
-    <div className={`flex items-center gap-2 px-3 py-1 ${colorMap.bg} border ${colorMap.border} ${colorMap.text} rounded-md w-fit shadow-sm`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${colorMap.dot} ${isAccepted ? 'animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.8)]' : ''}`}></span>
-      <span className="text-[10px] font-black uppercase tracking-widest">{status}</span>
+    <div className={`flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 ${colorMap.bg} ${colorMap.text} border ${tokens.radius.badge} w-fit shadow-sm`}>
+      <Icon size={10} className="sm:w-3 sm:h-3" />
+      <span className="text-[10px] sm:text-xs font-bold capitalize tracking-wide">{status}</span>
     </div>
   );
 }
 
 function AvatarDisplay({ name, url }: { name: string; url?: string }) {
-  if (url) return <img src={url} className="h-14 w-14 rounded-lg object-cover border border-white shadow-sm" alt={name} />;
+  if (url) return <img src={url} className={`h-10 w-10 sm:h-12 sm:w-12 ${tokens.radius.badge} object-cover border border-slate-200 shadow-sm`} alt={name} />;
   return (
-    <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 border border-white shadow-sm flex items-center justify-center text-white font-black text-xl shrink-0">
+    <div className={`h-10 w-10 sm:h-12 sm:w-12 ${tokens.radius.badge} bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center text-white font-extrabold text-base sm:text-lg shrink-0 shadow-sm`}>
       {name?.charAt(0) || 'T'}
     </div>
   );
@@ -1892,72 +2253,52 @@ function AvatarDisplay({ name, url }: { name: string; url?: string }) {
 
 function SkeletonLoader() {
   return (
-    <div className="p-8 md:p-10 animate-pulse w-full relative z-10">
-      <div className="glass-panel shadow-soft p-8 rounded-xl mb-10 border border-white/60">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div className="w-full md:w-1/2 space-y-4">
-            <div className="h-12 bg-slate-200/60 rounded-md w-3/4"></div>
-            <div className="h-5 bg-slate-200/60 rounded-md w-1/2"></div>
-          </div>
-          <div className="h-14 bg-slate-200/60 rounded-md w-40 shrink-0"></div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 mb-10">
-        <div className="lg:col-span-5 h-56 bg-white/40 border border-white/60 rounded-xl"></div>
-        <div className="lg:col-span-7 h-56 bg-white/40 border border-white/60 rounded-xl"></div>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <div className="lg:col-span-7 h-[500px] bg-white/40 border border-white/60 rounded-xl"></div>
-        <div className="lg:col-span-5 h-[500px] bg-white/40 border border-white/60 rounded-xl"></div>
+    <div className="p-4 sm:p-8 md:p-10 animate-pulse w-full relative z-10">
+      <div className={`bg-slate-200/60 ${tokens.radius.card} h-40 sm:h-48 mb-6 sm:mb-10`}></div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 mb-6 sm:mb-10">
+        <div className={`lg:col-span-5 h-48 sm:h-64 bg-slate-200/60 ${tokens.radius.card}`}></div>
+        <div className={`lg:col-span-7 h-48 sm:h-64 bg-slate-200/60 ${tokens.radius.card}`}></div>
       </div>
     </div>
   );
 }
 
-// ─── TUTOR MARQUEE ────────────────────────────────────────────────────────────
-
+// ─── TUTOR MARQUEE ───
 function TutorsMarquee({ tutors, className = "h-full" }: { tutors: Tutor[]; className?: string }) {
   const router = useRouter();
   if (!tutors || tutors.length === 0) return null;
   const displayTutors = [...tutors, ...tutors, ...tutors].map((t, i) => ({ ...t, _key: `${i}-${t.id}` }));
 
   return (
-    <div className={`glass-panel shadow-soft rounded-xl p-6 md:p-8 flex flex-col relative overflow-hidden ${className}`}>
-      <div className="flex justify-between items-center mb-6 shrink-0 z-10 relative bg-white/50 backdrop-blur-md p-4 rounded-lg border border-white/80 shadow-sm">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-          <Sparkles size={16} className="text-blue-500" /> Verified Premium Tutors
+    <div className={`bg-gradient-to-br from-white to-slate-50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-8 flex flex-col relative overflow-hidden ${className} ${tokens.shadow.card}`}>
+      <div className="flex justify-between items-center mb-4 sm:mb-6 shrink-0 z-10 relative">
+        <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2">
+          <Sparkles size={14} className="text-orange-500 sm:w-4 sm:h-4" /> Verified Premium Tutors
         </h3>
       </div>
       <div className="flex-grow w-full overflow-hidden relative flex items-center">
-        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-[#F0F4F8]/80 to-transparent z-10 pointer-events-none"></div>
-        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-[#F0F4F8]/80 to-transparent z-10 pointer-events-none"></div>
-        <div className="flex w-max animate-marquee gap-6 h-full items-stretch py-2">
+        <div className="absolute left-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-r from-white to-transparent z-10 pointer-events-none"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-12 sm:w-20 bg-gradient-to-l from-white to-transparent z-10 pointer-events-none"></div>
+        <div className="flex w-max animate-marquee gap-4 sm:gap-6 h-full items-stretch py-2 sm:py-3">
           {displayTutors.map((tutor) => (
             <div key={tutor._key} onClick={() => router.push(`/tutors/${tutor.id}`)}
-              className="flex flex-col justify-between gap-4 bg-white/80 backdrop-blur-md border border-white p-6 rounded-lg w-[420px] h-full shrink-0 shadow-soft hover:shadow-medium hover:-translate-y-1 transition-all duration-500 cursor-pointer"
+              className={`flex flex-col justify-between gap-3 sm:gap-5 bg-white border border-slate-100 p-4 sm:p-6 ${tokens.radius.card} w-[280px] sm:w-[380px] h-full shrink-0 shadow-sm hover:shadow-md hover:-translate-y-1 hover:border-blue-300 transition-all cursor-pointer`}
             >
-              <div className="flex items-center gap-4">
-                <AvatarDisplay name={tutor.name} url={tutor.avatar_url} />
+              <div className="flex items-center gap-3 sm:gap-4">
+                <AvatarDisplay name={tutor.name || 'Tutor'} url={tutor.avatar_url} />
                 <div className="overflow-hidden w-full">
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-black text-slate-900 text-lg truncate">{tutor.name}</p>
-                    {tutor.verified && <CheckCircle size={16} className="text-blue-500 fill-blue-50 shrink-0" />}
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <p className="font-extrabold text-slate-900 text-sm sm:text-lg truncate tracking-tight">{tutor.name}</p>
+                    <CheckCircle size={14} className="text-blue-600 shrink-0 sm:w-4 sm:h-4" />
                   </div>
-                  <p className="text-sm text-blue-600 font-bold truncate mt-0.5">{tutor.subject?.join(', ') || 'Various Subjects'}</p>
+                  <p className="text-[10px] sm:text-xs text-slate-500 font-bold truncate tracking-wide mt-0.5 sm:mt-1">
+                    {tutor.education || (tutor.subject && tutor.subject.length > 0 ? tutor.subject[0] : 'Premium Tutor')}
+                  </p>
                 </div>
               </div>
-              <p className="text-sm text-slate-600/80 line-clamp-3 mt-2 flex-grow font-medium leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-600 line-clamp-2 flex-grow font-medium leading-relaxed">
                 {tutor.bio ? `"${tutor.bio}"` : "Passionate about teaching and helping students achieve their best."}
               </p>
-              <div className="flex items-center justify-between mt-2 text-xs text-slate-500 font-bold border-t border-slate-100 pt-4">
-                <span className="flex items-center gap-1.5 truncate max-w-[60%] bg-slate-50 px-2.5 py-1.5 rounded-md border border-slate-100">
-                  <GraduationCap size={14} className="shrink-0 text-slate-400" /><span className="truncate">{tutor.education || 'N/A'}</span>
-                </span>
-                <span className="flex items-center gap-1.5 shrink-0 bg-green-50 px-2.5 py-1.5 rounded-md border border-green-100">
-                  <Clock size={14} className="text-green-500" />
-                  {tutor.availability ? <span className="text-green-700">Available</span> : <span className="text-slate-500">Busy</span>}
-                </span>
-              </div>
             </div>
           ))}
         </div>
@@ -1969,45 +2310,46 @@ function TutorsMarquee({ tutors, className = "h-full" }: { tutors: Tutor[]; clas
 function LatestCourseCard({ course, isTutor }: { course: OnlineCourse; isTutor: boolean }) {
   const offerPrice = course.fee;
   const originalPrice = course.discount > 0 ? Math.round(course.fee / (1 - course.discount / 100)) : course.fee;
+  const slug = course.course_code ? course.course_code : encodeURIComponent(course.title);
+
   return (
-    <div onClick={() => window.location.href = `/onlinecourse/${encodeURIComponent(course.title)}`}
-      className={`glass-panel rounded-xl overflow-hidden flex flex-col h-full shadow-soft ${isTutor ? 'hover:border-green-400' : 'hover:border-blue-400'} hover:shadow-strong transition-all duration-500 cursor-pointer group relative`}
+    <div onClick={() => window.location.href = `/onlinecourse/${slug}`}
+      className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden flex flex-col h-full ${tokens.shadow.card} ${tokens.shadow.hover} cursor-pointer group relative`}
     >
-      {/* Cover Image */}
-      <div className="relative w-full h-44 bg-slate-100 overflow-hidden shrink-0 border-b border-slate-100">
-        <div className="absolute top-3 right-3 bg-orange-500/90 backdrop-blur-sm text-white text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-md shadow-sm z-20">Featured</div>
+      <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-400 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+      <div className="relative w-full h-36 sm:h-48 bg-slate-100 overflow-hidden shrink-0 border-b border-slate-100">
+        <div className={`absolute top-3 sm:top-4 right-3 sm:right-4 bg-white text-slate-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5 ${tokens.radius.badge} shadow-md z-20`}>Featured</div>
         {course.discount > 0 && (
-          <div className="absolute top-5 left-[-35px] bg-red-500 text-white font-black text-[10px] uppercase px-10 py-1.5 rotate-[-45deg] shadow-lg z-20 tracking-widest">{course.discount}% OFF</div>
+          <div className="absolute top-5 sm:top-6 left-[-35px] sm:left-[-40px] bg-red-600 text-white font-extrabold text-[9px] sm:text-[11px] uppercase px-10 sm:px-12 py-1 sm:py-1.5 rotate-[-45deg] z-20 tracking-widest shadow-lg">{course.discount}% OFF</div>
         )}
         {course.cover_pic ? (
           <img src={course.cover_pic} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-slate-300 bg-slate-100"><BookOpen size={40} /></div>
+          <div className="w-full h-full flex items-center justify-center text-slate-300"><BookOpen size={40} className="sm:w-12 sm:h-12"/></div>
         )}
       </div>
-
-      <div className="flex flex-col justify-between w-full h-full p-6">
-        <h4 className="font-black text-xl mb-4 tracking-tight leading-tight break-words">{course.title}</h4>
-        <div className="flex flex-col gap-2 mb-6 border-b border-slate-100 pb-4">
+      <div className="flex flex-col justify-between w-full h-full p-4 sm:p-6 md:p-8">
+        <h4 className="font-extrabold text-xl sm:text-2xl mb-3 sm:mb-5 tracking-tight leading-tight break-words group-hover:text-blue-700 transition-colors">{course.title}</h4>
+        <div className="flex flex-col gap-2 sm:gap-3 mb-4 sm:mb-6 border-b border-slate-100 pb-3 sm:pb-5">
           {[
             { val: course.tutor_name, icon: User, label: 'Instructor' },
             { val: course.duration, icon: Activity, label: 'Duration' },
-            { val: course.start_datetime ? new Date(course.start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : null, icon: Calendar, label: 'Starts' },
+            { val: course.start_datetime ? new Date(course.start_datetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null, icon: Calendar, label: 'Starts' },
             { val: course.timing, icon: Clock, label: 'Timing' },
             { val: course.difficulty_level, icon: Star, label: 'Level' },
           ].filter(i => i.val).map(({ val, icon: Icon, label }) => (
-            <p key={label} className="text-xs font-bold text-slate-600 flex items-center gap-2">
-              <Icon size={14} className={`shrink-0 ${isTutor ? 'text-green-500' : 'text-blue-500'}`} /> {label}: {val}
+            <p key={label} className="text-[10px] sm:text-xs font-bold text-slate-600 flex items-center gap-1.5 sm:gap-2">
+              <Icon size={12} className={`shrink-0 text-slate-400 sm:w-3.5 sm:h-3.5`} /> <span className="text-slate-400 uppercase tracking-widest text-[9px] sm:text-[10px] w-16 sm:w-20">{label}</span> <span className="truncate">{val}</span>
             </p>
           ))}
         </div>
-        <div className="flex flex-wrap items-end justify-between gap-3 mt-auto">
-          <div className="flex items-end gap-3">
-            <p className="text-slate-900 font-black text-2xl tracking-tighter">Rs. {offerPrice.toLocaleString()}</p>
-            {course.discount > 0 && <p className="text-slate-400/80 font-bold text-xs line-through mb-1">Rs. {originalPrice.toLocaleString()}</p>}
+        <div className="flex flex-wrap items-end justify-between gap-2 sm:gap-3 mt-auto">
+          <div className="flex items-end gap-1.5 sm:gap-2">
+            <p className="text-slate-900 font-extrabold text-xl sm:text-2xl tracking-tight">Rs. {offerPrice.toLocaleString()}</p>
+            {course.discount > 0 && <p className="text-slate-400 font-bold text-xs sm:text-sm line-through mb-0.5 sm:mb-1">Rs. {originalPrice.toLocaleString()}</p>}
           </div>
-          <button onClick={(e) => { e.stopPropagation(); window.location.href='/onlinecourse'; }} className={`p-2.5 rounded-lg border ${isTutor ? 'bg-green-50 border-green-200 text-green-600 hover:bg-green-100' : 'bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100'} transition-colors shadow-sm hover:-translate-y-0.5`} title="See all online courses">
-            <ExternalLink size={16} />
+          <button onClick={(e) => { e.stopPropagation(); window.location.href = `/onlinecourse/${slug}`; }} className={`p-2 sm:p-2.5 border bg-slate-50 border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 ${tokens.radius.badge} transition-all shadow-sm`} title="See course details">
+            <ExternalLink size={16} className="sm:w-[18px] sm:h-[18px]"/>
           </button>
         </div>
       </div>
@@ -2017,30 +2359,43 @@ function LatestCourseCard({ course, isTutor }: { course: OnlineCourse; isTutor: 
 
 function ApplicationsModal({ applications, onClose, onReject, onUpdateStatus }: any) {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-strong flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-          <h3 className="text-xl font-black text-slate-800">Applications ({applications.length})</h3>
-          <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-100 text-slate-500"><X size={20} /></button>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
+      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className={`bg-white ${tokens.radius.card} w-full max-w-3xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 flex flex-col max-h-[90vh] my-auto`}>
+        <div className="p-5 sm:p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+          <h3 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">Applications ({applications.length})</h3>
+          <button onClick={onClose} className="p-2 bg-white rounded-full border border-slate-200 hover:bg-slate-100 text-slate-500 transition-colors shadow-sm"><X size={16} className="sm:w-[18px] sm:h-[18px]" /></button>
         </div>
-        <div className="flex-grow overflow-y-auto custom-scrollbar p-6 space-y-4">
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-5 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
           {applications.length === 0 ? (
-            <p className="text-center text-slate-400 font-bold py-10">No applications yet.</p>
-          ) : applications.map((app: ApplicationJoin) => (
-            <div key={app.id} className="bg-white border border-slate-100 rounded-lg p-5 shadow-soft flex flex-col sm:flex-row justify-between gap-4">
-              <div>
-                <p className="font-black text-slate-900 text-base">{app.tutors?.name || app.applicant_name || 'Applicant'}</p>
-                <p className="text-sm text-slate-500 font-medium mt-1">{app.vacancies?.subject} — {app.vacancies?.location}</p>
-                <div className="mt-2"><StatusBadge status={app.status} /></div>
-              </div>
-              <div className="flex gap-2 shrink-0 items-start">
-                {app.status !== 'accepted' && (
-                  <button onClick={() => onUpdateStatus(app.id, 'accepted')} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-colors">Accept</button>
-                )}
-                <button onClick={() => onReject(app.id)} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-black rounded-lg border border-red-200 transition-colors">Remove</button>
-              </div>
+            <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-12 sm:py-16 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+              <p className="text-slate-500 font-bold text-sm sm:text-lg">No applications yet.</p>
             </div>
-          ))}
+          ) : applications.map((app: ApplicationJoin) => {
+            const tutorId = app.tutors?.id;
+            const rawTutorName = app.tutors?.name || app.applicant_name || 'applicant';
+            const tutorSlug = `${tutorId}-${rawTutorName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+            return (
+              <div key={app.id} className={`bg-white border border-slate-200 ${tokens.radius.card} p-4 sm:p-6 flex flex-col sm:flex-row justify-between gap-4 sm:gap-5 shadow-sm hover:shadow-md transition-shadow`}>
+                <div>
+                  <Link
+                    href={tutorId ? `/tutors/${tutorSlug}` : '#'}
+                    className="font-extrabold text-slate-900 text-base sm:text-lg hover:text-blue-700 transition-colors cursor-pointer inline-block tracking-tight"
+                  >
+                    {rawTutorName}
+                  </Link>
+                  <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1 tracking-wide">{app.vacancies?.subject} — {app.vacancies?.location}</p>
+                  <div className="mt-2 sm:mt-3"><StatusBadge status={app.status} /></div>
+                </div>
+                <div className="flex gap-2 shrink-0 items-start">
+                  {app.status !== 'accepted' && (
+                    <button onClick={() => onUpdateStatus(app.id, 'accepted')} className={`px-4 py-2 sm:px-5 sm:py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm`}>Accept</button>
+                  )}
+                  <button onClick={() => onReject(app.id)} className={`px-4 py-2 sm:px-5 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-600 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} border border-slate-200 transition-colors shadow-sm`}>Remove</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </motion.div>
     </div>
@@ -2049,20 +2404,22 @@ function ApplicationsModal({ applications, onClose, onReject, onUpdateStatus }: 
 
 function TutorApplicationsModal({ applications, onClose }: any) {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-      <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-xl w-full max-w-2xl overflow-hidden shadow-strong flex flex-col max-h-[90vh]">
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
-          <h3 className="text-xl font-black text-slate-800">My Applications ({applications.length})</h3>
-          <button onClick={onClose} className="p-2 bg-white rounded-full shadow-sm hover:bg-slate-100 text-slate-500"><X size={20} /></button>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 sm:p-6 overflow-y-auto">
+      <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className={`bg-white ${tokens.radius.card} w-full max-w-3xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.15)] border border-slate-200 flex flex-col max-h-[90vh] my-auto`}>
+        <div className="p-5 sm:p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50 shrink-0">
+          <h3 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">My Applications ({applications.length})</h3>
+          <button onClick={onClose} className="p-2 bg-white rounded-full border border-slate-200 hover:bg-slate-100 text-slate-500 transition-colors shadow-sm"><X size={16} className="sm:w-[18px] sm:h-[18px]" /></button>
         </div>
-        <div className="flex-grow overflow-y-auto custom-scrollbar p-6 space-y-4">
+        <div className="flex-grow overflow-y-auto custom-scrollbar p-5 sm:p-6 md:p-8 space-y-4 sm:space-y-5">
           {applications.length === 0 ? (
-            <p className="text-center text-slate-400 font-bold py-10">No applications submitted yet.</p>
+            <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-12 sm:py-16 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+              <p className="text-slate-500 font-bold text-sm sm:text-lg">No applications submitted yet.</p>
+            </div>
           ) : applications.map((app: TutorApplicationJoin) => (
-            <div key={app.id} className="bg-white border border-slate-100 rounded-lg p-5 shadow-soft flex justify-between items-center">
+            <div key={app.id} className={`bg-white border border-slate-200 ${tokens.radius.card} p-4 sm:p-6 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4`}>
               <div>
-                <p className="font-black text-slate-900">{app.vacancies?.subject}</p>
-                <p className="text-sm text-slate-500 font-medium mt-1 flex items-center gap-1"><MapPin size={12} />{app.vacancies?.location}</p>
+                <p className="font-extrabold text-slate-900 text-base sm:text-lg tracking-tight">{app.vacancies?.subject}</p>
+                <p className="text-xs sm:text-sm text-slate-500 font-bold mt-0.5 sm:mt-1 flex items-center gap-1 sm:gap-1.5 tracking-wide"><MapPin size={12} className="text-slate-400 sm:w-3.5 sm:h-3.5" />{app.vacancies?.location}</p>
               </div>
               <StatusBadge status={app.status} />
             </div>
@@ -2073,41 +2430,43 @@ function TutorApplicationsModal({ applications, onClose }: any) {
   );
 }
 
-function DashboardView({ userId, userName, count, course, verifiedTutors, onShowApplications, globalRecordings }: any) {
+function DashboardView({ userId, userName, count, course, verifiedTutors, onShowApplications, globalRecordings, router }: any) {
   return (
-    <div className="space-y-8 w-full pb-10">
+    <div className="space-y-6 sm:space-y-10 w-full pb-10">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <h2 className="text-5xl font-black tracking-tighter text-slate-900">Student Hub</h2>
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Student Hub</h2>
         {count > 0 && (
-          <button onClick={onShowApplications} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all hover:scale-[1.02]">
-            <Users size={18} /> {count} Applicant{count !== 1 ? 's' : ''}
+          <button onClick={onShowApplications} className={`w-full md:w-auto flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 sm:px-6 py-2.5 sm:py-3 ${tokens.radius.button} font-bold text-sm transition-colors shadow-md`}>
+            <Users size={16} className="sm:w-[18px] sm:h-[18px]"/> {count} Applicant{count !== 1 ? 's' : ''}
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
         {course && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:gap-5">
             <div className="flex justify-between items-center px-1">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                <Sparkles size={16} className="text-orange-500" /> Featured Online Course
+              <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2">
+                <Sparkles size={14} className="text-blue-600 sm:w-4 sm:h-4" /> Featured Live Course
               </h3>
-              <Link href="/onlinecourse" className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1">
-                See All <ArrowRight size={14} />
+              <Link href="/onlinecourse" className="text-[9px] sm:text-[10px] font-extrabold text-blue-700 uppercase tracking-wide hover:underline flex items-center gap-1">
+                See All <ArrowRight size={12} className="sm:w-[14px] sm:h-[14px]" />
               </Link>
             </div>
             <LatestCourseCard course={course} isTutor={false} />
           </div>
         )}
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5 sm:gap-6">
           {verifiedTutors?.length > 0 && (
-            <div className="glass-panel rounded-xl p-6 shadow-soft flex flex-col gap-4">
-              <h3 className="text-sm font-black text-slate-600 uppercase tracking-widest flex items-center gap-2"><Sparkles size={14} className="text-blue-500" /> Find Tutors</h3>
-              <Link href="/tutors" className="w-full text-center bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 font-black py-4 rounded-xl transition-colors text-sm">Browse {verifiedTutors.length}+ Verified Tutors</Link>
+            <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-8 flex flex-col gap-4 sm:gap-5 ${tokens.shadow.card}`}>
+              <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2"><Sparkles size={14} className="text-orange-500 sm:w-4 sm:h-4" /> Find Tutors</h3>
+              <Link href="/tutors" className={`w-full text-center bg-white hover:bg-blue-50 text-slate-700 hover:text-blue-700 hover:border-blue-200 border border-slate-200 font-bold py-3 sm:py-3.5 ${tokens.radius.button} transition-colors text-sm shadow-sm hover:shadow-md`}>Browse {verifiedTutors.length}+ Verified Tutors</Link>
             </div>
           )}
-          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} />}
+          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} router={router} />}
         </div>
       </div>
+
       {verifiedTutors?.length > 0 && <TutorsMarquee tutors={verifiedTutors} />}
     </div>
   );
@@ -2121,146 +2480,159 @@ function VacanciesView({ vacancies, onUpdate, onDelete, onViewApplicants }: any)
   const handleSave = async () => { if (editingId) { await onUpdate({ ...editData, id: editingId } as Vacancy); setEditingId(null); } };
 
   return (
-    <div className="space-y-8 w-full pb-10">
-      <div className="flex items-center justify-between">
-        <h2 className="text-5xl font-black tracking-tighter text-slate-900">My Postings</h2>
-        <Link href="/post-tuition" className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all hover:scale-[1.02]">
-          <Plus size={18} /> Post Vacancy
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">My Postings</h2>
+        <Link href="/post-tuition" className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-5 sm:px-6 py-2.5 sm:py-3 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}>
+          <Plus size={16} className="sm:w-[18px] sm:h-[18px]"/> Post Vacancy
         </Link>
       </div>
-      {vacancies.length === 0 ? (
-        <div className="glass-panel p-12 rounded-xl text-center text-slate-400 shadow-soft border-dashed">
-          <FileText size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">No active vacancies. Post one to find tutors!</p>
-        </div>
-      ) : vacancies.map((v: Vacancy) => (
-        <div key={v.id} className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft flex flex-col gap-4">
-          {editingId === v.id ? (
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { key: 'subject', label: 'Subject' }, { key: 'location', label: 'Location' },
-                { key: 'salary_range', label: 'Salary' }, { key: 'class_time', label: 'Class Time' },
-                { key: 'class_level', label: 'Class Level' }
-              ].map(({ key, label }) => (
-                <div key={key} className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
-                  <input value={(editData as any)[key] || ''} onChange={e => setEditData(p => ({ ...p, [key]: e.target.value }))}
-                    className="border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium outline-none focus:border-blue-400 bg-slate-50"
-                  />
-                </div>
-              ))}
-              <div className="col-span-2 flex gap-3">
-                <button onClick={handleSave} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-black text-sm transition-colors"><Save size={16} /> Save</button>
-                <button onClick={() => setEditingId(null)} className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-lg font-black text-sm transition-colors"><X size={16} /> Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-black text-xl text-slate-900">{v.subject}</h3>
-                    {v.urgent && <span className="bg-red-100 text-red-700 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex items-center gap-1"><Flame size={10} />Urgent</span>}
+
+      <div className="space-y-5 sm:space-y-6">
+        {vacancies.length === 0 ? (
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <FileText size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+            <p className="font-bold text-slate-500 text-sm sm:text-lg">No active vacancies. Post one to find tutors!</p>
+          </div>
+        ) : vacancies.map((v: Vacancy) => (
+          <div key={v.id} className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-6 md:p-8 flex flex-col gap-4 sm:gap-5 ${tokens.shadow.card} group hover:border-blue-300 transition-colors relative`}>
+            {editingId === v.id ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 relative z-10">
+                {[
+                  { key: 'subject', label: 'Subject' }, { key: 'location', label: 'Location' },
+                  { key: 'salary_range', label: 'Salary' }, { key: 'class_time', label: 'Class Time' },
+                  { key: 'class_level', label: 'Class Level' }
+                ].map(({ key, label }) => (
+                  <div key={key} className="flex flex-col gap-1 sm:gap-1.5">
+                    <label className="text-[9px] sm:text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">{label}</label>
+                    <input value={(editData as any)[key] || ''} onChange={e => setEditData(p => ({ ...p, [key]: e.target.value }))}
+                      className={`border border-slate-200 ${tokens.radius.badge} px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-bold outline-none focus:border-blue-400 bg-white shadow-sm`}
+                    />
                   </div>
-                  <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
-                    <span className="flex items-center gap-1"><MapPin size={13} />{v.location}</span>
-                    <span className="flex items-center gap-1"><Clock size={13} />{v.class_time}</span>
-                    <span className="flex items-center gap-1"><DollarSign size={13} />{v.salary_range}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => onViewApplicants(v.id)} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-black text-xs hover:bg-blue-100 transition-colors">
-                    <Users size={14} /> {v.applicant_count || 0}
-                  </button>
-                  <button onClick={() => startEdit(v)} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors"><Edit2 size={15} /></button>
-                  <button onClick={() => onDelete(v.id)} className="p-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg border border-red-200 transition-colors"><Trash2 size={15} /></button>
+                ))}
+                <div className="col-span-1 sm:col-span-2 flex flex-col sm:flex-row gap-2 sm:gap-3 mt-1 sm:mt-2">
+                  <button onClick={handleSave} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-5 sm:px-6 py-2.5 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}><Save size={14} className="sm:w-4 sm:h-4" /> Save</button>
+                  <button onClick={() => setEditingId(null)} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-5 sm:px-6 py-2.5 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}><X size={14} className="sm:w-4 sm:h-4" /> Cancel</button>
                 </div>
               </div>
-            </>
-          )}
-        </div>
-      ))}
+            ) : (
+              <>
+                <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-3 sm:gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                      <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight">{v.subject}</h3>
+                      {v.urgent && <span className={`bg-red-50 text-red-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1 border border-red-100 shadow-sm`}><Flame size={10} className="sm:w-3 sm:h-3" />Urgent</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-3 sm:gap-5 text-xs sm:text-sm text-slate-600 font-bold">
+                      <span className="flex items-center gap-1 sm:gap-1.5"><MapPin size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.location}</span>
+                      <span className="flex items-center gap-1 sm:gap-1.5"><Clock size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.class_time}</span>
+                      <span className="flex items-center gap-1 sm:gap-1.5"><DollarSign size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.salary_range}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 sm:gap-2 shrink-0 mt-3 sm:mt-0 w-full sm:w-auto justify-end">
+                    <button onClick={() => onViewApplicants(v.id)} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-blue-50 text-blue-700 border border-blue-200 ${tokens.radius.badge} font-extrabold text-[10px] sm:text-xs tracking-wide uppercase hover:bg-blue-100 transition-colors shadow-sm`}>
+                      <Users size={14} className="sm:w-4 sm:h-4"/> {v.applicant_count || 0}
+                    </button>
+                    <button onClick={() => startEdit(v)} className={`p-2 sm:p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 ${tokens.radius.badge} transition-colors shadow-sm`} title="Edit"><Edit2 size={14} className="sm:w-4 sm:h-4"/></button>
+                    <button onClick={() => onDelete(v.id)} className={`p-2 sm:p-2.5 bg-white border border-slate-200 hover:bg-red-50 text-slate-600 hover:text-red-600 ${tokens.radius.badge} transition-colors shadow-sm`} title="Delete"><Trash2 size={14} className="sm:w-4 sm:h-4"/></button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 function StudentMyRequestsView({ requests, onCancel, onChatAdmin }: any) {
   return (
-    <div className="space-y-8 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900">My Requests</h2>
-      {requests.length === 0 ? (
-        <div className="glass-panel p-12 rounded-xl text-center text-slate-400 shadow-soft border-dashed">
-          <Users size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">No tutor requests sent yet.</p>
-          <Link href="/tutors" className="mt-4 inline-block text-blue-600 font-black text-sm hover:underline">Browse Tutors →</Link>
-        </div>
-      ) : requests.map((req: StudentRequest) => (
-        <div key={req.id} className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft flex flex-col sm:flex-row justify-between gap-4">
-          <div>
-            <p className="font-black text-slate-900 text-base">{req.tutors?.name || 'Tutor'}</p>
-            <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-500 font-medium">
-              <span className="flex items-center gap-1"><GraduationCap size={13} />{req.grade}</span>
-              {req.preferred_mode && <span className="flex items-center gap-1"><Monitor size={13} />{req.preferred_mode}</span>}
-              {req.tutors?.location && <span className="flex items-center gap-1"><MapPin size={13} />{req.tutors.location}</span>}
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">My Requests</h2>
+
+      <div className="space-y-5 sm:space-y-6">
+        {requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <Users size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+            <p className="font-bold text-slate-500 text-sm sm:text-lg">No tutor requests sent yet.</p>
+            <Link href="/tutors" className="mt-2 sm:mt-3 text-blue-700 font-extrabold text-xs sm:text-sm uppercase tracking-wide hover:underline flex items-center gap-1">Browse Tutors <ArrowRight size={12} className="sm:w-[14px] sm:h-[14px]" /></Link>
+          </div>
+        ) : requests.map((req: StudentRequest) => (
+          <div key={req.id} className={`bg-white border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-6 md:p-8 flex flex-col sm:flex-row justify-between gap-4 sm:gap-5 ${tokens.shadow.card} group hover:border-blue-300 transition-colors relative overflow-hidden`}>
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+            <div>
+              <p className="font-extrabold text-slate-900 text-lg sm:text-xl tracking-tight">{req.tutors?.name || 'Tutor'}</p>
+              <div className="flex flex-wrap gap-3 sm:gap-4 mt-2 sm:mt-3 text-xs sm:text-sm text-slate-600 font-bold">
+                <span className="flex items-center gap-1 sm:gap-1.5"><GraduationCap size={14} className="text-slate-400 sm:w-4 sm:h-4" />{req.grade}</span>
+                {req.preferred_mode && <span className="flex items-center gap-1 sm:gap-1.5"><Monitor size={14} className="text-slate-400 sm:w-4 sm:h-4" />{req.preferred_mode}</span>}
+                {req.tutors?.location && <span className="flex items-center gap-1 sm:gap-1.5"><MapPin size={14} className="text-slate-400 sm:w-4 sm:h-4" />{req.tutors.location}</span>}
+              </div>
+              {req.message && <p className={`text-xs sm:text-sm text-slate-600 mt-3 sm:mt-4 italic bg-slate-50 ${tokens.radius.badge} p-3 sm:p-4 border border-slate-100`}>"{req.message}"</p>}
+              <div className="mt-3 sm:mt-4"><StatusBadge status={req.status} /></div>
             </div>
-            {req.message && <p className="text-sm text-slate-600 mt-3 italic bg-slate-50 rounded-lg p-3 border border-slate-100">"{req.message}"</p>}
-            <div className="mt-3"><StatusBadge status={req.status} /></div>
+            <div className="flex flex-row sm:flex-col gap-2 shrink-0 mt-3 sm:mt-0 w-full sm:w-auto">
+              <button onClick={onChatAdmin} className={`flex-1 sm:flex-none px-4 py-2 sm:px-5 sm:py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm flex items-center justify-center sm:justify-start gap-1.5`}><MessageCircle size={14} className="sm:w-4 sm:h-4"/>Support</button>
+              <button onClick={() => onCancel(req.id)} className={`flex-1 sm:flex-none px-4 py-2 sm:px-5 sm:py-2.5 bg-white hover:bg-red-50 text-slate-700 hover:text-red-700 border border-slate-200 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm`}>Cancel</button>
+            </div>
           </div>
-          <div className="flex gap-2 shrink-0 items-start">
-            <button onClick={onChatAdmin} className="px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-black rounded-lg transition-colors flex items-center gap-1.5"><MessageCircle size={14} />Chat Support</button>
-            <button onClick={() => onCancel(req.id)} className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-black rounded-lg transition-colors">Cancel</button>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
-function TutorDashboardView({ profile, userId, userName, userEmail, applicationsCount, requestsCount, course, urgentVacancies, onShowApplications, onShowRequests, onFixProfile, globalRecordings }: any) {
+function TutorDashboardView({ profile, userId, userName, userEmail, applicationsCount, requestsCount, course, urgentVacancies, onShowApplications, onShowRequests, onFixProfile, globalRecordings, router }: any) {
   const completeness = profile ? [profile.bio, profile.education, profile.experience, profile.contact_num, profile.location, profile.hour_rate, profile.mode_of_teaching].filter(Boolean).length : 0;
   const pct = Math.round((completeness / 7) * 100);
 
   return (
-    <div className="space-y-8 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900">Tutor Hub</h2>
+    <div className="space-y-6 sm:space-y-10 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Tutor Hub</h2>
 
       {pct < 100 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 flex items-start gap-4">
-          <AlertCircle className="w-6 h-6 text-amber-500 shrink-0 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-black text-amber-800">Profile {pct}% complete — finish your profile to attract more students.</p>
-            <div className="w-full bg-amber-100 rounded-full h-2 mt-3"><div className="bg-amber-500 h-2 rounded-full transition-all" style={{ width: `${pct}%` }}></div></div>
+        <div className={`bg-orange-50 border border-orange-200 ${tokens.radius.card} p-5 sm:p-6 md:p-8 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-5 shadow-sm`}>
+          <div className="hidden sm:flex w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-full items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
           </div>
-          <button onClick={onFixProfile} className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white text-xs font-black px-4 py-2 rounded-lg transition-colors">Complete Profile</button>
+          <div className="flex-1 w-full">
+            <p className="font-bold text-orange-900 text-sm sm:text-base">Profile {pct}% complete — finish it to attract more students.</p>
+            <div className="w-full bg-orange-200/50 rounded-full h-1.5 sm:h-2 mt-2 sm:mt-3 overflow-hidden"><div className="bg-orange-500 h-1.5 sm:h-2 rounded-full transition-all duration-1000" style={{ width: `${pct}%` }}></div></div>
+          </div>
+          <button onClick={onFixProfile} className={`shrink-0 bg-white border border-orange-200 text-orange-800 hover:bg-orange-100 text-xs sm:text-sm font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} transition-colors shadow-sm w-full sm:w-auto`}>Complete Profile</button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard label="My Applications" value={applicationsCount} icon={<Briefcase size={24} />} isTutor={true} />
-        <StatCard label="Student Requests" value={requestsCount} icon={<Users size={24} />} isTutor={true} />
-        <StatCard label="Urgent Vacancies" value={urgentVacancies?.length || 0} icon={<Flame size={24} />} isTutor={true} />
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
+        <StatCard label="Applications" value={applicationsCount} icon={<Briefcase size={20} className="sm:w-6 sm:h-6" />} />
+        <StatCard label="Requests" value={requestsCount} icon={<Users size={20} className="sm:w-6 sm:h-6" />} />
+        <div className="col-span-2 md:col-span-1">
+          <StatCard label="Urgent Vacancies" value={urgentVacancies?.length || 0} icon={<Flame size={20} className="sm:w-6 sm:h-6" />} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="flex flex-col gap-6">
-          <div className="flex flex-col gap-4">
-            <button onClick={onShowApplications} className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(16,185,129,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-              <Briefcase size={20} /> View My Applications
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+        <div className="flex flex-col gap-5 sm:gap-6">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <button onClick={onShowApplications} className={`w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 sm:py-4 ${tokens.radius.button} font-bold transition-colors flex items-center justify-center gap-2 shadow-sm text-sm sm:text-base`}>
+              <Briefcase size={18} className="sm:w-5 sm:h-5" /> View My Applications
             </button>
-            <button onClick={onShowRequests} className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-400 hover:to-indigo-500 text-white py-4 rounded-xl font-black shadow-[0_10px_25px_rgba(59,130,246,0.3)] hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-              <Users size={20} /> View Student Requests
+            <button onClick={onShowRequests} className={`w-full bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-3.5 sm:py-4 ${tokens.radius.button} font-bold transition-colors flex items-center justify-center gap-2 shadow-sm text-sm sm:text-base`}>
+              <Users size={18} className="sm:w-5 sm:h-5" /> View Student Requests
             </button>
           </div>
-          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} />}
+          {globalRecordings?.length > 0 && <RecommendedRecordingsBox recordings={globalRecordings} router={router} />}
         </div>
+
         {course && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-4 sm:gap-5">
             <div className="flex justify-between items-center px-1">
-              <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                <Sparkles size={16} className="text-orange-500" /> Featured Online Course
+              <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2">
+                <Sparkles size={14} className="text-blue-600 sm:w-4 sm:h-4" /> Featured Course
               </h3>
-              <Link href="/onlinecourse" className="text-xs font-black text-blue-600 hover:underline flex items-center gap-1">
-                See All <ArrowRight size={14} />
+              <Link href="/onlinecourse" className="text-[9px] sm:text-[10px] font-extrabold text-blue-700 uppercase tracking-wide hover:underline flex items-center gap-1">
+                See All <ArrowRight size={12} className="sm:w-[14px] sm:h-[14px]" />
               </Link>
             </div>
             <LatestCourseCard course={course} isTutor={true} />
@@ -2269,16 +2641,16 @@ function TutorDashboardView({ profile, userId, userName, userEmail, applications
       </div>
 
       {urgentVacancies?.length > 0 && (
-        <div className="glass-panel rounded-xl p-6 shadow-soft">
-          <h3 className="text-sm font-black text-red-600 uppercase tracking-widest mb-4 flex items-center gap-2"><Flame size={16} className="animate-pulse" /> Urgent Vacancies</h3>
-          <div className="space-y-3">
+        <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-8 ${tokens.shadow.card}`}>
+          <h3 className="text-[10px] sm:text-[11px] font-extrabold text-slate-500 uppercase tracking-widest mb-4 sm:mb-5 flex items-center gap-1.5 sm:gap-2"><Flame size={14} className="text-red-500 sm:w-4 sm:h-4" /> Urgent Vacancies</h3>
+          <div className="space-y-3 sm:space-y-4">
             {urgentVacancies.slice(0, 3).map((v: Vacancy) => (
-              <div key={v.id} className="flex items-center justify-between bg-red-50 border border-red-100 p-4 rounded-lg">
+              <div key={v.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white border border-slate-100 p-4 sm:p-5 ${tokens.radius.badge} shadow-sm hover:shadow-md hover:border-red-200 transition-all group`}>
                 <div>
-                  <p className="font-black text-slate-900">{v.subject}</p>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1"><MapPin size={11} />{v.location} • {v.class_level}</p>
+                  <p className="font-extrabold text-slate-900 text-base sm:text-lg group-hover:text-red-700 transition-colors">{v.subject}</p>
+                  <p className="text-xs sm:text-sm text-slate-500 font-bold mt-1 flex items-center gap-1.5"><MapPin size={12} className="text-slate-400 sm:w-3.5 sm:h-3.5" />{v.location} <span className="text-slate-300 mx-1">•</span> {v.class_level}</p>
                 </div>
-                <Link href={`/vacancies/${v.id}`} className="text-xs font-black text-red-600 hover:underline flex items-center gap-1">Apply <ExternalLink size={11} /></Link>
+                <Link href={`/vacancies/${v.id}`} className="w-full sm:w-auto text-[10px] sm:text-xs font-extrabold uppercase tracking-widest text-blue-700 hover:text-blue-800 flex items-center justify-center gap-1 bg-blue-50 px-4 py-2.5 sm:py-2 rounded-lg">Apply <ExternalLink size={12} className="sm:w-[14px] sm:h-[14px]"/></Link>
               </div>
             ))}
           </div>
@@ -2295,73 +2667,83 @@ function AvailableVacanciesView({ vacancies }: any) {
   );
 
   return (
-    <div className="space-y-8 w-full pb-10">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h2 className="text-5xl font-black tracking-tighter text-slate-900">Job Board</h2>
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-5">
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Job Board</h2>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search subject or location…"
-          className="border border-slate-200 bg-white rounded-xl px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 shadow-soft w-full sm:w-64"
+          className={`border border-slate-200 bg-white ${tokens.radius.button} px-4 py-2.5 sm:px-5 sm:py-3.5 text-xs sm:text-sm font-bold outline-none focus:border-blue-500 shadow-sm w-full sm:w-80`}
         />
       </div>
-      {filtered.length === 0 ? (
-        <div className="glass-panel p-12 rounded-xl text-center text-slate-400 shadow-soft"><p className="font-bold">No vacancies found.</p></div>
-      ) : filtered.map((v: Vacancy) => (
-        <div key={v.id} className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft flex flex-col sm:flex-row justify-between gap-4 hover:shadow-medium hover:-translate-y-0.5 transition-all">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <h3 className="font-black text-xl text-slate-900">{v.subject}</h3>
-              {v.urgent && <span className="bg-red-100 text-red-700 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex items-center gap-1"><Flame size={10} />Urgent</span>}
-            </div>
-            <div className="flex flex-wrap gap-4 text-sm text-slate-500 font-medium">
-              <span className="flex items-center gap-1"><MapPin size={13} />{v.location}</span>
-              <span className="flex items-center gap-1"><GraduationCap size={13} />{v.class_level}</span>
-              <span className="flex items-center gap-1"><Clock size={13} />{v.class_time}</span>
-              <span className="flex items-center gap-1"><DollarSign size={13} />{v.salary_range}</span>
-            </div>
-            {v.description && <p className="text-sm text-slate-600 mt-3 line-clamp-2">{v.description}</p>}
+
+      <div className="space-y-5 sm:space-y-6">
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <SearchX size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+            <p className="font-bold text-slate-500 text-sm sm:text-lg">No vacancies found.</p>
           </div>
-          <div className="shrink-0">
-            <Link href={`/vacancies/${v.id}`} className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl font-black text-sm shadow-md transition-all hover:scale-[1.02]">
-              Apply <ExternalLink size={14} />
-            </Link>
+        ) : filtered.map((v: Vacancy) => (
+          <div key={v.id} className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-6 md:p-8 ${tokens.shadow.card} flex flex-col sm:flex-row justify-between gap-4 sm:gap-5 hover:border-blue-300 transition-colors relative overflow-hidden group`}>
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 tracking-tight group-hover:text-blue-700 transition-colors">{v.subject}</h3>
+                {v.urgent && <span className={`bg-red-50 text-red-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1 border border-red-100 shadow-sm`}><Flame size={10} className="sm:w-3 sm:h-3" />Urgent</span>}
+              </div>
+              <div className="flex flex-wrap gap-3 sm:gap-5 text-xs sm:text-sm text-slate-600 font-bold">
+                <span className="flex items-center gap-1 sm:gap-1.5"><MapPin size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.location}</span>
+                <span className="flex items-center gap-1 sm:gap-1.5"><GraduationCap size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.class_level}</span>
+                <span className="flex items-center gap-1 sm:gap-1.5"><Clock size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.class_time}</span>
+                <span className="flex items-center gap-1 sm:gap-1.5"><DollarSign size={14} className="text-slate-400 sm:w-4 sm:h-4" />{v.salary_range}</span>
+              </div>
+              {v.description && <p className="text-xs sm:text-sm text-slate-500 mt-3 sm:mt-4 line-clamp-2 leading-relaxed font-medium">"{v.description}"</p>}
+            </div>
+            <div className="shrink-0 flex items-center mt-3 sm:mt-0 w-full sm:w-auto">
+              <Link href={`/vacancies/${v.id}`} className={`w-full flex items-center justify-center gap-2 bg-white border border-slate-200 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 text-slate-700 px-5 sm:px-6 py-2.5 sm:py-3 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-all shadow-sm`}>
+                View Details <ExternalLink size={14} className="sm:w-4 sm:h-4"/>
+              </Link>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
 function StudentRequestsView({ requests, onUpdateStatus, onChatAdmin }: any) {
   return (
-    <div className="space-y-8 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900">Student Requests</h2>
-      {requests.length === 0 ? (
-        <div className="glass-panel p-12 rounded-xl text-center text-slate-400 shadow-soft border-dashed">
-          <Users size={40} className="mx-auto mb-3 opacity-30" />
-          <p className="font-bold">No student requests yet. Complete your profile to attract students.</p>
-        </div>
-      ) : requests.map((req: StudentRequest) => (
-        <div key={req.id} className="bg-white border border-slate-100 rounded-xl p-6 shadow-soft flex flex-col sm:flex-row justify-between gap-4">
-          <div>
-            <p className="font-black text-slate-900 text-base">{req.tutors?.name || 'Tutor'}</p>
-            <div className="flex flex-wrap gap-3 mt-2 text-sm text-slate-500 font-medium">
-              <span className="flex items-center gap-1"><Phone size={13} />{req.phone}</span>
-              <span className="flex items-center gap-1"><GraduationCap size={13} />{req.grade}</span>
-              {req.preferred_mode && <span className="flex items-center gap-1"><Monitor size={13} />{req.preferred_mode}</span>}
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Student Requests</h2>
+
+      <div className="space-y-5 sm:space-y-6">
+        {requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
+            <Users size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
+            <p className="font-bold text-slate-500 text-sm sm:text-lg">No student requests yet. Complete your profile to attract students.</p>
+          </div>
+        ) : requests.map((req: StudentRequest) => (
+          <div key={req.id} className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-6 md:p-8 ${tokens.shadow.card} flex flex-col sm:flex-row justify-between gap-4 sm:gap-5 relative overflow-hidden group hover:border-blue-300 transition-colors`}>
+            <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+            <div>
+              <p className="font-extrabold text-slate-900 text-lg sm:text-xl tracking-tight">{req.tutors?.name || 'Tutor'}</p>
+              <div className="flex flex-wrap gap-3 sm:gap-4 mt-2 sm:mt-3 text-xs sm:text-sm text-slate-600 font-bold">
+                <span className="flex items-center gap-1 sm:gap-1.5"><GraduationCap size={14} className="text-slate-400 sm:w-4 sm:h-4" />{req.grade}</span>
+                {req.preferred_mode && <span className="flex items-center gap-1 sm:gap-1.5"><Monitor size={14} className="text-slate-400 sm:w-4 sm:h-4" />{req.preferred_mode}</span>}
+              </div>
+              {req.message && <p className={`text-xs sm:text-sm text-slate-600 mt-3 sm:mt-4 italic bg-white ${tokens.radius.badge} p-3 sm:p-4 border border-slate-100 shadow-sm`}>"{req.message}"</p>}
+              <div className="mt-3 sm:mt-4"><StatusBadge status={req.status} /></div>
             </div>
-            {req.message && <p className="text-sm text-slate-600 mt-3 italic bg-slate-50 rounded-lg p-3 border border-slate-100">"{req.message}"</p>}
-            <div className="mt-3"><StatusBadge status={req.status} /></div>
+            <div className="flex flex-row sm:flex-col gap-2 shrink-0 mt-3 sm:mt-0">
+              {req.status !== 'accepted' && (
+                <button onClick={() => onUpdateStatus(req.id, 'accepted')} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 text-white text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm`}><Check size={14} className="sm:w-4 sm:h-4" />Accept</button>
+              )}
+              {req.status !== 'rejected' && (
+                <button onClick={() => onUpdateStatus(req.id, 'rejected')} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm`}><X size={14} className="sm:w-4 sm:h-4" />Decline</button>
+              )}
+              <button onClick={onChatAdmin} className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-white hover:bg-blue-50 hover:text-blue-700 border border-slate-200 text-slate-600 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest ${tokens.radius.button} transition-colors shadow-sm`}><MessageCircle size={14} className="sm:w-4 sm:h-4" />Support</button>
+            </div>
           </div>
-          <div className="flex flex-col gap-2 shrink-0">
-            {req.status !== 'accepted' && (
-              <button onClick={() => onUpdateStatus(req.id, 'accepted')} className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-lg transition-colors justify-center"><Check size={14} />Accept</button>
-            )}
-            {req.status !== 'rejected' && (
-              <button onClick={() => onUpdateStatus(req.id, 'rejected')} className="flex items-center gap-1.5 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 text-xs font-black rounded-lg transition-colors justify-center"><X size={14} />Decline</button>
-            )}
-            <button onClick={onChatAdmin} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-black rounded-lg transition-colors justify-center"><MessageCircle size={14} />Support</button>
-          </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -2394,19 +2776,20 @@ function MyInfoView({ profile, onSave }: any) {
   ];
 
   return (
-    <div className="space-y-8 w-full pb-10">
-      <h2 className="text-5xl font-black tracking-tighter text-slate-900">My Info</h2>
-      <div className="bg-white border border-slate-100 rounded-xl p-8 shadow-soft space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <div className="space-y-6 sm:space-y-8 w-full pb-10">
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">My Info</h2>
+      
+      <div className={`bg-gradient-to-br from-white to-slate-50/50 border border-slate-200/60 ${tokens.radius.card} p-5 sm:p-8 md:p-10 ${tokens.shadow.card} space-y-6 sm:space-y-8`}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
           {fields.map(({ key, label, type }) => (
-            <div key={key} className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
+            <div key={key} className="flex flex-col gap-1.5 sm:gap-2">
+              <label className="text-[9px] sm:text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">{label}</label>
               {key === 'subject' ? (
                 <input
                   type="text"
                   value={form.subject ? (Array.isArray(form.subject) ? form.subject.join(', ') : form.subject) : ''}
                   onChange={e => setForm(p => ({ ...p, subject: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
-                  className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 focus:bg-blue-50/30 bg-slate-50 transition-all"
+                  className={`border border-slate-200 ${tokens.radius.button} px-4 sm:px-5 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold outline-none focus:border-blue-500 focus:bg-white bg-white shadow-sm transition-colors`}
                   placeholder="Math, Science, English"
                 />
               ) : (
@@ -2414,41 +2797,41 @@ function MyInfoView({ profile, onSave }: any) {
                   type={type}
                   value={(form as any)[key] || ''}
                   onChange={e => setForm(p => ({ ...p, [key]: type === 'number' ? (e.target.value ? Number(e.target.value) : '') : e.target.value }))}
-                  className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 focus:bg-blue-50/30 bg-slate-50 transition-all"
+                  className={`border border-slate-200 ${tokens.radius.button} px-4 sm:px-5 py-2.5 sm:py-3.5 text-xs sm:text-sm font-bold outline-none focus:border-blue-500 focus:bg-white bg-white shadow-sm transition-colors`}
                 />
               )}
             </div>
           ))}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Bio</label>
+        <div className="flex flex-col gap-1.5 sm:gap-2">
+          <label className="text-[9px] sm:text-[10px] font-extrabold text-slate-500 uppercase tracking-widest">Bio</label>
           <textarea
             value={form.bio || ''}
             onChange={e => setForm(p => ({ ...p, bio: e.target.value }))}
-            rows={4}
-            className="border border-slate-200 rounded-lg px-4 py-3 text-sm font-medium outline-none focus:border-blue-400 bg-slate-50 resize-none transition-all"
+            rows={5}
+            className={`border border-slate-200 ${tokens.radius.button} px-4 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm font-bold outline-none focus:border-blue-500 bg-white shadow-sm resize-none transition-colors leading-relaxed`}
             placeholder="Tell students about yourself…"
           />
         </div>
 
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2 cursor-pointer">
+        <div className="flex items-center gap-3 sm:gap-4 bg-white p-4 sm:p-5 border border-slate-200 shadow-sm rounded-2xl">
+          <label className="flex items-center gap-2.5 sm:gap-3 cursor-pointer">
             <input type="checkbox" checked={form.availability || false} onChange={e => setForm(p => ({ ...p, availability: e.target.checked }))}
-              className="w-4 h-4 accent-green-600"
+              className="w-4 h-4 sm:w-5 sm:h-5 accent-blue-700 rounded cursor-pointer"
             />
-            <span className="font-black text-slate-700 text-sm">Currently Available for Students</span>
+            <span className="font-extrabold text-slate-800 text-sm sm:text-base">Currently Available for Students</span>
           </label>
         </div>
 
-        <div className="flex items-center gap-4 pt-4 border-t border-slate-100">
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 disabled:opacity-50 text-white px-8 py-3.5 rounded-xl font-black text-sm shadow-md transition-all hover:scale-[1.02]">
-            {saving ? <RotateCcw size={16} className="animate-spin" /> : <Save size={16} />}
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 pt-6 sm:pt-8 border-t border-slate-200/60">
+          <button onClick={handleSave} disabled={saving} className={`w-full sm:w-auto flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-colors shadow-md tracking-wide`}>
+            {saving ? <RotateCcw size={16} className="animate-spin sm:w-[18px] sm:h-[18px]" /> : <Save size={16} className="sm:w-[18px] sm:h-[18px]" />}
             {saving ? 'Saving…' : 'Save Changes'}
           </button>
           {saved && (
-            <span className="flex items-center gap-1.5 text-emerald-600 text-sm font-black">
-              <CheckCircle size={16} /> Saved successfully!
+            <span className="w-full sm:w-auto flex items-center justify-center gap-1.5 text-slate-600 text-xs sm:text-sm font-bold bg-green-50 text-green-700 px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-lg border border-green-200">
+              <CheckCircle size={14} className="text-green-600 sm:w-4 sm:h-4" /> Saved successfully
             </span>
           )}
         </div>

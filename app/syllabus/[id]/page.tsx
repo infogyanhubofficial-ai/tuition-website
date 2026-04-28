@@ -22,7 +22,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // --- TYPES ---
 interface TopicDay {
-  day: number;
+  day: number | string;
   title: string;
   topics: string[];
 }
@@ -41,10 +41,13 @@ interface Tutor {
   name: string | null;
   designation: string | null;
   signature_url: string | null;
+  tutor_pic_url: string | null;
+  tutor_bio: string | null;
 }
 
 interface Course {
   id: string;
+  course_code: string;
   title: string;
   category: string | null;
   difficulty_level: string | null;
@@ -55,7 +58,7 @@ interface Course {
   cover_pic: string | null;
   demo_video_url: string | null;
   learning_outcomes: string[] | null;
-  syllabus: SyllabusData | any | null; 
+  syllabus: SyllabusData | null; 
   tutor_id?: number | null; 
   tutor_name: string | null;
   tutor_pic_url: string | null;
@@ -72,32 +75,115 @@ function getYouTubeEmbedUrl(url: string | null) {
     : null;
 }
 
-// --- REAL DATA FETCHING ---
-async function getCourseAndTutorData(id: string): Promise<{ course: Course | null, tutor: Tutor | null }> {
-  
-  const { data: courseData, error: courseError } = await supabase
-    .from('online_courses')
-    .select('*')
-    .eq('tutor_id', id)
-    .limit(1)
-    .single();
+// 🟢 SMART JSON PARSER: Fixes mismatched or "undefined" database JSON
+function normalizeSyllabus(raw: any): SyllabusData | null {
+  if (!raw) return null;
 
-  if (courseError || !courseData) {
-    console.error("Failed to fetch course data by tutor_id:", courseError?.message);
+  let data = raw;
+  
+  // 1. Handle double-stringified JSON (Very common in Supabase)
+  while (typeof data === 'string') {
+    try { data = JSON.parse(data); } catch (e) { break; }
+  }
+
+  // 2. Extract sections array regardless of how it is nested
+  let sectionsArray: any[] = [];
+  if (data && Array.isArray(data.sections)) {
+    sectionsArray = data.sections;
+  } else if (Array.isArray(data)) {
+    // If the whole thing is just an array, figure out if it's an array of modules or an array of days
+    if (data[0] && (data[0].days || data[0].sections || data[0].title)) {
+       sectionsArray = data; // Looks like an array of sections
+    } else {
+       // Looks like an array of days, wrap it in a single section
+       sectionsArray = [{ title: "Course Curriculum", days: data }];
+    }
+  }
+
+  if (sectionsArray.length === 0) return null;
+
+  // 3. Deep Normalize to strictly guarantee NO "undefined" appears in UI
+  const normalizedSections: SyllabusSection[] = sectionsArray.map((sec: any, sIdx: number) => {
+    
+    let daysArray: any[] = [];
+    if (Array.isArray(sec.days)) daysArray = sec.days;
+    else if (Array.isArray(sec.topics)) daysArray = [sec]; // fallback if they skipped the "day" level
+
+    const normalizedDays: TopicDay[] = daysArray.map((d: any, dIdx: number) => {
+       let topicsArray: any[] = [];
+       if (Array.isArray(d.topics)) topicsArray = d.topics;
+       else if (typeof d.topics === 'string') topicsArray = [d.topics];
+       else if (Array.isArray(d.items)) topicsArray = d.items; // common alternative name
+       else topicsArray = ["Topic details provided in class"]; // ultimate fallback
+
+       return {
+          day: d.day || dIdx + 1,
+          title: d.title || d.name || `Topic ${dIdx + 1}`,
+          topics: topicsArray.map(t => typeof t === 'string' ? t : (t.title || t.name || "Content Segment"))
+       };
+    });
+
+    return {
+       title: sec.title || sec.module || sec.name || `Module ${sIdx + 1}`,
+       days: normalizedDays
+    };
+  });
+
+  return { sections: normalizedSections };
+}
+
+// --- REAL DATA FETCHING FROM SYLLABI_V2 ---
+async function getCourseAndTutorData(courseCode: string): Promise<{ course: Course | null, tutor: Tutor | null }> {
+  const decodedCode = decodeURIComponent(courseCode).trim();
+  const isNumeric = /^\d+$/.test(decodedCode);
+
+  // 1. Safe Lookup in syllabi_v2
+  let query = supabase
+    .from('syllabi_v2')
+    .select(`*, online_tutors (*)`);
+
+  if (isNumeric) {
+    query = query.or(`id.eq.${Number(decodedCode)},course_code.ilike.${decodedCode}`);
+  } else {
+    query = query.ilike("course_code", decodedCode);
+  }
+
+  const { data: syllabusData, error: courseError } = await query.maybeSingle();
+
+  if (courseError || !syllabusData) {
     return { course: null, tutor: null };
   }
 
-  const { data: tutorData, error: tutorError } = await supabase
-    .from('online_tutors')
-    .select('*')
-    .eq('id', id)
-    .single();
+  // 2. Safely extract tutor
+  const tutorData = Array.isArray(syllabusData.online_tutors) 
+    ? syllabusData.online_tutors[0] 
+    : syllabusData.online_tutors;
 
-  if (tutorError) {
-    console.error("Failed to fetch tutor data:", tutorError?.message);
-  }
+  // 3. Run the Smart JSON Parser on the correct column name
+  const safeSyllabus = normalizeSyllabus(syllabusData.syllabus_content);
 
-  return { course: courseData as Course, tutor: tutorData };
+  // 4. Map to UI format
+  const mappedCourse: Course = {
+    id: syllabusData.id.toString(),
+    course_code: syllabusData.course_code,
+    title: syllabusData.name || '',
+    category: syllabusData.category || null,
+    difficulty_level: syllabusData.difficulty_level || null,
+    description: syllabusData.description || null,
+    duration: syllabusData.duration || 'TBA',
+    timing: null, 
+    start_datetime: null,
+    cover_pic: syllabusData.cover_pic || null,
+    demo_video_url: syllabusData.demo_video_url || null,
+    learning_outcomes: syllabusData.learning_outcomes || null,
+    syllabus: safeSyllabus, // 🟢 FIX: Uses the cleaned JSON data
+    tutor_id: syllabusData.tutor_id || null,
+    tutor_name: tutorData?.name || null,
+    tutor_pic_url: tutorData?.tutor_pic_url || null,
+    tutor_bio: tutorData?.tutor_bio || null,
+  };
+
+  return { course: mappedCourse, tutor: tutorData };
 }
 
 // --- GENERATE HTML CONTENT FOR PDF COMPILER ---
@@ -110,7 +196,7 @@ function generateSyllabusHTML(
 ) {
   let htmlSyllabusContent = '';
 
-  if (syllabusData && syllabusData.sections) {
+  if (syllabusData && syllabusData.sections && syllabusData.sections.length > 0) {
     syllabusData.sections.forEach(section => {
       htmlSyllabusContent += `<div class="pdf-avoid-break" style="page-break-inside: avoid; break-inside: avoid;"><h3 style="color: #0f172a; border-bottom: 2px solid #cbd5e1; padding-bottom: 5px; margin-top: 25px; font-size: 18px;">${section.title}</h3></div>`;
       section.days.forEach(day => {
@@ -151,9 +237,15 @@ function generateSyllabusHTML(
 }
 
 // --- MAIN PAGE COMPONENT ---
-export default async function CourseSyllabusPage({ params }: { params: { id: string } }) {
+export default async function CourseSyllabusPage({ params }: { params: Promise<any> }) {
   const resolvedParams = await params;
-  const { course, tutor } = await getCourseAndTutorData(resolvedParams.id);
+  const urlParam = resolvedParams.courseCode || resolvedParams.id;
+  
+  if (!urlParam) {
+    notFound();
+  }
+
+  const { course, tutor } = await getCourseAndTutorData(urlParam);
 
   if (!course) {
     notFound();
@@ -165,7 +257,7 @@ export default async function CourseSyllabusPage({ params }: { params: { id: str
   const displayTutorDesignation = tutor?.designation || "Course Tutor";
   const displaySignature = tutor?.signature_url;
   
-  const syllabusData = course.syllabus as SyllabusData | null;
+  const syllabusData = course.syllabus;
   const hasSections = syllabusData?.sections && Array.isArray(syllabusData.sections) && syllabusData.sections.length > 0;
 
   const htmlContent = generateSyllabusHTML(course, syllabusData, displayTutorName, displayTutorDesignation, displaySignature);
@@ -177,10 +269,10 @@ export default async function CourseSyllabusPage({ params }: { params: { id: str
       <header className="bg-white border-b border-slate-200 pt-6 pb-0 px-4 md:px-8 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto">
           <Link 
-            href=".." 
+            href={`/onlinecourse/${course.course_code}`} 
             className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 transition-colors mb-6 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg"
           >
-            <ArrowLeft size={16} /> Back to Courses
+            <ArrowLeft size={16} /> Back to Course
           </Link>
 
           <h1 className="text-3xl md:text-4xl font-bold text-slate-900 tracking-tight mb-4">
@@ -282,7 +374,7 @@ export default async function CourseSyllabusPage({ params }: { params: { id: str
               <div className="p-6 md:p-8">
                 {hasSections ? (
                   <div className="space-y-10">
-                    {syllabusData.sections.map((section, sIdx) => (
+                    {syllabusData!.sections.map((section, sIdx) => (
                       <div key={sIdx}>
                         <h3 className="text-lg font-bold text-slate-900 border-b-2 border-slate-100 pb-3 mb-6 flex items-center gap-2">
                           <span className="bg-slate-900 text-white text-xs px-2 py-1 rounded">Part {sIdx + 1}</span>
@@ -401,23 +493,19 @@ export default async function CourseSyllabusPage({ params }: { params: { id: str
       </main>
 
       {/* --- NEXT.JS NATIVE SCRIPTS --- */}
-      {/* Loads the library safely across navigations */}
       <Script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" strategy="lazyOnload" />
       
-      {/* Inline Script utilizing Event Delegation for Next.js SPA architecture */}
       <Script id="pdf-download-handler" strategy="afterInteractive">
         {`
           if (typeof window !== 'undefined') {
             document.documentElement.style.scrollBehavior = 'smooth';
 
-            // Use event delegation to persist logic across Next.js navigations
             document.addEventListener('click', function(e) {
               var btn = e.target.closest('#download-pdf-btn');
               if (btn) {
                 e.preventDefault();
                 var btnText = document.getElementById('download-btn-text');
                 
-                // Prevent multiple clicks
                 if (btnText && btnText.innerText === 'Generating PDF...') return;
                 
                 var originalText = btnText ? btnText.innerText : 'Download PDF';
@@ -444,7 +532,6 @@ export default async function CourseSyllabusPage({ params }: { params: { id: str
                       btn.style.pointerEvents = 'auto';
                     });
                   } else {
-                    // Retry if script hasn't finished loading yet
                     setTimeout(tryGeneratePDF, 200);
                   }
                 };

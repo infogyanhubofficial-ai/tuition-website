@@ -8,7 +8,7 @@ import {
   ArrowRight, Lock
 } from "lucide-react";
 
-// --- DATA ARRAYS FOR CODE OPTIMIZATION (Suggestions 11 & 15) ---
+// --- DATA ARRAYS ---
 const SOCIAL_LINKS = [
   { icon: Facebook, href: "https://www.facebook.com/dashboard.php?id=61569757534336", label: "Facebook", hoverColor: "hover:bg-[#1877F2]" },
   { icon: Youtube, href: "https://www.youtube.com/@GyanHubOnline", label: "YouTube", hoverColor: "hover:bg-[#FF0000]" },
@@ -19,7 +19,7 @@ const SOCIAL_LINKS = [
 
 const COMPANY_LINKS = [
   { label: "About GyanHub", href: "/about" },
-  { label: "GyanHub Stories", href: "#", isLocked: true }, // Added isLocked flag
+  { label: "GyanHub Stories", href: "#", isLocked: true },
   { label: "User's Data Policy", href: "/privacy-policy" },
 ];
 
@@ -27,7 +27,7 @@ const QUICK_LINKS = [
   { label: "Popular Courses", href: "/onlinecourse" },
   { label: "Find a Tutor", href: "/tutors" },
   { label: "Latest Vacancies", href: "/vacancies" },
-  { label: "Recording Courses", href: "https://www.gyanhub.com.np/recording" }, // Added Recording Courses
+  { label: "Recording Courses", href: "https://www.gyanhub.com.np/recording" },
 ];
 
 const ADMIN_LINKS = [
@@ -45,7 +45,6 @@ export default function Footer() {
     if (!email) return;
     
     setSubscribeStatus('submitting');
-    // Simulate API call
     setTimeout(() => {
       setSubscribeStatus('success');
       setEmail('');
@@ -58,35 +57,31 @@ export default function Footer() {
   };
 
   return (
-    // 5. Background Gradient overlay instead of flat color
-    <footer className="relative bg-[#0A0F24] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-[#0A0F24] to-[#0A0F24] text-slate-400 pt-24 pb-12 border-t border-slate-800 overflow-hidden font-sans">
+    <footer className="relative bg-[#0A0F24] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-[#0A0F24] to-[#0A0F24] text-slate-400 pt-16 md:pt-24 pb-8 md:pb-12 border-t border-slate-800 overflow-hidden font-sans">
       
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         
-        {/* Top Grid Section: Increased gap for better spacing (4) & Added 5th column for Quick Links (14) */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-12 lg:gap-8 mb-20">
+        {/* Top Grid Section */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-10 mb-12 md:mb-20">
           
           {/* --- Brand & Socials Column --- */}
-          <div className="space-y-6 lg:col-span-2 pr-4 lg:pr-12">
+          <div className="space-y-5 lg:col-span-2 pr-4 lg:pr-12">
             
-            {/* 13. Branding & Modernization (Glow + Online Dot) */}
             <Link href="/" className="inline-flex items-center gap-2 text-3xl font-black tracking-tight transition-transform hover:scale-105 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg">
-              <div className="drop-shadow-[0_0_15px_rgba(59,130,246,0.4)]">
+              <div className="drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">
                 <span className="text-blue-500">Gyan</span>
                 <span className="text-orange-500">Hub</span>
               </div>
-              <span className="relative flex h-2.5 w-2.5 mt-1">
+              <span className="relative flex h-2 w-2 mt-1">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
               </span>
             </Link>
             
-            {/* 1. Visual Hierarchy: Darker text for body to contrast headings */}
-            <p className="text-[15px] leading-relaxed text-slate-400 font-medium">
+            <p className="text-[15px] leading-relaxed text-slate-400">
               Dive into educational stories, level up your skills, and connect with a community that never stops growing.
             </p>
             
-            {/* 2 & 9. Social Icons: Mapped, Animated, Scaled, Accessible */}
             <div className="flex flex-wrap gap-3 pt-2">
               {SOCIAL_LINKS.map((social) => {
                 const Icon = social.icon;
@@ -97,20 +92,19 @@ export default function Footer() {
                     target="_blank" 
                     rel="noreferrer" 
                     aria-label={`Follow us on ${social.label}`}
-                    className={`flex h-10 w-10 items-center justify-center rounded-full bg-white/5 border border-white/10 text-slate-300 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg ${social.hoverColor} hover:text-white hover:border-transparent`}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full bg-white/5 border border-white/5 text-slate-400 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${social.hoverColor} hover:text-white hover:border-transparent`}
                   >
-                    <Icon className="h-4 w-4 stroke-[2.5]" />
+                    <Icon className="h-4 w-4 stroke-[2]" />
                   </a>
                 );
               })}
               
-              {/* Custom SVG for TikTok */}
               <a 
                 href="https://www.tiktok.com/@gyanhubofficial" 
                 target="_blank" 
                 rel="noreferrer" 
                 aria-label="Follow us on TikTok"
-                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 border border-white/10 text-slate-300 transition-all duration-300 hover:-translate-y-1.5 hover:shadow-lg hover:bg-black hover:text-white hover:border-transparent"
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 border border-white/5 text-slate-400 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:bg-black hover:text-white hover:border-transparent"
               >
                 <svg className="h-[15px] w-[15px] fill-current" viewBox="0 0 24 24">
                   <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64 2.93 2.93 0 0 1 .88.13V9.4a6.84 6.84 0 0 0-1-.05A6.33 6.33 0 0 0 5 20.1a6.34 6.34 0 0 0 10.86-4.43v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.1z" />
@@ -121,8 +115,8 @@ export default function Footer() {
 
           {/* --- Company Links Column --- */}
           <div>
-            <h3 className="text-[13px] font-black uppercase tracking-[0.15em] text-white mb-6">Company</h3>
-            <ul className="space-y-4 text-[14px] font-medium text-slate-400">
+            <h3 className="text-[13px] font-semibold uppercase tracking-[0.15em] text-slate-200 mb-5">Company</h3>
+            <ul className="space-y-3 text-[14px] text-slate-400">
               {COMPANY_LINKS.map(link => (
                 <li key={link.label}>
                   {link.isLocked ? (
@@ -132,7 +126,7 @@ export default function Footer() {
                       title="This feature will be available soon!"
                     >
                       {link.label}
-                      <Lock className="w-3.5 h-3.5 ml-1.5 opacity-70" />
+                      <Lock className="w-3 h-3 ml-1.5 opacity-70" />
                     </button>
                   ) : (
                     <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
@@ -145,15 +139,15 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* --- Quick Links Column (14. Added for engagement) --- */}
+          {/* --- Quick Links Column --- */}
           <div>
-            <h3 className="text-[13px] font-black uppercase tracking-[0.15em] text-white mb-6">Quick Links</h3>
-            <ul className="space-y-4 text-[14px] font-medium text-slate-400">
+            <h3 className="text-[13px] font-semibold uppercase tracking-[0.15em] text-slate-200 mb-5">Quick Links</h3>
+            <ul className="space-y-3 text-[14px] text-slate-400">
               {QUICK_LINKS.map(link => (
                 <li key={link.label}>
                   <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
                     {link.label}
-                    <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-orange-500 transition-all duration-300 group-hover:w-full"></span>
+                    <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
                   </Link>
                 </li>
               ))}
@@ -162,8 +156,8 @@ export default function Footer() {
 
           {/* --- Admin/Support Links Column --- */}
           <div>
-            <h3 className="text-[13px] font-black uppercase tracking-[0.15em] text-white mb-6">Admin</h3>
-            <ul className="space-y-4 text-[14px] font-medium text-slate-400">
+            <h3 className="text-[13px] font-semibold uppercase tracking-[0.15em] text-slate-200 mb-5">Admin</h3>
+            <ul className="space-y-3 text-[14px] text-slate-400">
               {ADMIN_LINKS.map(link => (
                 <li key={link.label}>
                   <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
@@ -173,9 +167,9 @@ export default function Footer() {
                 </li>
               ))}
               <li className="pt-2">
-                <a href="mailto:admin@gyanhub.com" className="inline-flex items-center gap-2.5 text-blue-400 hover:text-blue-300 transition-colors group p-2 -ml-2 rounded-lg hover:bg-blue-500/10">
-                  <div className="bg-blue-500/10 p-2 rounded-full group-hover:bg-blue-500/20 transition-colors shadow-sm">
-                    <Mail className="h-4 w-4" />
+                <a href="mailto:admin@gyanhub.com" className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 transition-colors group p-1.5 -ml-1.5 rounded-lg hover:bg-blue-500/10">
+                  <div className="bg-blue-500/10 p-1.5 rounded-full group-hover:bg-blue-500/20 transition-colors">
+                    <Mail className="h-3.5 w-3.5" />
                   </div>
                   admin@gyanhub.com
                 </a>
@@ -185,10 +179,10 @@ export default function Footer() {
 
         </div>
 
-        {/* --- Newsletter Section (Pulled out of grid to span beautifully) --- */}
-        <div className="bg-gradient-to-r from-slate-800/40 to-slate-900/40 border border-white/5 rounded-3xl p-8 mb-16 flex flex-col md:flex-row items-center justify-between gap-8 backdrop-blur-sm">
-          <div className="max-w-md">
-            <h3 className="text-xl font-black text-white mb-2">Subscribe to our Newsletter</h3>
+        {/* --- Newsletter Section --- */}
+        <div className="bg-gradient-to-r from-slate-800/40 to-slate-900/40 border border-white/5 rounded-3xl p-6 md:p-8 mb-10 md:mb-16 flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8 backdrop-blur-sm">
+          <div className="max-w-md w-full text-center md:text-left">
+            <h3 className="text-lg md:text-xl font-bold text-white mb-2">Subscribe to our Newsletter</h3>
             <p className="text-sm text-slate-400">Get the latest course updates, educational stories, and tech news delivered straight to your inbox.</p>
           </div>
           
@@ -202,13 +196,13 @@ export default function Footer() {
                 disabled={subscribeStatus !== 'idle'}
                 required
                 aria-label="Email Address"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl pl-5 pr-[130px] py-4 text-sm text-white placeholder-slate-500 outline-none transition-all focus:border-blue-500 focus:bg-white/10 focus:shadow-[0_0_20px_rgba(59,130,246,0.15)] disabled:opacity-50"
+                className="w-full bg-[#0A0F24]/50 border border-white/10 rounded-2xl pl-5 pr-[130px] py-4 text-sm text-white placeholder-slate-500 outline-none transition-all focus:border-blue-500 focus:bg-white/5 focus:shadow-[0_0_15px_rgba(59,130,246,0.1)] disabled:opacity-50"
               />
               <button 
                 type="submit" 
                 disabled={subscribeStatus !== 'idle'}
                 aria-label="Subscribe"
-                className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-500 text-white font-bold px-5 rounded-xl transition-all text-sm tracking-wide shadow-lg hover:shadow-blue-500/25 active:scale-95 disabled:opacity-80 flex items-center justify-center gap-2 min-w-[110px]"
+                className="absolute right-2 top-2 bottom-2 bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 rounded-xl transition-all text-sm tracking-wide shadow-lg hover:shadow-blue-500/25 active:scale-95 disabled:opacity-80 flex items-center justify-center gap-2 min-w-[110px]"
               >
                 {subscribeStatus === 'submitting' ? (
                   <span className="animate-pulse">Sending...</span>
@@ -219,33 +213,31 @@ export default function Footer() {
                 )}
               </button>
             </form>
-            {/* 3. Small privacy assurance */}
-            <p className="text-[11px] text-slate-500 mt-3 flex items-center gap-1.5 ml-2 font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500"/> We respect your privacy. No spam.
+            <p className="text-[11px] text-slate-500 mt-3 flex items-center justify-center md:justify-start gap-1.5 ml-2">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500/80"/> We respect your privacy. No spam.
             </p>
           </div>
         </div>
 
         {/* --- Bottom Bar --- */}
-        <div className="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="pt-6 md:pt-8 border-t border-slate-800/80 flex flex-col md:flex-row justify-between items-center gap-6">
           
-          {/* 8. Reduced opacity on secondary text for better hierarchy */}
-          <p className="text-[14px] font-medium text-slate-500/80 text-center md:text-left">
+          <p className="text-[13px] text-slate-500/80 text-center md:text-left">
             © {new Date().getFullYear()} GyanHub Pvt. Ltd. All rights reserved. 
             <Link href="https://www.gyanhub.com.np" className="text-slate-400 hover:text-blue-400 transition-colors ml-1 border-b border-transparent hover:border-blue-400">
               www.gyanhub.com.np
             </Link>
           </p>
           
-          {/* 6. Improved Payment Methods Section with subtle hover */}
-          <div className="group flex items-center gap-4 bg-blue-50/90 hover:bg-white backdrop-blur-md px-5 py-3 rounded-2xl border border-blue-100 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-            <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">We Accept</span>
-            <div className="h-4 w-[1px] bg-slate-200"></div>
+          {/* Modified Payment Badge to fit dark theme */}
+          <div className="group flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-xl border border-white/5 transition-all duration-300">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-slate-300 transition-colors">We Accept</span>
+            <div className="h-3 w-[1px] bg-slate-700"></div>
             <div className="flex items-center justify-center">
               <img 
                 src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/fonepay_payments_fatafat.png" 
                 alt="Fonepay" 
-                className="h-5 w-auto object-contain grayscale-[20%] group-hover:grayscale-0 transition-all duration-300" 
+                className="h-4 w-auto object-contain opacity-60 group-hover:opacity-100 transition-opacity duration-300" 
                 loading="lazy"
               />
             </div>
@@ -254,13 +246,13 @@ export default function Footer() {
 
       </div>
 
-      {/* 7. Enhanced Scroll to Top Button */}
+      {/* Softened Scroll to Top Button */}
       <button 
         onClick={scrollToTop}
-        className="absolute top-10 right-6 md:right-10 h-12 w-12 bg-white/5 hover:bg-blue-600 text-slate-400 hover:text-white rounded-2xl flex items-center justify-center shadow-lg transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_10px_30px_rgba(37,99,235,0.4)] border border-white/10 hover:border-blue-500 z-10 group"
+        className="absolute top-8 right-6 md:right-8 h-10 w-10 bg-white/5 hover:bg-blue-600 text-slate-400 hover:text-white rounded-xl flex items-center justify-center shadow-lg transition-all duration-300 hover:-translate-y-1 hover:shadow-blue-500/20 border border-white/5 hover:border-blue-500 z-10 group"
         aria-label="Scroll to top"
       >
-        <ChevronUp className="h-5 w-5 stroke-[2.5] group-hover:animate-bounce" />
+        <ChevronUp className="h-4 w-4 stroke-[2] group-hover:animate-bounce" />
       </button>
       
     </footer>

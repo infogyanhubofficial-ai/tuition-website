@@ -2,35 +2,33 @@ import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
 
 export const metadata: Metadata = {
-  // [SEO FIX] Shortened title to ~60 characters to prevent Google truncation
-  title: "GyanHub | Courses & Tutors in Nepal",
+  title: "GyanHub | Online Courses & Tutors in Nepal",
+  
   description:
-    "Learn AutoCAD, SketchUp, GIS, ETABS, SAFE, RCDC, Revit BIM, estimation costing, structural design, and more in Nepal. Find verified tutors or join online and recorded courses on GyanHub.",
+    "GyanHub is a Nepal-based learning platform offering online and recorded courses in AutoCAD, GIS, Revit, and engineering skills. Find verified tutors or enroll in practical training designed for students and professionals.",
+  
   keywords: [
+    "online courses Nepal",
+    "engineering courses Nepal",
     "AutoCAD course Nepal",
     "GIS training Nepal",
-    "Revit BIM course Nepal",
-    "ETABS training Nepal",
-    "SketchUp course Nepal",
-    "Enscape training Nepal",
-    "estimation costing course Nepal",
+    "Revit course Nepal",
     "structural design course Nepal",
-    "property valuation course Nepal",
-    "SolidWorks training Nepal",
-    "online courses Nepal",
+    "ETABS training Nepal",
     "recorded courses Nepal",
-    "tutors in Nepal",
+    "find tutors Nepal",
     "home tuition Nepal",
-    "GyanHub"
+    "GyanHub Nepal"
   ],
-  // [SEO FIX] Added canonical URL to prevent duplicate content penalties
+
   alternates: {
     canonical: "https://www.gyanhub.com.np",
   },
+
   openGraph: {
-    title: "GyanHub | Courses & Tutors in Nepal",
+    title: "GyanHub | Online Courses & Tutors in Nepal",
     description:
-      "Join practical training in AutoCAD, GIS, ETABS, Revit BIM, and more. Find tutors or enroll in online and recorded courses with GyanHub.",
+      "Explore practical online courses and find verified tutors in Nepal. Learn AutoCAD, GIS, Revit, structural design, and more with GyanHub.",
     url: "https://www.gyanhub.com.np",
     siteName: "GyanHub",
     images: [
@@ -38,48 +36,56 @@ export const metadata: Metadata = {
         url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
         width: 1200,
         height: 630,
-        alt: "GyanHub Courses and Tutors",
+        alt: "GyanHub - Online Courses and Tutors in Nepal",
       },
     ],
     locale: "en_NP",
     type: "website",
   },
+
   twitter: {
     card: "summary_large_image",
-    title: "GyanHub | Courses & Tutors in Nepal",
+    title: "GyanHub | Online Courses & Tutors in Nepal",
     description:
-      "Learn in-demand skills with GyanHub. Explore tutors and professional courses in Nepal.",
-    images: ["https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp"],
+      "Learn practical skills and connect with tutors in Nepal. Join GyanHub for online and recorded courses.",
+    images: [
+      "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
+    ],
   },
+
   metadataBase: new URL("https://www.gyanhub.com.np"),
 };
 
 export default function Page() {
-  // [SEO FIX] Added exact social links and WhatsApp contact point to Schema
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "EducationalOrganization",
     name: "GyanHub",
     url: "https://www.gyanhub.com.np",
     logo: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
-    description: "Online learning and tutor discovery platform in Nepal offering engineering courses, AutoCAD, GIS, and private tutoring.",
+    
+    description:
+      "GyanHub is an online learning and tutor marketplace in Nepal offering engineering courses, recorded training, and tutor discovery services.",
+    
     address: {
       "@type": "PostalAddress",
       addressCountry: "NP",
     },
+
     contactPoint: {
       "@type": "ContactPoint",
-      telephone: "+977-9763695665",
-      contactType: "customer service",
-      availableLanguage: ["English", "Nepali"]
+      telephone: "+977-9813111857",
+      contactType: "customer support",
+      availableLanguage: ["English", "Nepali"],
     },
+
     sameAs: [
       "https://www.facebook.com/dashboard.php?id=61569757534336",
       "https://www.youtube.com/@GyanHubOnline",
-      "https://www.instagram.com/gyanhubonline/?next=%2F",
+      "https://www.instagram.com/gyanhubonline/",
       "https://www.linkedin.com/company/gyanhub/",
       "https://www.tiktok.com/@gyanhubofficial"
-    ]
+    ],
   };
 
   return (

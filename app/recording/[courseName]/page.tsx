@@ -142,20 +142,21 @@ export default async function RecordingDetailPage(props: PageProps) {
   const orderUrl = `/order?type=recording&courseId=${course.id}&courseName=${encodeURIComponent(course.course_name)}&price=${salePrice}&cover=${encodeURIComponent(course.cover_pic_url || '')}`;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-blue-100 pb-20">
+    <div className="min-h-screen bg-slate-50/50 font-sans selection:bg-blue-100 pb-16 md:pb-24">
       
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <Link href="/recording" className="text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+        <Link href="/recording" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1.5 w-fit">
            &larr; Back to all recordings
         </Link>
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-[28px] shadow-xl border border-slate-200/60 overflow-hidden flex flex-col md:flex-row">
+        <div className="bg-white rounded-2xl md:rounded-[28px] shadow-sm border border-slate-200/60 overflow-hidden flex flex-col md:flex-row">
           
+          {/* Main Content Area */}
           <div className="w-full md:w-[65%] flex flex-col">
             
-            <div className="w-full aspect-video bg-slate-900 relative flex-shrink-0">
+            <div className="w-full aspect-video bg-slate-900 relative flex-shrink-0 border-b border-slate-100">
               {course.demo_video_url ? (
                 <iframe 
                   src={getYouTubeEmbedUrl(course.demo_video_url) || ''} 
@@ -168,32 +169,32 @@ export default async function RecordingDetailPage(props: PageProps) {
               )}
             </div>
 
-            <div className="p-6 md:p-10 flex-grow">
-              <div className="flex flex-wrap gap-2 mb-5">
+            <div className="p-5 md:p-10 flex-grow">
+              <div className="flex flex-wrap gap-2 mb-4 md:mb-6">
                 {course.category && (
-                  <span className="bg-blue-50 border border-blue-100 text-blue-700 text-xs font-bold px-3 py-1.5 rounded-[10px]">
+                  <span className="bg-blue-50/50 border border-blue-100/50 text-blue-600 text-[11px] md:text-xs font-semibold px-2.5 py-1 rounded-md">
                     {course.category}
                   </span>
                 )}
                 {course.difficulty_level && (
-                  <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold px-3 py-1.5 rounded-[10px]">
+                  <span className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 text-slate-600 text-[11px] md:text-xs font-medium px-2.5 py-1 rounded-md">
                     <BarChart size={14} className="stroke-[2] text-slate-400"/> {course.difficulty_level}
                   </span>
                 )}
               </div>
 
-              <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold text-slate-900 mb-8 tracking-tight leading-tight">
+              <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-6 md:mb-10 tracking-tight leading-tight">
                 {course.course_name}
               </h1>
 
               {course.description && (
-                <div className="bg-slate-50 border border-slate-100 rounded-[20px] p-6 mb-10">
-                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-widest mb-5">Included in this recording</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-8">
+                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 md:p-6 mb-8 md:mb-12 shadow-sm">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Included in this recording</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
                     {parseDescription(course.description).map((feature, idx) => (
-                      <div key={idx} className="flex items-start gap-3">
-                        <CheckCircle2 size={18} className="text-emerald-500 flex-shrink-0 mt-0.5 stroke-[2]" />
-                        <span className="text-sm text-slate-600 font-medium leading-relaxed">{feature}</span>
+                      <div key={idx} className="flex items-start gap-2.5">
+                        <CheckCircle2 size={16} className="text-emerald-500 flex-shrink-0 mt-0.5 stroke-[2.5]" />
+                        <span className="text-sm text-slate-700 font-medium leading-relaxed">{feature}</span>
                       </div>
                     ))}
                   </div>
@@ -202,16 +203,16 @@ export default async function RecordingDetailPage(props: PageProps) {
 
               {extractedOutcomes.length > 0 && (
                 <div className="mb-4">
-                  <h2 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-                    <Award size={22} className="text-blue-600" /> What you will learn
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900 mb-5 flex items-center gap-2">
+                    <Award size={20} className="text-blue-600" /> What you will learn
                   </h2>
-                  <ul className="space-y-4">
+                  <ul className="space-y-3">
                     {extractedOutcomes.map((outcome, idx) => (
-                      <li key={idx} className="flex gap-4 p-5 bg-white border border-slate-100 shadow-sm rounded-[20px]">
-                        <div className="bg-blue-50 text-blue-600 font-extrabold h-8 w-8 rounded-[10px] flex items-center justify-center flex-shrink-0 text-sm">
+                      <li key={idx} className="flex gap-3 md:gap-4 p-4 md:p-5 bg-white border border-slate-100 rounded-xl shadow-sm transition-shadow hover:shadow-md">
+                        <div className="bg-slate-50 text-slate-500 border border-slate-100 font-semibold h-7 w-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs md:text-sm">
                           {idx + 1}
                         </div>
-                        <p className="text-slate-600 text-sm leading-relaxed pt-1.5">{outcome}</p>
+                        <p className="text-slate-600 text-sm leading-relaxed pt-1">{outcome}</p>
                       </li>
                     ))}
                   </ul>
@@ -221,23 +222,24 @@ export default async function RecordingDetailPage(props: PageProps) {
             </div>
           </div>
 
-          <div className="w-full md:w-[35%] bg-slate-50/80 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col">
-            <div className="p-6 md:p-10 sticky top-6">
+          {/* Sidebar / Checkout Area */}
+          <div className="w-full md:w-[35%] bg-slate-50/50 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col">
+            <div className="p-5 md:p-8 lg:p-10 sticky top-6">
               
-              <div className="mb-8">
+              <div className="mb-6 md:mb-8">
                 {activeDiscount > 0 && (
-                  <div className="inline-block bg-red-100 text-red-600 font-black px-3 py-1.5 rounded-[10px] text-xs uppercase tracking-wide mb-4">
+                  <div className="inline-block bg-blue-50 text-blue-600 font-semibold px-2.5 py-1 rounded-md text-[11px] uppercase tracking-wider mb-3">
                     Limited Time {activeDiscount}% Off
                   </div>
                 )}
-                <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Price</div>
-                <div className="flex flex-wrap items-end gap-3 mb-1">
-                  <span className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-none">
+                <div className="text-[10px] md:text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Total Price</div>
+                <div className="flex flex-wrap items-end gap-2 mb-1">
+                  <span className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight leading-none">
                     {formatCurrency(salePrice)}
                   </span>
                 </div>
                 {activeDiscount > 0 && (
-                  <div className="text-slate-500 font-medium text-sm mt-2">
+                  <div className="text-slate-400 font-medium text-xs md:text-sm mt-1.5">
                     <span className="line-through">{formatCurrency(course.standard_fee)}</span>
                   </div>
                 )}
@@ -245,7 +247,7 @@ export default async function RecordingDetailPage(props: PageProps) {
 
               <Link 
                 href={orderUrl}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-lg py-4 rounded-[14px] shadow-[0_8px_20px_-6px_rgba(37,99,235,0.4)] transition-all active:scale-[0.98] mb-4"
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-base md:text-lg py-3.5 md:py-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] mb-3 md:mb-4"
               >
                 <ShoppingCart size={18} className="stroke-[2]" /> Buy Recording
               </Link>
@@ -255,54 +257,52 @@ export default async function RecordingDetailPage(props: PageProps) {
                   href={course.syllabus_url} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300 font-bold py-3.5 rounded-[14px] transition-all mb-8 shadow-sm"
+                  className="w-full flex items-center justify-center gap-2 bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-900 font-medium text-sm md:text-base py-3 rounded-xl transition-colors mb-6 md:mb-8 shadow-sm"
                 >
-                  <BookOpen size={18} className="stroke-[2]" /> View Full Syllabus <ExternalLink size={14} className="text-slate-400" />
+                  <BookOpen size={16} className="stroke-[2]" /> View Full Syllabus <ExternalLink size={14} className="text-slate-400" />
                 </a>
               )}
 
-              <div className="space-y-4 pt-8 border-t border-slate-200">
+              <div className="space-y-3.5 pt-6 border-t border-slate-200/80">
                 <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                  <Clock size={18} className="text-slate-400 stroke-[2]" />
+                  <Clock size={16} className="text-slate-400 stroke-[2]" />
                   <span>{course.course_hours} Hours of HD Video</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                  <Infinity size={18} className="text-slate-400 stroke-[2]" />
+                  <Infinity size={16} className="text-slate-400 stroke-[2]" />
                   <span>Full Lifetime Access</span>
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                  <ShieldCheck size={18} className="text-slate-400 stroke-[2]" />
+                  <ShieldCheck size={16} className="text-slate-400 stroke-[2]" />
                   <span>Secure SSL Checkout</span>
                 </div>
-                {/* NEW ITEM ADDED HERE */}
-                <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
-                  <FileText size={18} className="text-slate-400 stroke-[2]" />
-                  <span>Study materials like class notes, sheets, sample reports</span>
+                <div className="flex items-start gap-3 text-sm text-slate-600 font-medium">
+                  <FileText size={16} className="text-slate-400 stroke-[2] shrink-0 mt-0.5" />
+                  <span className="leading-snug">Study materials like class notes, sheets, sample reports</span>
                 </div>
               </div>
 
-              {/* MOVED FAQ SECTION - Under Checkout info in Sidebar */}
               {extractedFaqs.length > 0 && (
-                <div className="mt-8 pt-8 border-t border-slate-200">
-                  <h2 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
-                    <HelpCircle size={20} className="text-blue-600" /> Frequently Asked Questions
+                <div className="mt-8 md:mt-10 pt-6 md:pt-8 border-t border-slate-200/80">
+                  <h2 className="text-base font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <HelpCircle size={18} className="text-blue-600" /> FAQ
                   </h2>
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     {extractedFaqs.map((faq, idx) => (
                       <details 
                         key={idx} 
-                        className="group bg-white border border-slate-200 hover:border-slate-300 transition-colors duration-300 rounded-[16px] overflow-hidden [&_summary::-webkit-details-marker]:hidden shadow-sm"
+                        className="group bg-white border border-slate-200 hover:border-slate-300 transition-colors duration-200 rounded-xl overflow-hidden [&_summary::-webkit-details-marker]:hidden shadow-sm"
                       >
-                        <summary className="w-full text-left px-5 py-3.5 flex justify-between items-center cursor-pointer bg-white hover:bg-slate-50 focus:outline-none focus:bg-blue-50/50">
-                          <span className="font-bold pr-4 leading-snug text-slate-800 group-open:text-blue-700 text-sm">
+                        <summary className="w-full text-left px-4 py-3 flex justify-between items-center cursor-pointer bg-white hover:bg-slate-50 focus:outline-none focus:bg-slate-50/80">
+                          <span className="font-semibold pr-4 leading-snug text-slate-700 group-open:text-slate-900 text-[13px] md:text-sm">
                             {faq.question}
                           </span>
-                          <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center bg-slate-100 text-slate-500 group-open:bg-blue-100 group-open:text-blue-600 transition-colors">
-                            <ChevronDown size={16} className="transition-transform duration-300 group-open:rotate-180" />
+                          <div className="flex-shrink-0 w-6 h-6 rounded-md flex items-center justify-center bg-slate-50 text-slate-400 group-open:bg-slate-100 group-open:text-slate-600 transition-colors">
+                            <ChevronDown size={14} className="transition-transform duration-300 group-open:rotate-180" />
                           </div>
                         </summary>
-                        <div className="px-5 pb-4 pt-1 border-t border-slate-100/0">
-                          <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                        <div className="px-4 pb-4 pt-1">
+                          <p className="text-slate-500 text-[13px] leading-relaxed whitespace-pre-line">
                             {faq.answer}
                           </p>
                         </div>
