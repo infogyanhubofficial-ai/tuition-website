@@ -3,34 +3,9 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone();
-  const hostname = request.nextUrl.hostname;
 
   // ==========================================
-  // 🚨 TEMPORARY MAINTENANCE MODE 🚨
-  // ==========================================
-
-  const isLocalDev =
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.');
-
-  const isLiveDomain =
-    hostname === 'gyanhub.com.np' ||
-    hostname === 'www.gyanhub.com.np';
-
-  if (!isLocalDev && isLiveDomain) {
-    if (url.pathname !== '/maintenance') {
-      url.pathname = '/maintenance';
-      return NextResponse.redirect(url);
-    }
-
-    return NextResponse.next();
-  }
-
-  // ==========================================
-  // ORIGINAL SUPABASE LOGIC
+  // SUPABASE AUTHENTICATION LOGIC
   // ==========================================
 
   let supabaseResponse = NextResponse.next({ request });
@@ -66,6 +41,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
+  // Protect the dashboard routes
   if (!user && url.pathname.startsWith('/dashboard')) {
     url.pathname = '/login';
     return NextResponse.redirect(url);
