@@ -1537,9 +1537,9 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   const daysSinceStart = Math.floor((nowTick.getTime() - enrollStart.getTime()) / (1000 * 60 * 60 * 24));
   const isFinished = (batch && batch.is_active === false) || daysSinceStart > 30;
 
-  const isUnverifiedPayment = pendingVerificationOrders.some(o =>
-    o.order_name.toLowerCase() === enroll.course_name.toLowerCase()
-  );
+  const isUnverifiedPayment = pendingVerificationOrders.some((o: { order_name: string }) =>
+  o.order_name.toLowerCase() === enroll.course_name.toLowerCase()
+);
 
   const totalFee = enroll.paid_amount + enroll.remaining_amount;
   const tenPercentFee = Math.round(totalFee * 0.1);
