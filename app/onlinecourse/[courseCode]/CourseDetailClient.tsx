@@ -207,20 +207,34 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
         const courseData = await res.json();
         setCourse(courseData);
 
+        // --- SEAT FETCHING LOGIC ---
         try {
           if (courseData.active_batch_id) {
+            console.log("✅ Found active_batch_id:", courseData.active_batch_id);
+            
+            // Added .eq('is_confirmed', true) to strictly count verified payments/enrollments
             const { count, error: countError } = await supabase
               .from('enrollments_v2') 
-              .select('*', { count: 'exact', head: true })
-              .eq('batch_id', courseData.active_batch_id); 
+              .select('id', { count: 'exact' }) 
+              .eq('batch_id', courseData.active_batch_id)
+              .eq('is_confirmed', true);
+
+            console.log("🔍 Supabase response -> Confirmed Count:", count, "Error:", countError);
 
             if (countError) {
+              console.error("❌ Supabase error fetching seats:", countError.message);
               setSeats(15); 
             } else if (count !== null) {
-              setSeats(15 - (count % 15));
+              const remaining = 15 - count;
+              console.log(`🧮 Math: 15 (Total) - ${count} (Confirmed Enrolled) = ${remaining} (Remaining)`);
+              setSeats(remaining <= 5 ? 5 : remaining);
             }
+          } else {
+            console.warn("⚠️ No active_batch_id returned from /api/online_courses API!");
+            setSeats(15);
           }
         } catch (seatErr) {
+          console.error("❌ Try/Catch error fetching seats:", seatErr);
           setSeats(15);
         }
 
@@ -312,8 +326,8 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
           }
         `}</style>
         <div className="animate-custom-marquee font-bold uppercase text-xs sm:text-sm tracking-widest w-max shrink-0 drop-shadow-sm">
-          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨</span>
-          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨</span>
+          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} DISCOUNTED SEATS REMAINING ✨</span>
+          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} DISCOUNTED SEATS REMAINING ✨</span>
         </div>
       </div>
 
@@ -387,7 +401,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
                     <Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/>
                   </div>
                   <p className="text-slate-300 text-xs md:text-sm font-semibold tracking-tight">
-                      <span className="text-white font-extrabold">GyanHub:</span> 1500+ Students • 4.9 Rating
+                      <span className="text-white font-extrabold">GyanHub:</span> 2500+ Students • 4.5+ Rating
                   </p>
                 </div>
             </div>
@@ -617,7 +631,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
                            <span className="relative flex h-2 w-2"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span></span>
                            Filling fast today!
                          </p>
-                         <p className="text-lg md:text-xl font-extrabold text-slate-900">Only <span className="text-red-600 text-3xl md:text-4xl">{seats}</span> seats left</p>
+                         <p className="text-lg md:text-xl font-extrabold text-slate-900">Only <span className="text-red-600 text-3xl md:text-4xl">{seats}</span> discounted seats left</p>
                      </div>
                    </div>
 
@@ -650,7 +664,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
       {/* Mobile Sticky Enrollment Bar */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 p-4 z-[100] flex items-center justify-between xl:hidden shadow-[0_-10px_20px_rgba(0,0,0,0.05)]">
           <div className="flex flex-col">
-              <span className="text-[11px] font-bold text-red-500 mb-0.5 animate-pulse">Only {seats} seats left</span>
+              <span className="text-[11px] font-bold text-red-500 mb-0.5 animate-pulse">Only {seats} discounted seats left</span>
               <span className="text-lg font-black text-slate-900">NRs. {formatPrice(finalPrice)}</span>
           </div>
           <EnrollButton onClick={handleBookSeat} className="!px-6 !py-3 !text-base">

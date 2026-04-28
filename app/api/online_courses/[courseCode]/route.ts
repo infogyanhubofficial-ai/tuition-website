@@ -90,7 +90,7 @@ export async function GET(
       id: syllabusId.toString(),
       course_code: syllabus.course_code, 
       title: syllabus.name,
-      description: syllabus.description || null, // 🟢 FIX: Added description mapping
+      description: syllabus.description || null, 
       fee: storefront.fee,
       discount: storefront.discount,
       start_datetime: activeBatch?.start_datetime || null,
@@ -106,7 +106,8 @@ export async function GET(
       tutor_pic_url: tutorData?.tutor_pic_url || null,
       tutor_bio: tutorData?.tutor_bio || null,
       
-      batch_id: activeBatch?.id || null // 🟢 FIX: Renamed to batch_id to match frontend
+      // ✅ THE FIX: Changed 'batch_id' to 'active_batch_id' so the frontend detects it
+      active_batch_id: activeBatch?.id || null 
     };
 
     return NextResponse.json(payload);

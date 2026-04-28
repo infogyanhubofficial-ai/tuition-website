@@ -1,5 +1,4 @@
 "use client";
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -62,6 +61,7 @@ interface Enrollment {
   paid_amount: number;
   remaining_amount: number;
   batch_no: number | null;
+  order_id?: string | null;
 }
 interface Message {
   id: string; user_id: string; sender_role: string; content: string;
@@ -161,20 +161,37 @@ export default function AdminDashboard() {
     if (tutRes.data) setTutors(tutRes.data);
     if (certRes.data) setCertificates(certRes.data);
     if (sylRes.data) setSyllabi(sylRes.data);
-    if (enrRes.data) setEnrollments(enrRes.data.map((e: any) => ({ ...e, confirmed: e.is_confirmed !== undefined ? e.is_confirmed : e.confirmed, course_id: e.course_batches_v2?.syllabus_id?.toString() || e.course_id, batch_no: e.course_batches_v2?.batch_no || e.batch_no })));
     
-    // FIX: Map orders_v2 mapping logic to handle locked_amount and ensure names/emails have safe fallbacks
-    if (ordRes.data) {
-      setOrders(ordRes.data.map((o: any) => ({ 
+    const fetchedOrders = ordRes.data || [];
+
+    if (fetchedOrders.length > 0) {
+      setOrders(fetchedOrders.map((o: any) => ({ 
         ...o, 
         full_name: o.full_name || 'N/A',
         email: o.email || 'N/A',
         contact_number: o.whatsapp_number || o.contact_number || 'N/A', 
-        price: o.locked_amount !== undefined ? o.locked_amount : (o.price || 0),
+        price: o.paid_amount ?? 0,
+        locked_amount: o.locked_price ?? 0,
         order_type: o.order_type || 'course',
         order_name: o.order_name || 'Course Enrollment',
         screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[0] : o.screenshot_url 
       })));
+    }
+
+    // Link financial data from orders_v2 to enrollments_v2
+    if (enrRes.data) {
+      setEnrollments(enrRes.data.map((e: any) => {
+        const linkedOrder = fetchedOrders.find((o: any) => o.enrollment_id === e.id);
+        return { 
+          ...e, 
+          confirmed: e.is_confirmed !== undefined ? e.is_confirmed : e.confirmed, 
+          course_id: e.course_batches_v2?.syllabus_id?.toString() || e.course_id, 
+          batch_no: e.course_batches_v2?.batch_no || e.batch_no,
+          paid_amount: linkedOrder ? Number(linkedOrder.paid_amount) : 0,
+          remaining_amount: linkedOrder ? Number(linkedOrder.remaining_amount) : 0,
+          order_id: linkedOrder ? linkedOrder.id : null
+        };
+      }));
     }
     
     if (batchRes.data) setBatches(batchRes.data.map((b: any) => ({ ...b, course_id: b.syllabus_id?.toString() || b.course_id })));
@@ -403,7 +420,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'failed'>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'course' | 'others'>('all'); 
-  const [showAllOrders, setShowAllOrders] = useState(true); // FIX: Default to TRUE so transactions show up
+  const [showAllOrders, setShowAllOrders] = useState(true);
 
   const filteredData = data.filter((o: Order) => {
     const s = searchQuery.toLowerCase();
@@ -1001,7 +1018,11 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   const [editPaid, setEditPaid] = useState<number>(0);
   const [editRemaining, setEditRemaining] = useState<number>(0);
   
-  // Add hidden enrollments state
+  // Manual Booking State
+  const [isAddingBooking, setIsAddingBooking] = useState(false);
+  const [newBooking, setNewBooking] = useState({ name: '', email: '', wa: '' });
+
+  // Hidden enrollments state
   const [hiddenBookingIds, setHiddenBookingIds] = useState<Set<string>>(new Set());
 
   // PAGINATION STATE
@@ -1028,10 +1049,41 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
   const savePayment = async () => {
     if (!editingPayment) return;
-    const { error } = await supabase.from('enrollments_v2').update({
+    
+    // Automatically construct Order entry if it's completely missing
+    if (!editingPayment.order_id) {
+       const course = courses.find(c => c.id === editingPayment.course_id);
+       const fee = course ? Number(course.fee) : 0;
+       const discount = course ? Number(course.discount) : 0;
+       const locked_price = fee - (fee * discount / 100);
+
+       const { data: newOrder, error: insErr } = await supabase.from('orders_v2').insert([{
+         enrollment_id: editingPayment.id,
+         full_name: editingPayment.full_name,
+         email: editingPayment.email,
+         contact_number: editingPayment.whatsapp_number,
+         order_type: 'course',
+         order_name: editingPayment.course_name || (course?.title || 'Course Enrollment'),
+         paid_amount: editPaid,
+         remaining_amount: editRemaining,
+         locked_price: locked_price,
+         status: editPaid >= locked_price ? 'verified' : 'pending'
+       }]).select().single();
+
+       if (insErr) {
+         alert("Failed to auto-create missing order: " + insErr.message);
+         return;
+       }
+       refresh();
+       setEditingPayment(null);
+       return;
+    }
+
+    // UPDATE ORDERS_V2 DIRECTLY (If exists)
+    const { error } = await supabase.from('orders_v2').update({
       paid_amount: editPaid,
       remaining_amount: editRemaining
-    }).eq('id', editingPayment.id);
+    }).eq('id', editingPayment.order_id);
     
     if (error) {
       alert("Failed to update payment: " + error.message);
@@ -1039,6 +1091,59 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       refresh();
       setEditingPayment(null);
     }
+  };
+
+  const saveManualBooking = async () => {
+    if (!selectedCourse) return;
+    if (!newBooking.name || !newBooking.email || !newBooking.wa) {
+      alert("Please fill all booking details!");
+      return;
+    }
+
+    const fee = Number(selectedCourse.fee) || 0;
+    const discount = Number(selectedCourse.discount) || 0;
+    const locked_price = fee - (fee * discount / 100);
+
+    // 1. Insert Enrollment
+    const enrPayload = {
+      course_id: selectedCourse.id,
+      batch_no: selectedBatch === 'unassigned' ? null : selectedBatch,
+      full_name: newBooking.name,
+      email: newBooking.email,
+      whatsapp_number: newBooking.wa,
+      is_confirmed: true // Assuming confirmed by default for manual additions
+    };
+
+    const { data: enrData, error: enrErr } = await supabase.from('enrollments_v2').insert([enrPayload]).select().single();
+
+    if (enrErr) {
+      alert("Error adding enrollment: " + enrErr.message);
+      return;
+    }
+
+    // 2. Insert corresponding Order auto
+    const ordPayload = {
+      enrollment_id: enrData.id,
+      full_name: newBooking.name,
+      email: newBooking.email,
+      contact_number: newBooking.wa,
+      order_type: 'course',
+      order_name: selectedCourse.title,
+      paid_amount: 0,
+      locked_price: locked_price,
+      remaining_amount: locked_price,
+      status: 'pending'
+    };
+
+    const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
+
+    if (ordErr) {
+      alert("Enrollment added, but auto-order creation failed: " + ordErr.message);
+    }
+
+    setIsAddingBooking(false);
+    setNewBooking({ name: '', email: '', wa: '' });
+    refresh();
   };
 
   const handleHide = (id: string) => {
@@ -1053,7 +1158,8 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     setHiddenBookingIds(new Set());
   };
 
-  // STEP 1: SHOW COURSES LIST
+  // STEP 1: SHOW COURSES LIST (Square Boxes Layout)
+// STEP 1: SHOW COURSES LIST (Square Boxes Layout)
   if (!selectedCourse) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -1062,24 +1168,23 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
           <p className="text-slate-500 font-medium mt-1">Select an online course to view its batches and enrollments.</p>
         </div>
         
-        <div className="flex flex-col gap-4">
+        {/* Constrained max-width to keep the squares compact */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 max-w-2xl">
           {courses.map(course => {
-            const bookingCount = enrollments.filter(e => e.course_id === course.id).length;
+            const batchCount = batches.filter(b => b.course_id === course.id).length;
             return (
-              <div key={course.id} onClick={() => setSelectedCourse(course)} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-indigo-400 hover:shadow-md cursor-pointer transition-all">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shrink-0">
-                    <BookOpen size={24} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-base line-clamp-1">{course.title}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">Starts: {course.start_datetime ? new Date(course.start_datetime).toLocaleDateString() : 'TBA'}</p>
-                  </div>
+              <div 
+                key={course.id} 
+                onClick={() => setSelectedCourse(course)} 
+                className="flex flex-col items-center justify-center p-6 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all aspect-square relative text-center group"
+              >
+                <div className="absolute top-4 right-4 bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl shadow-sm">
+                  {batchCount} Batches
                 </div>
-                <div className="text-right pl-4">
-                  <p className="text-xl font-black text-indigo-600">{bookingCount}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Bookings</p>
+                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center text-indigo-500 mb-4 group-hover:scale-110 transition-transform duration-300 shadow-inner">
+                  <BookOpen size={28} />
                 </div>
+                <h3 className="font-black text-slate-900 text-base px-2 leading-snug">{course.title}</h3>
               </div>
             );
           })}
@@ -1090,11 +1195,10 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
   // STEP 2: SHOW BATCHES LIST FOR SELECTED COURSE
   if (selectedCourse && selectedBatch === null) {
-    // Collect all available batches for the selected course
     const availableBatches = Array.from(new Set([
       ...batches.filter(b => b.course_id === selectedCourse.id).map(b => b.batch_no),
       ...enrollments.filter(e => e.course_id === selectedCourse.id && e.batch_no).map(e => e.batch_no as number)
-    ])).sort((a, b) => b - a); // Highest first
+    ])).sort((a, b) => b - a);
 
     const unassignedCount = enrollments.filter(e => e.course_id === selectedCourse.id && !e.batch_no).length;
 
@@ -1150,17 +1254,14 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     );
   }
 
-  // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH
-  // Filter enrollments by course, chosen batch, search query, and hidden filter
+  // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH (Excel Sheet Look)
   let courseEnrollments = enrollments.filter(e => {
     if (e.course_id !== selectedCourse.id) return false;
     if (hiddenBookingIds.has(e.id)) return false;
     
-    // Batch Check
     if (selectedBatch === 'unassigned' && e.batch_no) return false;
     if (selectedBatch !== 'unassigned' && e.batch_no !== selectedBatch) return false;
 
-    // Search logic check
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = e.full_name?.toLowerCase().includes(q);
@@ -1168,7 +1269,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       const matchPhone = e.whatsapp_number?.toLowerCase().includes(q);
       if (!matchName && !matchEmail && !matchPhone) return false;
     }
-
     return true;
   });
 
@@ -1187,9 +1287,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   const handleCopyCSV = () => {
     const header = "Name,Phone,Email\n";
     const rows = courseEnrollments.map(e => `"${e.full_name}","${e.whatsapp_number}","${e.email}"`).join("\n");
-    navigator.clipboard.writeText(header + rows).then(() => {
-      alert("Copied to clipboard!");
-    });
+    navigator.clipboard.writeText(header + rows).then(() => alert("Copied to clipboard!"));
   };
 
   return (
@@ -1206,11 +1304,16 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
               </p>
             </div>
           </div>
-          {hiddenBookingIds.size > 0 && (
-            <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
-              <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
+          <div className="flex items-center gap-3">
+            {hiddenBookingIds.size > 0 && (
+              <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
+                <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
+              </button>
+            )}
+            <button onClick={() => setIsAddingBooking(true)} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm shadow-indigo-600/30">
+              <Plus size={16} /> Add Booking
             </button>
-          )}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-4 items-center">
@@ -1233,7 +1336,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
         </div>
       </div>
 
-      {/* STATS AND EXPORT BAR */}
       <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
         <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
         <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
@@ -1241,82 +1343,113 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
         </button>
       </div>
 
-      {/* COMPACT NO-SCROLL TABLE WITH PAGINATION */}
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden w-full flex flex-col">
+      {/* EXCEL SHEET STYLED TABLE */}
+      <div className="bg-white border border-slate-300 shadow-sm overflow-hidden w-full flex flex-col rounded-md">
         <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse table-auto">
+          <table className="w-full text-left border-collapse table-auto text-xs">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                <th className="p-4 w-[25%]">Applicant Details</th>
-                <th className="p-4 w-[15%]">Date</th>
-                <th className="p-4 w-[30%]">Remarks</th>
-                <th className="p-4 w-[12%]">Payment</th>
-                <th className="p-4 w-[10%]">Confirmed</th>
-                <th className="p-4 text-right w-[8%]">Actions</th>
+              <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-black tracking-wider">
+                <th className="p-3 border-r border-slate-300 w-12 text-center">No.</th>
+                <th className="p-3 border-r border-slate-300 w-[20%]">Applicant Details</th>
+                <th className="p-3 border-r border-slate-300 w-[12%]">Date</th>
+                <th className="p-3 border-r border-slate-300 w-[30%]">Remarks</th>
+                <th className="p-3 border-r border-slate-300 w-[15%]">Payment Info</th>
+                <th className="p-3 border-r border-slate-300 w-[8%] text-center">Confirmed</th>
+                <th className="p-3 text-center w-[12%]">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedEnrollments.map(enr => (
-                <tr key={enr.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                  <td className="p-4 align-top">
-                    <p className="font-bold text-slate-900 leading-tight">{enr.full_name}</p>
-                    <p className="text-xs text-slate-500 mt-1 truncate" title={enr.email}>{enr.email}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 font-medium">WA: {enr.whatsapp_number}</p>
+              {paginatedEnrollments.map((enr, idx) => (
+                <tr key={enr.id} className="border-b border-slate-300 hover:bg-amber-50/50 transition-colors">
+                  <td className="p-3 border-r border-slate-300 text-center text-slate-500 font-mono align-top">
+                    {startIndex + idx + 1}
                   </td>
-                  <td className="p-4 align-top text-sm text-slate-500 font-medium">
+                  <td className="p-3 border-r border-slate-300 align-top leading-relaxed">
+                    <p className="font-bold text-slate-900 text-sm">{enr.full_name}</p>
+                    <p className="text-slate-600 truncate" title={enr.email}>{enr.email}</p>
+                    <p className="text-slate-600 font-medium">WA: {enr.whatsapp_number}</p>
+                  </td>
+                  <td className="p-3 border-r border-slate-300 align-top text-slate-700 font-medium">
                     {new Date(enr.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-4 align-top">
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-700 whitespace-pre-wrap break-words h-auto min-w-[200px]">
-                        {enr.remarks || <span className="italic text-slate-400">No remarks provided.</span>}
+                  <td className="p-3 border-r border-slate-300 align-top max-w-[200px] truncate text-slate-700" title={enr.remarks}>
+                    {enr.remarks || '-'}
+                  </td>
+                  <td className="p-3 border-r border-slate-300 align-top">
+                    <div className="flex justify-between w-full mb-1">
+                      <span className="text-slate-500 font-bold">Paid:</span> 
+                      <span className="font-black text-slate-800">Rs.{enr.paid_amount || 0}</span>
+                    </div>
+                    <div className="flex justify-between w-full">
+                      <span className="text-slate-500 font-bold">Due:</span> 
+                      <span className="font-black text-red-600">Rs.{enr.remaining_amount || 0}</span>
                     </div>
                   </td>
-                  <td className="p-4 align-top whitespace-nowrap">
-                    <p className="text-sm font-bold text-slate-800">Paid: Rs.{enr.paid_amount || 0}</p>
-                    <p className="text-xs font-bold text-red-500 mt-0.5">Due: Rs.{enr.remaining_amount || 0}</p>
+                  <td className="p-3 border-r border-slate-300 align-top text-center">
+                    <input 
+                      type="checkbox" 
+                      checked={!!enr.confirmed} 
+                      onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} 
+                      className="w-5 h-5 cursor-pointer accent-green-600 border-slate-300 rounded" 
+                    />
                   </td>
-                  <td className="p-4 align-top">
-                    <ToggleSwitch checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} label={enr.confirmed ? 'Yes' : 'No'} activeColor="bg-green-500" activeText="text-green-600" />
-                  </td>
-                  <td className="p-4 align-top text-right">
-                    <div className="flex justify-end gap-1 flex-wrap">
-                      <button onClick={() => openPaymentEdit(enr)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors" title="Edit Payment"><DollarSign size={16} /></button>
-                      <button onClick={() => handleHide(enr.id)} className="p-1.5 text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Hide"><EyeOff size={16} /></button>
-                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments_v2').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                  <td className="p-2 align-top text-center">
+                    <div className="flex flex-col gap-1.5">
+                      <button onClick={() => openPaymentEdit(enr)} className="w-full text-[10px] font-bold bg-slate-100 border border-slate-300 text-slate-700 py-1.5 rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-1"><Edit2 size={12}/> Edit Pay</button>
+                      <button onClick={() => handleHide(enr.id)} className="w-full text-[10px] font-bold bg-slate-100 border border-slate-300 text-slate-600 py-1.5 rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-1"><EyeOff size={12}/> Hide</button>
+                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments_v2').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="w-full text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 py-1.5 rounded hover:bg-red-100 transition-colors flex items-center justify-center gap-1"><Trash2 size={12}/> Del</button>
                     </div>
                   </td>
                 </tr>
               ))}
-              {paginatedEnrollments.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-slate-500">No matching enrollments found.</td></tr>}
+              {paginatedEnrollments.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500 font-medium">No matching enrollments found.</td></tr>}
             </tbody>
           </table>
         </div>
 
-        {/* PAGINATION FOOTER */}
         {courseEnrollments.length > 0 && (
-          <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0">
-            <span className="text-sm font-medium text-slate-500">
+          <div className="flex items-center justify-between p-4 border-t border-slate-300 bg-slate-50 shrink-0">
+            <span className="text-xs font-bold text-slate-600">
               Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, courseEnrollments.length)} of {courseEnrollments.length} entries
             </span>
             <div className="flex gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-slate-200 text-slate-700 disabled:opacity-50 hover:bg-slate-50 transition-colors"
-              >
-                Next
-              </button>
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded border border-slate-300 text-xs font-bold bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-100 transition-colors">Previous</button>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-4 py-2 rounded border border-slate-300 text-xs font-bold bg-white text-slate-700 disabled:opacity-50 hover:bg-slate-100 transition-colors">Next</button>
             </div>
           </div>
         )}
       </div>
+
+      {/* MANUAL BOOKING MODAL */}
+      {isAddingBooking && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setIsAddingBooking(false)}>
+          <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsAddingBooking(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
+            <h3 className="text-2xl font-black mb-1">Add Booking</h3>
+            <p className="text-xs font-medium text-slate-500 mb-6">Create enrollment and link order manually.</p>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Full Name</label>
+                <input type="text" value={newBooking.name} onChange={(e) => setNewBooking({...newBooking, name: e.target.value})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" placeholder="John Doe" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Email Address</label>
+                <input type="email" value={newBooking.email} onChange={(e) => setNewBooking({...newBooking, email: e.target.value})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" placeholder="john@example.com" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">WhatsApp Number</label>
+                <input type="text" value={newBooking.wa} onChange={(e) => setNewBooking({...newBooking, wa: e.target.value})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" placeholder="98XXXXXXXX" />
+              </div>
+            </div>
+            
+            <div className="mt-8 flex justify-end gap-3">
+              <button onClick={() => setIsAddingBooking(false)} className="px-5 py-3 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
+              <button onClick={saveManualBooking} className="px-6 py-3 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Add Enrollment</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* PAYMENT EDIT MODAL */}
       {editingPayment && (
@@ -1329,17 +1462,22 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
             <div className="space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
-                <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-emerald-500 font-black text-slate-800 transition-colors" />
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Remaining Amount (Rs)</label>
-                <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-red-500 font-black text-red-600 transition-colors" />
               </div>
+              {!editingPayment.order_id && (
+                 <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mt-2">
+                   <p className="text-xs font-bold text-blue-700 flex items-start gap-1"><AlertCircle size={14} className="shrink-0 mt-0.5" /> No linked order found. Saving this will automatically create an order linking to this enrollment.</p>
+                 </div>
+              )}
             </div>
             
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={() => setEditingPayment(null)} className="px-4 py-2 font-bold text-slate-500 hover:text-slate-800 transition-colors">Cancel</button>
-              <button onClick={savePayment} className="px-6 py-2 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
+              <button onClick={savePayment} className="px-6 py-2 rounded-xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save Details</button>
             </div>
           </div>
         </div>
@@ -1376,7 +1514,6 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
 
     let savedCourseId = editingCourse.id;
 
-    // 1. Save Online Course Data to V2
     if (payload.id) { 
       const { error } = await supabase.from('online_courses_v2').update({
           fee: payload.fee, discount: payload.discount, is_active: payload.is_active
@@ -1390,7 +1527,6 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
       savedCourseId = inserted.syllabus_id;
     }
 
-    // 2. Save Batch Data to V2
     if (savedCourseId && editBatch.batch_no) {
       const exists = batches.find(b => b.course_id === savedCourseId && b.batch_no === editBatch.batch_no);
       
