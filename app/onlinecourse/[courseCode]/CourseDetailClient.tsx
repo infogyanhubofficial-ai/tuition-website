@@ -66,6 +66,9 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
   
   const urlCourseCode = resolvedParams.courseCode || resolvedParams.id; 
 
+  // Initialize Supabase client once to prevent lock stealing runtime error
+  const [supabase] = useState(() => createClient());
+
   const [course, setCourse] = useState<Course | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -206,7 +209,6 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
 
         try {
           if (courseData.active_batch_id) {
-            const supabase = createClient();
             const { count, error: countError } = await supabase
               .from('enrollments_v2') 
               .select('*', { count: 'exact', head: true })
@@ -229,7 +231,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
       }
     }
     fetchCourseAndSeats();
-  }, [urlCourseCode]);
+  }, [urlCourseCode, supabase]);
 
   useEffect(() => {
     async function fetchAvatars() {
@@ -296,10 +298,22 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
       
       <div className="fixed top-0 left-0 h-1.5 bg-emerald-500 z-[60] transition-all duration-150 ease-out shadow-[0_0_10px_rgba(16,185,129,0.8)]" style={{ width: `${scrollProgress}%` }} />
 
+      {/* Marquee Banner */}
       <div className="bg-gradient-to-r from-orange-600 via-amber-500 to-orange-600 text-white py-2.5 border-b border-orange-700/50 flex overflow-hidden shadow-md">
-        <div className="whitespace-nowrap animate-marquee-slow font-bold uppercase text-xs sm:text-sm tracking-widest shrink-0 drop-shadow-sm">
-            ✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨ &nbsp;&nbsp;&nbsp;&nbsp;
-            ✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨
+        <style>{`
+          @keyframes custom-marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .animate-custom-marquee {
+            display: flex;
+            white-space: nowrap;
+            animation: custom-marquee 25s linear infinite;
+          }
+        `}</style>
+        <div className="animate-custom-marquee font-bold uppercase text-xs sm:text-sm tracking-widest w-max shrink-0 drop-shadow-sm">
+          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨</span>
+          <span className="pr-10">✨ SPECIAL ENROLLMENT OFFER: NRs. {formatPrice(finalPrice)} ONLY — CLAIM YOUR {discount}% DISCOUNT TODAY — ONLY {seats} SEATS REMAINING ✨</span>
         </div>
       </div>
 

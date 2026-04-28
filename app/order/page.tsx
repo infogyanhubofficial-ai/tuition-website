@@ -98,10 +98,10 @@ function CheckoutContent() {
   else if (orderTypeParam.includes("verif") || orderTypeParam.includes("batch") || orderTypeParam.includes("badge")) currentMode = "badge";
   else if (requestType === "cv" || requestType === "phone") currentMode = "cv_phone"; 
 
-  // 3. FORM STATE
-  const [fullName, setFullName] = useState(urlName);
-  const [email, setEmail] = useState(urlEmail);
-  const [contactNumber, setContactNumber] = useState(urlPhone);
+  // 3. BULLETPROOF FORM STATE (Forces strings, prevents nulls)
+  const [fullName, setFullName] = useState<string>(urlName || "");
+  const [email, setEmail] = useState<string>(urlEmail || "");
+  const [contactNumber, setContactNumber] = useState<string>(urlPhone || "");
   
   // 4. UPLOAD & POLICY STATE
   const [screenshot, setScreenshot] = useState<File | null>(null);
@@ -169,7 +169,6 @@ function CheckoutContent() {
   }, [tutorId, urlTutorName, urlName, urlEmail, urlCourseName, currentMode, supabase]);
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
-  // Centralized standard brand colors: Blue for primary action, Emerald for positive/secure status, Slate for structure
   const getOrderConfig = () => {
     switch (currentMode) {
       case "recording":
@@ -233,10 +232,15 @@ function CheckoutContent() {
   const config = getOrderConfig();
   const amountInWords = config.price === 1000 ? "One Thousand Rupees" : config.price === 500 ? "Five Hundred Rupees" : `${config.price.toLocaleString()} Rupees`;
 
-  // 8. VALIDATION CHECKS
-  const isPhoneValid = contactNumber.replace(/\D/g, '').length >= 10;
-  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const isNameValid = fullName.trim().length > 2;
+  // 8. BULLETPROOF VALIDATION CHECKS
+  // Safely extract values in case state behaves unexpectedly
+  const safePhone = contactNumber || '';
+  const safeEmail = email || '';
+  const safeName = fullName || '';
+
+  const isPhoneValid = safePhone.replace(/\D/g, '').length >= 10;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail);
+  const isNameValid = safeName.trim().length > 2;
 
   // 9. SUBMIT HANDLER
   const handleSubmit = async () => {
@@ -249,6 +253,10 @@ function CheckoutContent() {
     if (currentMode === "unknown") { alert("Invalid order type. Please restart the checkout process."); return; }
 
     setIsUploading(true);
+
+    // Normalize email before database submission
+    const finalNormalizedEmail = safeEmail.trim().toLowerCase();
+
     try {
       const compressedScreenshot = await compressImage(screenshot);
       const fileExt = compressedScreenshot.name.split('.').pop();
@@ -265,7 +273,7 @@ function CheckoutContent() {
 
       if (!finalEnrollmentId && config.dbOrderType === "Online Course") {
         const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
-          search_email: email.trim()
+          search_email: finalNormalizedEmail
         });
 
         if (rpcId && !rpcError) {
@@ -278,17 +286,31 @@ function CheckoutContent() {
       }
 
       const paidAmount = config.price; 
-      const finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+      let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
 
+      // SAFEGUARD: Ensure locked_price is NEVER lower than paid_amount to prevent DB constraint crash
+      if (finalLockedPrice < paidAmount) {
+        finalLockedPrice = paidAmount;
+      }
+
+      // BULLETPROOF SUBMIT: Guaranteed to send valid string values
+      // BULLETPROOF SUBMIT: Guaranteed to send valid string values
       const { error: dbError } = await supabase.from('orders_v2').insert([{
         user_id: currentUserId || null,
-        enrollment_id: finalEnrollmentId,
+        enrollment_id: finalEnrollmentId || null,
         order_type: config.dbOrderType,         
         order_name: config.orderName,
-        locked_price: finalLockedPrice,
-        paid_amount: paidAmount,        
+        
+        // --- FIX IS HERE ---
+        locked_amount: finalLockedPrice, // Changed from locked_price
+        price: paidAmount,               // Changed from paid_amount
+        // -------------------
+        
         payment_screenshots: [uploadData.path],
-        status: 'pending'
+        status: 'pending',
+        full_name: safeName.trim(),           
+        email: finalNormalizedEmail,          
+        whatsapp_number: safePhone.trim()     
       }]);
       
       if (dbError) throw dbError;

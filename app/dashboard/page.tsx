@@ -299,19 +299,21 @@ export default function ProfilePage() {
   const fetchNeutralData = useCallback(async (email: string, uid: string) => {
     if (!email || !uid) return;
     try {
+      // 1. Fetch Orders (linked by ID or Email)
       const { data: ordersV2, error: ordersError } = await supabase
         .from('orders_v2')
         .select('*')
-        .eq('user_id', uid)
+        .or(`user_id.eq.${uid},email.ilike.${email}`)
         .order('created_at', { ascending: false });
+        
       if (ordersError) setOrdersError(ordersError.message);
       else if (ordersV2) {
         const mappedOrders = ordersV2.map(o => ({
           id: o.id,
-          full_name: 'You',
-          email: email,
-          contact_number: '',
-          order_type: o.order_type,
+          full_name: o.full_name || 'You',
+          email: o.email || email,
+          contact_number: o.whatsapp_number || '',
+          order_type: o.order_type?.toLowerCase() || 'other',
           order_name: o.order_name,
           price: o.paid_amount || 0,
           screenshot_url: o.payment_screenshots?.[0] || '',
@@ -323,11 +325,13 @@ export default function ProfilePage() {
         setOrders(mappedOrders as any);
         setOrdersError(null);
       }
+      
       const { data: certs } = await supabase.from('certificates').select('*').ilike('email', email);
       if (certs) setCertificates(certs as any);
       const { data: recordings } = await supabase.from('recordings').select('*');
       if (recordings) setRecordingsList(recordings as any);
       
+      // 2. Fetch Enrollments (linked by ID or Email)
       const { data: enrollsV2 } = await supabase
         .from('enrollments_v2')
         .select('*')
@@ -434,6 +438,7 @@ export default function ProfilePage() {
 
   const fetchStudentData = useCallback(async (uid: string, email: string) => {
     try {
+      // 3. Fetch Vacancies (linked by ID or Email)
       let vacancyQuery = supabase.from('vacancies').select('*').order('created_at', { ascending: false });
       if (email && email.trim() !== '') vacancyQuery = vacancyQuery.or(`user_id.eq.${uid},email.ilike.${email}`);
       else vacancyQuery = vacancyQuery.eq('user_id', uid);

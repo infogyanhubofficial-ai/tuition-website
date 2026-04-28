@@ -20,14 +20,16 @@ export interface Course {
   discount: number; 
   category: string;
   difficulty_level: string;
-  description: string;
+  // Allows for direct property
+  learning_outcomes?: any; 
+  // Added to catch data if the backend returns it as a joined relation
+  syllabi_v2?: any; 
   start_datetime: string;
   syllabus_url: string;
   cover_pic: string;
   is_active: boolean; 
 }
 
-// Refinement 2: Softer, lower-saturation secondary UI elements
 const DIFFICULTY_COLORS: Record<string, string> = {
   Beginner: "text-emerald-700 bg-emerald-50/50 dark:text-emerald-400 dark:bg-emerald-950/20 ring-emerald-500/10",
   Intermediate: "text-indigo-700 bg-indigo-50/50 dark:text-indigo-400 dark:bg-indigo-950/20 ring-indigo-500/10",
@@ -134,10 +136,8 @@ export default function OnlineCoursesPage() {
         <span className="text-neutral-800 dark:text-neutral-200">Online Courses</span>
       </nav>
 
-      {/* Refinement 3 & 5: Improved mobile density and spacing rhythm */}
       <header className="max-w-7xl mx-auto px-5 sm:px-8 pt-8 pb-8 md:pt-16 md:pb-12 flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 md:gap-10 border-b border-neutral-200/60 dark:border-neutral-800/60">
         <div className="w-full lg:w-auto">
-          {/* Refinement 1: Sharpen typography hierarchy (tighter tracking, stronger contrast) */}
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tighter mb-4 text-neutral-900 dark:text-white">
             Master our Upcoming <br className="hidden sm:block" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-600 to-orange-400">
@@ -149,7 +149,6 @@ export default function OnlineCoursesPage() {
           </p>
         </div>
 
-        {/* Refinement 4: Subtler secondary components (thinner borders, lighter backgrounds) */}
         <div className="w-full lg:w-auto flex flex-col sm:flex-row gap-3">
           <div className="relative group w-full sm:w-64">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -182,7 +181,6 @@ export default function OnlineCoursesPage() {
         </div>
       </header>
 
-      {/* Refinement 3: Tighter gaps on mobile */}
       <main className="max-w-7xl mx-auto px-5 sm:px-8 mt-8 md:mt-12 pb-24">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-8">
@@ -246,16 +244,54 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
   };
   const countdown = getCountdown();
 
-  const descriptionBullets = useMemo(() => {
-    if (!course.description) return [];
-    return course.description
-      .split('\n')
-      .filter(line => line.trim().length > 0)
-      .map(line => line.replace(/✔️|✅|▪️|-/g, '').trim())
-      .slice(0, 3); // Reduced to 3 for tighter mobile height
-  }, [course.description]);
+  // Bullet-proof extractor for Postgres JSONB & nested relation issues
+  const outcomeBullets = useMemo(() => {
+    // 1. Locate the data payload (handles direct root OR joined table scenario)
+    let rawPayload = course.learning_outcomes;
+    
+    if (!rawPayload && course.syllabi_v2) {
+      // Handles if backend returns an array of joins or a single object join
+      const syllabusData = Array.isArray(course.syllabi_v2) ? course.syllabi_v2[0] : course.syllabi_v2;
+      if (syllabusData) rawPayload = syllabusData.learning_outcomes;
+    }
 
-  // Refinement 2: Control colors. Less noisy tags.
+    if (!rawPayload) return [];
+
+    let extractedOutcomes: any[] = [];
+
+    // 2. Safely parse if Postgres returned it as a stringified JSON block
+    let parsedData = rawPayload;
+    if (typeof rawPayload === 'string') {
+      try {
+        parsedData = JSON.parse(rawPayload);
+      } catch (e) {
+        // Fallback if it's just a raw text string
+        parsedData = [rawPayload];
+      }
+    }
+
+    // 3. Extract the array regardless of object wrapping
+    if (Array.isArray(parsedData)) {
+      extractedOutcomes = parsedData;
+    } else if (parsedData && typeof parsedData === 'object') {
+      if (Array.isArray(parsedData.learning_outcomes)) {
+        extractedOutcomes = parsedData.learning_outcomes;
+      } else if (typeof parsedData.learning_outcomes === 'string') {
+        // Catch double-stringified objects
+        try {
+          const innerParse = JSON.parse(parsedData.learning_outcomes);
+          if (Array.isArray(innerParse)) extractedOutcomes = innerParse;
+        } catch(e) {}
+      }
+    }
+
+    // 4. Clean formatting and limit to 2 for UI density
+    return extractedOutcomes
+      .filter(item => typeof item === 'string' && item.trim().length > 0)
+      .map(item => item.replace(/✔️|✅|▪️|-/g, '').trim())
+      .slice(0, 2); 
+  }, [course.learning_outcomes, course.syllabi_v2]);
+
   const tagData = useMemo(() => {
     const tags = [
       { text: "Bestseller", icon: Zap, bg: "bg-orange-500 text-white" },
@@ -272,7 +308,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
       
       <Link href={`/onlinecourse/${course.course_code}`} className="absolute inset-0 z-10" aria-label={`View details for ${course.title}`} />
       
-      {/* --- TOP IMAGE SECTION --- */}
       <div className="relative w-full aspect-[16/9] overflow-hidden bg-neutral-100 dark:bg-neutral-800">
         <Image
           src={course.cover_pic || '/placeholder-course.jpg'}
@@ -315,8 +350,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
         </div>
       </div>
 
-      {/* --- CONTENT SECTION --- */}
-      {/* Refinement 3: Tighter internal padding on mobile */}
       <div className="p-4 sm:p-5 flex flex-col flex-grow relative pointer-events-none">
         
         <div className="flex items-center justify-between gap-3 mb-2.5 relative z-20 pointer-events-auto">
@@ -335,17 +368,16 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           )}
         </div>
 
-        {/* Refinement 1: Typography hierarchy */}
         <h2 className="text-lg font-black text-neutral-900 dark:text-white mb-2 leading-snug tracking-tight line-clamp-2 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors">
           {course.title || 'Untitled Course'}
         </h2>
 
-        {descriptionBullets.length > 0 ? (
-          <ul className="space-y-1 mb-4 flex-grow">
-            {descriptionBullets.map((bullet, idx) => (
-              <li key={idx} className="flex items-start gap-2 text-sm text-neutral-500/90 dark:text-neutral-400/90 font-medium leading-snug">
+        {outcomeBullets.length > 0 ? (
+          <ul className="mb-4 flex-grow flex flex-col gap-1.5">
+            {outcomeBullets.map((bullet, idx) => (
+              <li key={idx} className="flex items-start gap-2 text-xs text-neutral-500/90 dark:text-neutral-400/90 font-medium leading-relaxed">
                 <CheckCircle2 size={14} className="text-neutral-300 dark:text-neutral-600 shrink-0 mt-0.5" />
-                <span className="line-clamp-1">{bullet}</span>
+                <span className="line-clamp-2" title={bullet}>{bullet}</span>
               </li>
             ))}
           </ul>
@@ -362,7 +394,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           <span>{course.timing || 'N/A'}</span>
         </div>
 
-        {/* Refinement 4: Softer secondary component (removed heavy border, lighter background) */}
         <div className="bg-neutral-50/80 dark:bg-neutral-800/40 rounded-lg p-3 mb-5">
           <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1">
             <Calendar size={10} className="text-neutral-400"/> Starts: {nepaliStartDate}
@@ -389,7 +420,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
         </div>
 
         <div className="mt-auto flex flex-col gap-2 relative z-20 pointer-events-auto">
-          {/* Refinement 4: Clear dominant primary CTA component */}
           <Link 
             href={`/onlinecourse/${course.course_code}/enroll`}
             className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-bold text-sm transition-colors"
@@ -397,7 +427,6 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
             Enroll Now <ArrowRight size={14} />
           </Link>
           
-          {/* Refinement 1: Lower opacity for least important text */}
           <div className="flex justify-center items-center gap-1 mt-1 text-[9px] font-semibold text-neutral-400/60 uppercase tracking-widest">
             <History size={10} /> Updated {updatedWeeksAgo} {updatedWeeksAgo > 1 ? 'weeks' : 'week'} ago
           </div>

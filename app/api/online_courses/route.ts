@@ -17,10 +17,11 @@ export async function GET() {
 
     const syllabusIds = storefront.map((c) => c.syllabus_id);
 
-    // 2. Fetch Tier 1: Master Templates (Heavy Content)
+    // 2. Fetch Tier 1: Master Templates
+    // FIX: Added 'learning_outcomes' to the select list and removed 'description' if not needed
     const { data: syllabi, error: syllabiError } = await supabase
       .from("syllabi_v2")
-      .select("id, course_code, category, difficulty_level, duration, description, cover_pic, syllabus_pdf")
+      .select("id, course_code, category, difficulty_level, duration, learning_outcomes, cover_pic, syllabus_pdf")
       .in("id", syllabusIds);
 
     if (syllabiError) throw syllabiError;
@@ -35,17 +36,14 @@ export async function GET() {
 
     // 4. Merge into the flat interface
     const mappedCourses = storefront.map((course) => {
-      // FIX: Removed `|| {}` so TypeScript knows this might be undefined
       const syllabus = syllabi.find((s) => s.id === course.syllabus_id);
       
-      // FIX: Removed `|| {}`
       const activeBatch = batches.find(
         (b) => b.syllabus_id === course.syllabus_id && b.batch_no === course.active_batch_no
       );
 
       return {
         id: course.syllabus_id.toString(), 
-        // FIX: Added optional chaining (?.)
         course_code: syllabus?.course_code || course.syllabus_id.toString(),
         title: course.name,
         batch_id: activeBatch?.id || null, 
@@ -55,7 +53,8 @@ export async function GET() {
         discount: course.discount,
         category: syllabus?.category || "General",
         difficulty_level: syllabus?.difficulty_level || "Beginner",
-        description: syllabus?.description || "",
+        // FIX: Map learning_outcomes instead of description
+        learning_outcomes: syllabus?.learning_outcomes || [],
         start_datetime: activeBatch?.start_datetime || null,
         syllabus_url: syllabus?.syllabus_pdf || "",
         cover_pic: syllabus?.cover_pic || "/placeholder-course.jpg",
@@ -72,6 +71,7 @@ export async function GET() {
 
     return NextResponse.json(mappedCourses);
   } catch (error: any) {
+    console.error("API Error:", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

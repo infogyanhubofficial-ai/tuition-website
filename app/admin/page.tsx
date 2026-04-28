@@ -75,7 +75,7 @@ interface Certificate {
 }
 interface Order {
   id: string; full_name: string; email: string; contact_number: string;
-  order_type: string; order_name: string; price: number; screenshot_url: string;
+  order_type: string; order_name: string; price: number; locked_amount?: number; screenshot_url: string;
   status: string; created_at: string;
 }
 
@@ -90,16 +90,6 @@ function timeAgo(dateString: string) {
   if (diffHrs < 24) return `${diffHrs}h ago`;
   return `${Math.floor(diffHrs / 24)}d ago`;
 }
-
-// --- FRAMER MOTION VARIANTS ---
-const staggerContainer: Variants = {
-  hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { staggerChildren: 0.08 } }
-};
-const staggerItem: Variants = {
-  hidden: { opacity: 0, y: 20, scale: 0.98 },
-  show: { opacity: 1, y: 0, scale: 1, transition: { type: "spring", stiffness: 300, damping: 24 } }
-};
 
 // --- MAIN COMPONENT ---
 export default function AdminDashboard() {
@@ -140,9 +130,9 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'student_requests' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vacancies' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'certificates' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchAllData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_batches' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments_v2' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders_v2' }, () => fetchAllData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_batches_v2' }, () => fetchAllData())
       .subscribe();
     return () => { supabase.removeChannel(channels); };
   }, [router]);
@@ -152,26 +142,42 @@ export default function AdminDashboard() {
       supabase.from("vacancies").select("*").order("created_at", { ascending: false }),
       supabase.from("vacancy_applications").select("*, vacancies(subject, location, salary_range, contact_name, contact_number)").order("id", { ascending: false }),
       supabase.from("student_requests").select("*, tutors(name, contact_num, hour_rate, user_id)").order("id", { ascending: false }),
-      supabase.from("online_courses").select("*").order("created_at", { ascending: false }),
+      supabase.from("online_courses_v2").select("*").order("created_at", { ascending: false }),
       supabase.from("tutors").select("*").order("created_at", { ascending: false }),
       supabase.from("messages").select("*").order("created_at", { ascending: false }),
       supabase.from("certificates").select("*").order("created_at", { ascending: false }),
-      supabase.from("syllabi").select("id, name"),
-      supabase.from("enrollments").select("*").order("created_at", { ascending: false }),
-      supabase.from("orders").select("*").order("created_at", { ascending: false }),
-      supabase.from("course_batches").select("*").order("batch_no", { ascending: false })
+      supabase.from("syllabi_v2").select("id, name"),
+      supabase.from("enrollments_v2").select("*, course_batches_v2(syllabus_id, batch_no)").order("created_at", { ascending: false }),
+      supabase.from("orders_v2").select("*").order("created_at", { ascending: false }),
+      supabase.from("course_batches_v2").select("*").order("batch_no", { ascending: false })
     ]);
 
     if (vacRes.data) setVacancies(vacRes.data);
     if (appRes.data) setApplications(appRes.data);
     if (reqRes.data) setRequests(reqRes.data);
-    if (curRes.data) setCourses(curRes.data);
+    
+    // Map V2 structure to V1 state to prevent UI crashes
+    if (curRes.data) setCourses(curRes.data.map((c: any) => ({ ...c, id: c.syllabus_id?.toString() || c.id, title: c.name || c.title })));
     if (tutRes.data) setTutors(tutRes.data);
     if (certRes.data) setCertificates(certRes.data);
     if (sylRes.data) setSyllabi(sylRes.data);
-    if (enrRes.data) setEnrollments(enrRes.data);
-    if (ordRes.data) setOrders(ordRes.data);
-    if (batchRes.data) setBatches(batchRes.data);
+    if (enrRes.data) setEnrollments(enrRes.data.map((e: any) => ({ ...e, confirmed: e.is_confirmed !== undefined ? e.is_confirmed : e.confirmed, course_id: e.course_batches_v2?.syllabus_id?.toString() || e.course_id, batch_no: e.course_batches_v2?.batch_no || e.batch_no })));
+    
+    // FIX: Map orders_v2 mapping logic to handle locked_amount and ensure names/emails have safe fallbacks
+    if (ordRes.data) {
+      setOrders(ordRes.data.map((o: any) => ({ 
+        ...o, 
+        full_name: o.full_name || 'N/A',
+        email: o.email || 'N/A',
+        contact_number: o.whatsapp_number || o.contact_number || 'N/A', 
+        price: o.locked_amount !== undefined ? o.locked_amount : (o.price || 0),
+        order_type: o.order_type || 'course',
+        order_name: o.order_name || 'Course Enrollment',
+        screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[0] : o.screenshot_url 
+      })));
+    }
+    
+    if (batchRes.data) setBatches(batchRes.data.map((b: any) => ({ ...b, course_id: b.syllabus_id?.toString() || b.course_id })));
 
     if (msgRes.error) {
       console.error("Error fetching messages:", msgRes.error);
@@ -397,7 +403,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'failed'>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'course' | 'others'>('all'); 
-  const [showAllOrders, setShowAllOrders] = useState(false);
+  const [showAllOrders, setShowAllOrders] = useState(true); // FIX: Default to TRUE so transactions show up
 
   const filteredData = data.filter((o: Order) => {
     const s = searchQuery.toLowerCase();
@@ -426,14 +432,14 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   });
 
   const handleStatusChange = async (id: string, newStatus: string) => {
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', id);
+    const { error } = await supabase.from('orders_v2').update({ status: newStatus }).eq('id', id);
     if (error) alert("Update failed: " + error.message);
     else refresh();
   };
 
   const handleDelete = async (id: string) => {
     if (confirm("Are you sure you want to delete this order?")) {
-      const { error } = await supabase.from('orders').delete().eq('id', id);
+      const { error } = await supabase.from('orders_v2').delete().eq('id', id);
       if (error) alert("Delete failed: " + error.message);
       else refresh();
     }
@@ -540,7 +546,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   <p><span className="font-bold text-slate-800">Email:</span> {selectedOrder.email}</p>
                   <p><span className="font-bold text-slate-800">Phone:</span> {selectedOrder.contact_number}</p>
                 </div>
-                <a href={`https://wa.me/${selectedOrder.contact_number.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20b858] text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm transition-colors w-full">
+                <a href={`https://wa.me/${(selectedOrder.contact_number || '').replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20b858] text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm transition-colors w-full">
                   <MessageCircle size={16} /> Contact via WhatsApp
                 </a>
               </div>
@@ -982,14 +988,13 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
 }
 
 // --- SECTION: BOOKINGS ---
-// --- SECTION: BOOKINGS ---
 function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
   const [dateSort, setDateSort] = useState<'desc' | 'asc'>('desc');
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
-  const [searchQuery, setSearchQuery] = useState(""); // <-- NEW: Search state
+  const [searchQuery, setSearchQuery] = useState(""); 
   
   // Payment Editing State
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
@@ -1003,14 +1008,13 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
-  // 🔥 FIX: Pagination Logic moved to the top level, before any early returns
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCourse, selectedBatch, dateSort, statusFilter, hiddenBookingIds, searchQuery]); // <-- NEW: Added searchQuery to dependencies
+  }, [selectedCourse, selectedBatch, dateSort, statusFilter, hiddenBookingIds, searchQuery]); 
 
   const toggleConfirmation = async (enrollmentId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase.from('enrollments').update({ confirmed: !currentStatus }).eq('id', enrollmentId);
+      const { error } = await supabase.from('enrollments_v2').update({ is_confirmed: !currentStatus }).eq('id', enrollmentId);
       if (error) { alert(`Could not update booking: ${error.message}`); return; }
       refresh();
     } catch (err) { alert("An unexpected error occurred while updating."); }
@@ -1024,7 +1028,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
   const savePayment = async () => {
     if (!editingPayment) return;
-    const { error } = await supabase.from('enrollments').update({
+    const { error } = await supabase.from('enrollments_v2').update({
       paid_amount: editPaid,
       remaining_amount: editRemaining
     }).eq('id', editingPayment.id);
@@ -1156,7 +1160,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     if (selectedBatch === 'unassigned' && e.batch_no) return false;
     if (selectedBatch !== 'unassigned' && e.batch_no !== selectedBatch) return false;
 
-    // <-- NEW: Search logic check -->
+    // Search logic check
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchName = e.full_name?.toLowerCase().includes(q);
@@ -1191,7 +1195,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       
-      {/* <-- NEW: Redesigned Header & Search Bar --> */}
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -1279,7 +1282,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                     <div className="flex justify-end gap-1 flex-wrap">
                       <button onClick={() => openPaymentEdit(enr)} className="p-1.5 text-emerald-600 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors" title="Edit Payment"><DollarSign size={16} /></button>
                       <button onClick={() => handleHide(enr.id)} className="p-1.5 text-slate-500 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors" title="Hide"><EyeOff size={16} /></button>
-                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
+                      <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments_v2').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors" title="Delete"><Trash2 size={16} /></button>
                     </div>
                   </td>
                 </tr>
@@ -1354,7 +1357,6 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
 
   const openEdit = (course: OnlineCourse) => {
     setEditingCourse({ ...course });
-    // Pull course batches and pick highest batch_no for editing
     const courseBatches = batches.filter(b => b.course_id === course.id).sort((a,b) => b.batch_no - a.batch_no);
     if (courseBatches.length > 0) {
       setEditBatch({ ...courseBatches[0] });
@@ -1370,27 +1372,31 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
     payload.fee = parseFloat(payload.fee as any) || 0;
     payload.discount = parseFloat(payload.discount as any) || 0;
     
-    // Legacy cleanup - keeping it structurally fine if using pure table mapping
     delete payload.class_info;
 
     let savedCourseId = editingCourse.id;
 
-    // 1. Save Online Course Data
+    // 1. Save Online Course Data to V2
     if (payload.id) { 
-      const { error } = await supabase.from('online_courses').update(payload).eq('id', payload.id); 
+      const { error } = await supabase.from('online_courses_v2').update({
+          fee: payload.fee, discount: payload.discount, is_active: payload.is_active
+      }).eq('syllabus_id', payload.id); 
       if (error) { alert(error.message); return; }
     } else { 
-      const { data: inserted, error } = await supabase.from('online_courses').insert([payload]).select('id').single(); 
+      const { data: inserted, error } = await supabase.from('online_courses_v2').insert([{
+          syllabus_id: payload.id, name: payload.title, fee: payload.fee, discount: payload.discount, is_active: payload.is_active
+      }]).select('syllabus_id').single(); 
       if (error) { alert(error.message); return; }
-      savedCourseId = inserted.id;
+      savedCourseId = inserted.syllabus_id;
     }
 
-    // 2. Save Batch Data
+    // 2. Save Batch Data to V2
     if (savedCourseId && editBatch.batch_no) {
       const exists = batches.find(b => b.course_id === savedCourseId && b.batch_no === editBatch.batch_no);
       
       const batchPayload = {
-        course_id: savedCourseId,
+        syllabus_id: savedCourseId,
+        course_name: payload.title,
         batch_no: editBatch.batch_no,
         online_class_link: editBatch.online_class_link || null,
         google_classroom_link: editBatch.google_classroom_link || null,
@@ -1399,13 +1405,13 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
       };
 
       if (exists) {
-        const { error: bErr } = await supabase.from('course_batches')
+        const { error: bErr } = await supabase.from('course_batches_v2')
           .update(batchPayload)
-          .eq('course_id', savedCourseId)
+          .eq('syllabus_id', savedCourseId)
           .eq('batch_no', editBatch.batch_no);
         if (bErr) alert("Batch Update Error: " + bErr.message);
       } else {
-        const { error: bErr } = await supabase.from('course_batches')
+        const { error: bErr } = await supabase.from('course_batches_v2')
           .insert([batchPayload]);
         if (bErr) alert("Batch Create Error: " + bErr.message);
       }
@@ -1416,7 +1422,7 @@ function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batc
   };
 
   const toggleCourseStatus = async (course: OnlineCourse) => {
-    const { error } = await supabase.from('online_courses').update({ is_active: !course.is_active }).eq('id', course.id);
+    const { error } = await supabase.from('online_courses_v2').update({ is_active: !course.is_active }).eq('syllabus_id', course.id);
     if (error) alert(error.message); else refresh();
   };
 
@@ -1542,7 +1548,6 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
     certificate_code: '', existing_image: '', file: null as File | null
   });
 
-  // 🔥 FIX: Pagination Logic moved to the top level 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
@@ -1768,25 +1773,22 @@ function ChatModal({ userId, onClose, profilesMap }: any) {
 
   useEffect(() => {
     const fetchMessages = async () => {
-      // Fetch user messages
       const { data } = await supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: true });
       if (data) setMessages(data);
     };
 
     fetchMessages();
 
-    // Listen for realtime chat updates
     const channel = supabase.channel(`chat_updates_${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
          setMessages(prev => {
-           // Prevent duplicate if we already added it via handleSend
            if (prev.some(msg => msg.id === payload.new.id)) return prev;
            return [...prev, payload.new as Message];
          });
       }).subscribe();
       
     return () => { supabase.removeChannel(channel); };
-  }, [userId]); // Removed refreshData to prevent constant re-subscriptions
+  }, [userId]); 
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -1796,15 +1798,12 @@ function ChatModal({ userId, onClose, profilesMap }: any) {
     e.preventDefault();
     if (!newMessage.trim()) return;
     
-    // Completely removed `is_read` from payload to fix the schema crash
     const msgPayload = { user_id: userId, sender_role: 'admin', content: newMessage.trim() };
     
-    // Added .select().single() to return the inserted row instantly
     const { data, error } = await supabase.from("messages").insert([msgPayload]).select().single();
     
     if (!error && data) {
       setNewMessage("");
-      // Optimistic update
       setMessages(prev => [...prev, data as Message]); 
     } else {
       alert("Failed to send message: " + error?.message);
