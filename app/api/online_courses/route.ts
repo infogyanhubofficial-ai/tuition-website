@@ -18,7 +18,6 @@ export async function GET() {
     const syllabusIds = storefront.map((c) => c.syllabus_id);
 
     // 2. Fetch Tier 1: Master Templates (Heavy Content)
-    // 🟢 course_code and description are safely fetched here
     const { data: syllabi, error: syllabiError } = await supabase
       .from("syllabi_v2")
       .select("id, course_code, category, difficulty_level, duration, description, cover_pic, syllabus_pdf")
@@ -27,7 +26,6 @@ export async function GET() {
     if (syllabiError) throw syllabiError;
 
     // 3. Fetch Tier 3: Live Logistics (Active Batches Only)
-    // 🟢 FIX: Added 'id' to the select statement so we can map batch_id
     const { data: batches, error: batchesError } = await supabase
       .from("course_batches_v2")
       .select("id, syllabus_id, batch_no, start_datetime, timing")
@@ -37,28 +35,30 @@ export async function GET() {
 
     // 4. Merge into the flat interface
     const mappedCourses = storefront.map((course) => {
-      const syllabus = syllabi.find((s) => s.id === course.syllabus_id) || {};
+      // FIX: Removed `|| {}` so TypeScript knows this might be undefined
+      const syllabus = syllabi.find((s) => s.id === course.syllabus_id);
       
+      // FIX: Removed `|| {}`
       const activeBatch = batches.find(
         (b) => b.syllabus_id === course.syllabus_id && b.batch_no === course.active_batch_no
-      ) || {};
+      );
 
       return {
         id: course.syllabus_id.toString(), 
-        course_code: syllabus.course_code || course.syllabus_id.toString(),
+        // FIX: Added optional chaining (?.)
+        course_code: syllabus?.course_code || course.syllabus_id.toString(),
         title: course.name,
-        // 🟢 FIX: Map the batch_id so the frontend can use it for enrollments_v2
-        batch_id: activeBatch.id || null, 
-        duration: syllabus.duration || "Self-Paced",
-        timing: activeBatch.timing || "TBA",
+        batch_id: activeBatch?.id || null, 
+        duration: syllabus?.duration || "Self-Paced",
+        timing: activeBatch?.timing || "TBA",
         fee: course.fee,
         discount: course.discount,
-        category: syllabus.category || "General",
-        difficulty_level: syllabus.difficulty_level || "Beginner",
-        description: syllabus.description || "",
-        start_datetime: activeBatch.start_datetime || null,
-        syllabus_url: syllabus.syllabus_pdf || "",
-        cover_pic: syllabus.cover_pic || "/placeholder-course.jpg",
+        category: syllabus?.category || "General",
+        difficulty_level: syllabus?.difficulty_level || "Beginner",
+        description: syllabus?.description || "",
+        start_datetime: activeBatch?.start_datetime || null,
+        syllabus_url: syllabus?.syllabus_pdf || "",
+        cover_pic: syllabus?.cover_pic || "/placeholder-course.jpg",
         is_active: course.is_active,
       };
     });
