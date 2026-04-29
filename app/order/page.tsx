@@ -89,6 +89,7 @@ function CheckoutContent() {
   const urlPrice = searchParams.get("price") || "0"; 
   
   const urlEnrollmentId = searchParams.get("enrollment_id") || searchParams.get("enrollmentId") || null;
+  const urlOrderId = searchParams.get("order_id") || searchParams.get("orderId") || null; // NEW: Get existing order ID
   const urlLockedPrice = searchParams.get("locked_price") || null;
 
   // 2. DETERMINE ORDER MODE
@@ -233,7 +234,6 @@ function CheckoutContent() {
   const amountInWords = config.price === 1000 ? "One Thousand Rupees" : config.price === 500 ? "Five Hundred Rupees" : `${config.price.toLocaleString()} Rupees`;
 
   // 8. BULLETPROOF VALIDATION CHECKS
-  // Safely extract values in case state behaves unexpectedly
   const safePhone = contactNumber || '';
   const safeEmail = email || '';
   const safeName = fullName || '';
@@ -254,10 +254,11 @@ function CheckoutContent() {
 
     setIsUploading(true);
 
-    // Normalize email before database submission
     const finalNormalizedEmail = safeEmail.trim().toLowerCase();
+    const paidAmount = config.price; 
 
     try {
+      // 1. Upload Screenshot
       const compressedScreenshot = await compressImage(screenshot);
       const fileExt = compressedScreenshot.name.split('.').pop();
       const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -269,70 +270,86 @@ function CheckoutContent() {
         
       if (uploadError) throw uploadError;
 
-      let finalEnrollmentId = searchParams.get("enrollment_id")?.trim() || searchParams.get("enrollmentId")?.trim() || null;
+      // 2. Decide if we are UPDATING an existing order or INSERTING a new one
+      if (urlOrderId) {
+        
+        // --- UPDATE EXISTING ORDER ---
+        const { error: dbError } = await supabase
+          .from('orders_v2')
+          .update({
+            paid_amount: paidAmount,
+            payment_screenshots: [uploadData.path],
+            full_name: safeName.trim(),
+            email: finalNormalizedEmail,
+            whatsapp_number: safePhone.trim(),
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', urlOrderId);
 
-      if (!finalEnrollmentId && config.dbOrderType === "Online Course") {
-        const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
-          search_email: finalNormalizedEmail
-        });
+        if (dbError) throw dbError;
 
-        if (rpcId && !rpcError) {
-          finalEnrollmentId = rpcId;
-        } else {
-          alert("We couldn't find your enrollment record. Please make sure you used the same email address as your enrollment form.");
-          setIsUploading(false);
-          return; 
+      } else {
+
+        // --- INSERT NEW ORDER ---
+        let finalEnrollmentId = urlEnrollmentId;
+
+        if (!finalEnrollmentId && config.dbOrderType === "Online Course") {
+          const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
+            search_email: finalNormalizedEmail
+          });
+
+          if (rpcId && !rpcError) {
+            finalEnrollmentId = rpcId;
+          } else {
+            alert("We couldn't find your enrollment record. Please make sure you used the same email address as your enrollment form.");
+            setIsUploading(false);
+            return; 
+          }
         }
+
+        let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+
+        if (finalLockedPrice < paidAmount) {
+          finalLockedPrice = paidAmount;
+        }
+
+        const { error: dbError } = await supabase.from('orders_v2').insert([{
+          user_id: currentUserId || null,
+          enrollment_id: finalEnrollmentId || null,
+          order_type: config.dbOrderType,         
+          order_name: config.orderName,
+          
+          locked_price: finalLockedPrice, // CORRECTLY MAPPED TO DB
+          paid_amount: paidAmount,        // CORRECTLY MAPPED TO DB
+          
+          payment_screenshots: [uploadData.path],
+          status: 'pending',
+          full_name: safeName.trim(),           
+          email: finalNormalizedEmail,          
+          whatsapp_number: safePhone.trim()     
+        }]);
+        
+        if (dbError) throw dbError;
       }
 
-      const paidAmount = config.price; 
-      let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
-
-      // SAFEGUARD: Ensure locked_price is NEVER lower than paid_amount to prevent DB constraint crash
-      if (finalLockedPrice < paidAmount) {
-        finalLockedPrice = paidAmount;
-      }
-
-      // BULLETPROOF SUBMIT: Guaranteed to send valid string values
-      // BULLETPROOF SUBMIT: Guaranteed to send valid string values
-      const { error: dbError } = await supabase.from('orders_v2').insert([{
-        user_id: currentUserId || null,
-        enrollment_id: finalEnrollmentId || null,
-        order_type: config.dbOrderType,         
-        order_name: config.orderName,
-        
-        // --- FIX IS HERE ---
-        locked_amount: finalLockedPrice, // Changed from locked_price
-        price: paidAmount,               // Changed from paid_amount
-        // -------------------
-        
-        payment_screenshots: [uploadData.path],
-        status: 'pending',
-        full_name: safeName.trim(),           
-        email: finalNormalizedEmail,          
-        whatsapp_number: safePhone.trim()     
-      }]);
-      
-      if (dbError) throw dbError;
-
+      // 3. Handle Success Redirects
       if (currentMode === "recording") {
         setIsUploading(false);
         setShowRecordingSuccess(true);
       } else {
-        alert("Order submitted successfully!");
+        alert("Payment screenshot uploaded successfully! Your order is being verified.");
         router.push("/dashboard"); 
       }
       
     } catch (error: any) {
-      console.error("Error submitting order:", error);
-      alert(`Failed to submit order: ${error.message || 'Please try again.'}`);
+      console.error("Error processing order:", error);
+      alert(`Failed to process order: ${error.message || 'Please try again.'}`);
       setIsUploading(false); 
     } 
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20 relative selection:bg-blue-100">
-      {/* Floating Support Button softened slightly */}
       <a 
         href="https://wa.me/9763695665" 
         target="_blank" 
@@ -343,7 +360,6 @@ function CheckoutContent() {
         <span className="hidden sm:inline">Immediate Support</span>
       </a>
 
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 py-3 md:px-8 flex items-center justify-between sticky top-0 z-40">
         <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -356,13 +372,11 @@ function CheckoutContent() {
         <div className="w-16"></div>
       </header>
 
-      {/* Main Content layout */}
       <main className="max-w-6xl mx-auto px-4 md:px-8 pt-6 md:pt-10">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
           
           <div className="lg:col-span-7 space-y-6">
             
-            {/* Section 1: Contact Details */}
             <section className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
               <h2 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
                 <User className="w-5 h-5 text-blue-600" /> Contact Information
@@ -408,7 +422,6 @@ function CheckoutContent() {
               </div>
             </section>
 
-            {/* Section 2: Payment Method */}
             <section className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
@@ -419,7 +432,6 @@ function CheckoutContent() {
                 </div>
               </div>
 
-              {/* Softer QR background styling */}
               <div className="border border-emerald-100 bg-emerald-50/30 rounded-xl p-5 relative overflow-hidden flex flex-col items-center justify-center text-center">
                 <p className="text-sm font-medium text-slate-600 mb-3">Scan QR to pay securely via Fonepay</p>
                 <img 
@@ -466,7 +478,6 @@ function CheckoutContent() {
           </div>
 
           <div className="lg:col-span-5">
-            {/* Sidebar / Order Summary */}
             <div className="sticky top-20 bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm flex flex-col gap-5">
               
               <h2 className="text-lg font-bold pb-3 border-b border-slate-100 text-slate-900 flex items-center gap-2">
@@ -568,7 +579,6 @@ function CheckoutContent() {
         </div>
       </main>
 
-      {/* Success Modal */}
       {showRecordingSuccess && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xl text-center flex flex-col items-center animate-in zoom-in-95 duration-200">

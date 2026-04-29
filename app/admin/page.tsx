@@ -8,7 +8,7 @@ import {
   ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle,
   AlertCircle, CheckCircle, Flame, Sparkles, Link as LinkIcon, RotateCcw,
   ShoppingCart, CalendarDays, Award, ChevronDown, Search, EyeOff, Eye,
-  Loader2, MessageSquare, ArrowLeft, Upload, Copy
+  Loader2, MessageSquare, ArrowLeft, Upload, Copy, Settings, Layers
 } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -39,14 +39,17 @@ interface Tutor {
   hour_rate: number; user_id?: string;
 }
 interface OnlineCourse {
-  id: string; title: string; category: string; fee: number; discount: number;
+  id: string; title: string; category: string; fee: number; discount: number; active_batch_no: number;
   duration: string; cover_pic: string; tutor_name: string; is_active: boolean;
   start_datetime: string; created_at: string;
-  class_info?: { google_classroom_link?: string; online_class_link?: string; };
 }
 interface CourseBatch {
-  course_id: string;
+  id: string;
+  course_id: string; // syllabus_id
+  course_name: string;
   batch_no: number;
+  start_datetime?: string;
+  timing?: string;
   online_class_link?: string;
   google_classroom_link?: string;
   whatsapp_group_link?: string;
@@ -172,7 +175,7 @@ export default function AdminDashboard() {
         contact_number: o.whatsapp_number || o.contact_number || 'N/A', 
         price: o.paid_amount ?? 0,
         locked_amount: o.locked_price ?? 0,
-        order_type: o.order_type || 'course',
+        order_type: o.order_type || 'Online Course',
         order_name: o.order_name || 'Course Enrollment',
         screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[0] : o.screenshot_url 
       })));
@@ -187,6 +190,7 @@ export default function AdminDashboard() {
           confirmed: e.is_confirmed !== undefined ? e.is_confirmed : e.confirmed, 
           course_id: e.course_batches_v2?.syllabus_id?.toString() || e.course_id, 
           batch_no: e.course_batches_v2?.batch_no || e.batch_no,
+          locked_price: linkedOrder ? Number(linkedOrder.locked_price) : 0,
           paid_amount: linkedOrder ? Number(linkedOrder.paid_amount) : 0,
           remaining_amount: linkedOrder ? Number(linkedOrder.remaining_amount) : 0,
           order_id: linkedOrder ? linkedOrder.id : null
@@ -284,7 +288,7 @@ export default function AdminDashboard() {
           <SidebarBtn icon={<Briefcase size={20}/>} label="Vacancies" active={activeTab === "Vacancies"} onClick={() => setActiveTab("Vacancies")} />
           <SidebarBtn icon={<FileText size={20}/>} label="Applications" active={activeTab === "Applications"} onClick={() => setActiveTab("Applications")} />
           <SidebarBtn icon={<MessageSquare size={20}/>} label="Tuition Requests" active={activeTab === "Tuition Requests"} onClick={() => setActiveTab("Tuition Requests")} />
-          <SidebarBtn icon={<BookOpen size={20}/>} label="Online Courses" active={activeTab === "Online Courses"} onClick={() => setActiveTab("Online Courses")} />
+          <SidebarBtn icon={<Layers size={20}/>} label="Batch Management" active={activeTab === "Batch Management"} onClick={() => setActiveTab("Batch Management")} />
           <SidebarBtn icon={<CalendarDays size={20}/>} label="Bookings" active={activeTab === "Bookings"} onClick={() => setActiveTab("Bookings")} />
           <SidebarBtn icon={<Award size={20}/>} label="Certificates" active={activeTab === "Certificates"} onClick={() => setActiveTab("Certificates")} />
         </nav>
@@ -293,7 +297,7 @@ export default function AdminDashboard() {
         </div>
       </aside>
 
-      <main className="ml-72 flex-1 p-10 bg-slate-100/50 min-h-screen relative">
+      <main className="ml-72 flex-1 p-10 bg-slate-100/50 min-h-screen relative overflow-x-hidden">
         <AnimatePresence mode="wait">
           {activeTab === "Dashboard" && <DashboardView key="dash" conversations={conversations} loading={loadingConversations} onOpenChat={openChat} />}
           {activeTab === "Orders" && <OrdersManager key="ord" data={orders} refresh={fetchAllData} />}
@@ -301,7 +305,7 @@ export default function AdminDashboard() {
           {activeTab === "Vacancies" && <VacanciesManager key="vac" data={vacancies} applications={applications} tutors={tutors} refresh={fetchAllData} />}
           {activeTab === "Applications" && <ApplicationsManager key="app" data={applications} tutors={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Tuition Requests" && <RequestsManager key="req" data={requests} refresh={fetchAllData} onOpenChat={openChat} />}
-          {activeTab === "Online Courses" && <CoursesManager key="crs" data={courses} batches={batches} refresh={fetchAllData} />}
+          {activeTab === "Batch Management" && <BatchManager key="batch" data={courses} batches={batches} refresh={fetchAllData} />}
           {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} refresh={fetchAllData} />}
           {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={fetchAllData} />}
         </AnimatePresence>
@@ -337,7 +341,7 @@ function ToggleSwitch({ checked, onChange, label, activeColor = 'bg-indigo-500',
       <div className={`w-10 h-6 flex items-center rounded-full p-1 transition-colors duration-300 ease-in-out ${checked ? activeColor : 'bg-slate-300'}`}>
         <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ease-in-out ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
       </div>
-      {label && <span className={`text-xs font-bold ${checked ? activeText : 'text-slate-500'}`}>{label}</span>}
+      {label && <span className={`text-xs font-bold whitespace-nowrap ${checked ? activeText : 'text-slate-500'}`}>{label}</span>}
     </div>
   );
 }
@@ -419,7 +423,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'failed'>('all');
-  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'course' | 'others'>('all'); 
+  const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'Online Course' | 'others'>('all'); 
   const [showAllOrders, setShowAllOrders] = useState(true);
 
   const filteredData = data.filter((o: Order) => {
@@ -434,7 +438,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
     if (orderTypeFilter !== 'all') {
       const lowerType = o.order_type?.toLowerCase() || '';
       if (orderTypeFilter === 'recording') matchesType = lowerType.includes('recording');
-      else if (orderTypeFilter === 'course') matchesType = lowerType.includes('course');
+      else if (orderTypeFilter === 'Online Course') matchesType = lowerType.includes('course');
       else if (orderTypeFilter === 'others') matchesType = !lowerType.includes('recording') && !lowerType.includes('course');
     }
 
@@ -448,10 +452,34 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
     return matchesSearch && matchesStatus && matchesType && matchesDate;
   });
 
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    const { error } = await supabase.from('orders_v2').update({ status: newStatus }).eq('id', id);
-    if (error) alert("Update failed: " + error.message);
-    else refresh();
+  const handleStatusChange = async (order: Order, newStatus: string) => {
+    let updatePayload: any = { status: newStatus };
+
+    // If changing status to verified, optionally prompt the admin for the verified amount
+    if (newStatus === 'verified') {
+      const remaining = (order.locked_amount ?? 0) - (order.price ?? 0);
+      const amountStr = window.prompt(
+        `Order verification:\nEnter the payment amount to ADD to the current paid amount.\n\nLocked Price: Rs. ${order.locked_amount ?? 0}\nCurrently Paid: Rs. ${order.price ?? 0}\nRemaining: Rs. ${remaining}`,
+        remaining.toString()
+      );
+
+      if (amountStr === null) return; // User cancelled
+
+      const amountToAdd = parseFloat(amountStr);
+      if (isNaN(amountToAdd) || amountToAdd < 0) {
+        alert("Invalid amount entered. Please enter a valid positive number.");
+        return;
+      }
+
+      updatePayload.paid_amount = (order.price ?? 0) + amountToAdd;
+    }
+
+    const { error } = await supabase.from('orders_v2').update(updatePayload).eq('id', order.id);
+    if (error) {
+      alert("Update failed: " + error.message);
+    } else {
+      refresh();
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -476,7 +504,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black text-slate-900">Orders</h2>
       </div>
-      <div className="flex flex-wrap gap-4 items-center">
+      <div className="flex flex-wrap gap-4 items-center w-full">
         <div className="relative flex-1 min-w-[250px]">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input type="text" placeholder="Search by name, email, or order name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
@@ -491,17 +519,17 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)}>
           <option value="all">All Types</option>
           <option value="recording">Recording</option>
-          <option value="course">Course</option>
+          <option value="Online Course">Online Course</option>
           <option value="others">Others</option>
         </select>
 
-        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-3 rounded-2xl shadow-sm">
+        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-3 rounded-2xl shadow-sm whitespace-nowrap">
           <input type="checkbox" checked={showAllOrders} onChange={(e) => setShowAllOrders(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
           Show All Time
         </label>
       </div>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Date</th><th className="p-6">Customer Details</th><th className="p-6">Order Info</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -519,7 +547,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   <td className="p-6">
                     <p className="font-bold text-slate-800 flex items-center gap-2">
                       <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{order.order_type}</span>
-                      Rs. {order.price}
+                      Rs. {order.price} / Rs. {order.locked_amount}
                     </p>
                     <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.order_name}>
                       Target: {order.order_name}
@@ -527,7 +555,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   </td>
                   <td className="p-6" onClick={(e) => e.stopPropagation()}>
                     <div className="relative inline-block w-36">
-                      <select value={order.status} onChange={(e) => handleStatusChange(order.id, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[order.status] || 'bg-slate-100 text-slate-700'}`}>
+                      <select value={order.status} onChange={(e) => handleStatusChange(order, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[order.status] || 'bg-slate-100 text-slate-700'}`}>
                         <option value="pending">PENDING</option>
                         <option value="verified">VERIFIED</option>
                         <option value="failed">FAILED</option>
@@ -538,7 +566,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   <td className="p-6 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end items-center gap-4">
                       <button onClick={() => handleDelete(order.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete Order"><Trash2 size={16} /></button>
-                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Details</span>
+                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Details</span>
                     </div>
                   </td>
                 </tr>
@@ -572,7 +600,8 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                 <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Order Info</p>
                 <p><span className="font-bold text-slate-800">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
                 <p><span className="font-bold text-slate-800">Order Name:</span> {selectedOrder.order_name}</p>
-                <p><span className="font-bold text-slate-800">Price:</span> Rs. {selectedOrder.price}</p>
+                <p><span className="font-bold text-slate-800">Paid Amount:</span> Rs. {selectedOrder.price}</p>
+                <p><span className="font-bold text-slate-800">Locked Price:</span> Rs. {selectedOrder.locked_amount}</p>
                 <p><span className="font-bold text-slate-800">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
               </div>
             </div>
@@ -629,8 +658,8 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input type="text" placeholder="Search by Tutor Name, Location, or Subjects..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
       </div>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Tutor Info</th><th className="p-6">Verified</th><th className="p-6">Available</th><th className="p-6 text-right">Actions</th>
@@ -653,7 +682,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
                 <td className="p-6 text-right">
                   <div className="flex justify-end items-center gap-4">
                     <button onClick={(e) => handleDeleteTutor(tutor.id, e)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete Tutor"><Trash2 size={16} /></button>
-                    <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800">View Details</span>
+                    <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap">View Details</span>
                   </div>
                 </td>
               </tr>
@@ -759,7 +788,7 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black text-slate-900">Vacancies</h2>
-        <button onClick={() => { setEditingData({ status: true, urgent: false }); setModalOpen(true); }} className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all">
+        <button onClick={() => { setEditingData({ status: true, urgent: false }); setModalOpen(true); }} className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all whitespace-nowrap">
           <Plus size={18} /> Add Vacancy
         </button>
       </div>
@@ -767,8 +796,8 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input type="text" placeholder="Search by subject, location, or contact name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
       </div>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Date Posted</th><th className="p-6">Subject & Location</th><th className="p-6">Urgent</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -894,8 +923,8 @@ function ApplicationsManager({ data, refresh, onOpenChat, tutors }: any) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <h2 className="text-3xl font-black text-slate-900">Applications</h2>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[900px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Applicant (Tutor)</th><th className="p-6">Contact Info</th><th className="p-6">Applied For</th><th className="p-6">Vacancy Poster (Student)</th><th className="p-6">Student Response</th><th className="p-6 text-right">Action</th>
@@ -908,16 +937,16 @@ function ApplicationsManager({ data, refresh, onOpenChat, tutors }: any) {
               return (
                 <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                   <td className="p-6"><a href={tutorLink} target="_blank" className="font-bold text-indigo-600 hover:underline text-base flex items-center gap-1">{item.applicant_name} <ExternalLink size={14} /></a></td>
-                  <td className="p-6"><p className="text-sm font-bold text-slate-700">{item.applicant_phone}</p><p className="text-xs font-medium text-slate-400 truncate max-w-[150px]">{item.applicant_email}</p></td>
+                  <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.applicant_phone}</p><p className="text-xs font-medium text-slate-400 truncate max-w-[150px]">{item.applicant_email}</p></td>
                   <td className="p-6"><span onClick={() => window.open(`/vacancies/${item.vacancy_id}`, '_blank')} className="cursor-pointer text-sm text-slate-700 font-bold hover:text-indigo-600 hover:underline transition-colors flex items-center gap-1">{item.vacancies?.subject}</span></td>
-                  <td className="p-6"><p className="text-sm font-bold text-slate-700">{item.vacancies?.contact_name || 'N/A'}</p><p className="text-xs font-medium text-slate-400">{item.vacancies?.contact_number || 'N/A'}</p></td>
+                  <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.vacancies?.contact_name || 'N/A'}</p><p className="text-xs font-medium text-slate-400">{item.vacancies?.contact_number || 'N/A'}</p></td>
                   <td className="p-6">
                     <div className="flex items-center gap-2">
-                      <div className="relative inline-block w-36">
+                      <div className="relative inline-block w-32">
                         <select value={item.status} onChange={(e) => handleStatusChange(item.id, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[item.status] || 'bg-slate-100 text-slate-700'}`}>
                           <option value="pending">PENDING</option><option value="accepted">ACCEPTED</option><option value="rejected">REJECTED</option>
                         </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                        <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                       </div>
                       {item.user_id && <button onClick={() => onOpenChat(item.user_id as any)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors" title="Chat with Tutor"><MessageSquare size={16} /></button>}
                     </div>
@@ -949,8 +978,8 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <h2 className="text-3xl font-black text-slate-900">Tuition Requests</h2>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Student Info</th><th className="p-6">Applied To (Tutor)</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -960,14 +989,14 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
             {data.map((item: StudentRequest) => (
               <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer transition-colors" onClick={() => setViewMessage(item.message)}>
                 <td className="p-6">
-                  <p className="font-bold text-indigo-600 hover:underline text-lg transition-colors inline-block" onClick={(e) => { e.stopPropagation(); if (item.user_id) onOpenChat(item.user_id); }} title="Chat with Student">{item.student_name}</p>
+                  <p className="font-bold text-indigo-600 hover:underline text-lg transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); if (item.user_id) onOpenChat(item.user_id); }} title="Chat with Student">{item.student_name}</p>
                   <p className="text-sm text-slate-500 mt-1">{item.phone}</p>
                 </td>
                 <td className="p-6">
                   {item.tutors ? (
                     <div>
-                      <p className="font-bold text-indigo-600 hover:underline text-base transition-colors inline-block" onClick={(e) => { e.stopPropagation(); if (item.tutors?.user_id) onOpenChat(item.tutors.user_id); }} title="Chat with Tutor">{item.tutors.name}</p>
-                      <p className="text-sm text-slate-500 mt-0.5">{item.tutors.contact_num} • Rs. {item.tutors.hour_rate}/hr</p>
+                      <p className="font-bold text-indigo-600 hover:underline text-base transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); if (item.tutors?.user_id) onOpenChat(item.tutors.user_id); }} title="Chat with Tutor">{item.tutors.name}</p>
+                      <p className="text-sm text-slate-500 mt-0.5 whitespace-nowrap">{item.tutors.contact_num} • Rs. {item.tutors.hour_rate}/hr</p>
                     </div>
                   ) : <p className="text-sm text-slate-400 italic">No specific tutor</p>}
                 </td>
@@ -1004,6 +1033,300 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
   );
 }
 
+// --- NEW SECTION: BATCH MANAGEMENT (Formerly Courses) ---
+function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batches: CourseBatch[], refresh: () => void }) {
+  const supabase = createClient();
+  
+  // View States
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  
+  // Course Modal State
+  const [courseModalOpen, setCourseModalOpen] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<Partial<OnlineCourse>>({});
+
+  // Batch Modal State
+  const [batchModalOpen, setBatchModalOpen] = useState(false);
+  const [editingBatch, setEditingBatch] = useState<Partial<CourseBatch>>({});
+
+  // 1. Course Handlers
+  const openCourseEdit = (course: OnlineCourse) => {
+    setEditingCourse({ ...course });
+    setCourseModalOpen(true);
+  };
+
+  const saveCourse = async () => {
+    if (!editingCourse.id) return;
+    const { error } = await supabase.from('online_courses_v2').update({
+      name: editingCourse.title, // Maps Title edit back to the `name` column!
+      fee: Number(editingCourse.fee),
+      discount: Number(editingCourse.discount),
+      active_batch_no: Number(editingCourse.active_batch_no),
+      is_active: editingCourse.is_active
+    }).eq('syllabus_id', editingCourse.id);
+    
+    if (error) { alert("Course Update Error: " + error.message); return; }
+    setCourseModalOpen(false);
+    refresh();
+  };
+
+  const toggleCourseStatus = async (course: OnlineCourse) => {
+    const { error } = await supabase.from('online_courses_v2').update({ is_active: !course.is_active }).eq('syllabus_id', course.id);
+    if (error) alert(error.message); else refresh();
+  };
+
+  // 2. Batch Handlers
+  const openBatchEdit = (batch: Partial<CourseBatch>, courseId: string, courseName: string) => {
+    setEditingBatch({ 
+      ...batch, 
+      course_id: courseId, 
+      course_name: courseName,
+      is_active: batch.is_active ?? true 
+    });
+    setBatchModalOpen(true);
+  };
+
+  const saveBatch = async () => {
+    if (!editingBatch.course_id || !editingBatch.batch_no) { alert("Syllabus ID and Batch No are required."); return; }
+    
+    const payload = {
+      syllabus_id: editingBatch.course_id,
+      course_name: editingBatch.course_name,
+      batch_no: editingBatch.batch_no,
+      start_datetime: editingBatch.start_datetime || null,
+      timing: editingBatch.timing || null,
+      online_class_link: editingBatch.online_class_link || null,
+      google_classroom_link: editingBatch.google_classroom_link || null,
+      whatsapp_group_link: editingBatch.whatsapp_group_link || null,
+      is_active: editingBatch.is_active
+    };
+
+    if (editingBatch.id) {
+      // Update
+      const { error } = await supabase.from('course_batches_v2').update(payload).eq('id', editingBatch.id);
+      if (error) { alert("Batch Update Error: " + error.message); return; }
+    } else {
+      // Insert
+      const { error } = await supabase.from('course_batches_v2').insert([payload]);
+      if (error) { alert("Batch Create Error: " + error.message); return; }
+    }
+    
+    setBatchModalOpen(false);
+    refresh();
+  };
+
+  const toggleBatchStatus = async (batch: CourseBatch) => {
+    const { error } = await supabase.from('course_batches_v2').update({ is_active: !batch.is_active }).eq('id', batch.id);
+    if (error) alert(error.message); else refresh();
+  };
+
+  // VIEWS
+  if (selectedCourseId) {
+    const selectedCourse = data.find(c => c.id === selectedCourseId);
+    if (!selectedCourse) return <p>Course not found</p>;
+    
+    // Sort batches for this course, newest start date first
+    const courseBatches = batches.filter(b => b.course_id === selectedCourseId).sort((a, b) => {
+      const timeA = a.start_datetime ? new Date(a.start_datetime).getTime() : 0;
+      const timeB = b.start_datetime ? new Date(b.start_datetime).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    return (
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSelectedCourseId(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900">{selectedCourse.title}</h2>
+              <p className="text-sm font-medium text-slate-500">Manage batches for this specific course.</p>
+            </div>
+          </div>
+          <button onClick={() => openBatchEdit({ batch_no: (courseBatches[0]?.batch_no || 0) + 1 }, selectedCourse.id, selectedCourse.title)} className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all whitespace-nowrap">
+            <Plus size={18} /> Create New Batch
+          </button>
+        </div>
+
+        <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+          <table className="w-full text-left border-collapse min-w-[900px]">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
+                <th className="p-6 w-24 text-center">Batch No</th>
+                <th className="p-6">Schedule Details</th>
+                <th className="p-6">Platform Links</th>
+                <th className="p-6">Status</th>
+                <th className="p-6 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {courseBatches.map(batch => (
+                <tr key={batch.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                  <td className="p-6 text-center">
+                    <span className="w-10 h-10 mx-auto bg-indigo-50 text-indigo-700 rounded-xl flex items-center justify-center font-black text-lg">
+                      {batch.batch_no}
+                    </span>
+                  </td>
+                  <td className="p-6">
+                    <p className="font-bold text-slate-900 flex items-center gap-2"><Clock size={14} className="text-slate-400"/> {batch.start_datetime ? new Date(batch.start_datetime).toLocaleString() : 'No Start Date Set'}</p>
+                    <p className="text-sm text-slate-500 mt-1">Timing: {batch.timing || 'TBD'}</p>
+                  </td>
+                  <td className="p-6 space-y-1">
+                    {batch.online_class_link ? <a href={batch.online_class_link} target="_blank" className="text-sm font-bold text-blue-600 hover:underline flex items-center gap-1"><Monitor size={12}/> Class Link</a> : <p className="text-xs text-slate-400">No Class Link</p>}
+                    {batch.google_classroom_link ? <a href={batch.google_classroom_link} target="_blank" className="text-sm font-bold text-emerald-600 hover:underline flex items-center gap-1"><GraduationCap size={12}/> Classroom</a> : <p className="text-xs text-slate-400">No Classroom Link</p>}
+                    {batch.whatsapp_group_link ? <a href={batch.whatsapp_group_link} target="_blank" className="text-sm font-bold text-green-600 hover:underline flex items-center gap-1"><MessageCircle size={12}/> WhatsApp Group</a> : <p className="text-xs text-slate-400">No WA Link</p>}
+                  </td>
+                  <td className="p-6"><ToggleSwitch checked={batch.is_active} onChange={() => toggleBatchStatus(batch)} label={batch.is_active ? 'Active' : 'Archived'} /></td>
+                  <td className="p-6 text-right">
+                    <button onClick={() => openBatchEdit(batch, selectedCourse.id, selectedCourse.title)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100" title="Edit Batch"><Edit2 size={16} /></button>
+                  </td>
+                </tr>
+              ))}
+              {courseBatches.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-slate-500">No batches created for this course yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+
+        {/* BATCH MODAL */}
+        {batchModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setBatchModalOpen(false)}>
+            <div className="bg-white rounded-[30px] shadow-2xl max-w-lg w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <button onClick={() => setBatchModalOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800 z-10"><X /></button>
+              <div className="p-6 border-b border-slate-100 bg-slate-50 mt-4">
+                <h3 className="text-2xl font-black text-slate-900">{editingBatch.id ? `Edit Batch ${editingBatch.batch_no}` : 'Create New Batch'}</h3>
+                <p className="text-sm text-slate-500 font-medium mt-1">{selectedCourse.title}</p>
+              </div>
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Batch Number</label>
+                    <input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editingBatch.batch_no || ''} onChange={e => setEditingBatch({ ...editingBatch, batch_no: Number(e.target.value) })} />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Status</label>
+                    <div className="pt-2"><ToggleSwitch checked={!!editingBatch.is_active} onChange={() => setEditingBatch({ ...editingBatch, is_active: !editingBatch.is_active })} label={editingBatch.is_active ? 'Active' : 'Inactive'} /></div>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Start Date & Time</label>
+                  <input type="datetime-local" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingBatch.start_datetime ? new Date(new Date(editingBatch.start_datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={e => setEditingBatch({ ...editingBatch, start_datetime: new Date(e.target.value).toISOString() })} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Timing Description (e.g., "8:00 PM to 9:30 PM")</label>
+                  <input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingBatch.timing || ''} onChange={e => setEditingBatch({ ...editingBatch, timing: e.target.value })} placeholder="e.g., 8:00 PM to 9:30 PM" />
+                </div>
+                <hr className="border-slate-100 my-2" />
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Online Class Link (Meet/Zoom)</label>
+                  <input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" value={editingBatch.online_class_link || ''} onChange={e => setEditingBatch({ ...editingBatch, online_class_link: e.target.value })} placeholder="https://meet.google.com/..." />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Google Classroom Link</label>
+                  <input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" value={editingBatch.google_classroom_link || ''} onChange={e => setEditingBatch({ ...editingBatch, google_classroom_link: e.target.value })} placeholder="https://classroom.google.com/..." />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">WhatsApp Group Link</label>
+                  <input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" value={editingBatch.whatsapp_group_link || ''} onChange={e => setEditingBatch({ ...editingBatch, whatsapp_group_link: e.target.value })} placeholder="https://chat.whatsapp.com/..." />
+                </div>
+              </div>
+              <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
+                <button onClick={() => setBatchModalOpen(false)} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800">Cancel</button>
+                <button onClick={saveBatch} className="px-8 py-3 rounded-2xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save Batch</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
+  // ROOT VIEW (Show Courses Table)
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <div className="flex justify-between items-center flex-wrap gap-4">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900">Batch Management</h2>
+          <p className="text-slate-500 font-medium mt-1">Manage global course configurations and drill down into batches.</p>
+        </div>
+      </div>
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse min-w-[800px]">
+          <thead>
+            <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
+              <th className="p-6">Course Overview</th>
+              <th className="p-6">Configured Pricing</th>
+              <th className="p-6 text-center">Active Batch</th>
+              <th className="p-6 text-center">Status</th>
+              <th className="p-6 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map(course => (
+              <tr key={course.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer" onClick={() => openCourseEdit(course)}>
+                <td className="p-6">
+                  <p className="font-bold text-slate-900 text-lg whitespace-nowrap">{course.title}</p>
+                  <p className="text-xs text-slate-500 font-mono mt-1">ID: {course.id}</p>
+                </td>
+                <td className="p-6 whitespace-nowrap">
+                  <p className="font-black text-slate-800">Rs. {course.fee}</p>
+                  {course.discount > 0 ? <p className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded inline-block mt-1">{course.discount}% Discount</p> : <p className="text-xs text-slate-400 mt-1">No Discount</p>}
+                </td>
+                <td className="p-6 text-center">
+                  <span className="inline-block bg-indigo-50 text-indigo-700 font-black px-3 py-1.5 rounded-xl border border-indigo-100 shadow-sm text-lg">
+                    {course.active_batch_no || '-'}
+                  </span>
+                </td>
+                <td className="p-6 flex justify-center" onClick={e => e.stopPropagation()}>
+                  <ToggleSwitch checked={course.is_active} onChange={() => toggleCourseStatus(course)} label={course.is_active ? 'Active' : 'Inactive'} />
+                </td>
+                <td className="p-6 text-right" onClick={e => e.stopPropagation()}>
+                  <div className="flex justify-end gap-3 items-center">
+                    <button onClick={(e) => { e.stopPropagation(); setSelectedCourseId(course.id); }} className="px-5 py-2 text-xs font-black text-white bg-slate-800 rounded-xl hover:bg-slate-900 shadow-md shadow-slate-900/20 transition-colors flex items-center gap-1 whitespace-nowrap">
+                      <Layers size={14} /> View Batches
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {courseModalOpen && editingCourse && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setCourseModalOpen(false)}>
+          <div className="bg-white rounded-[30px] shadow-2xl max-w-sm w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <p className="font-mono text-[10px] text-slate-400 absolute top-4 left-6">ID: {editingCourse.id}</p>
+            <button onClick={() => setCourseModalOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800 z-10"><X /></button>
+            <div className="p-6 border-b border-slate-100 bg-slate-50 mt-4">
+              <h3 className="text-2xl font-black text-slate-900">Edit Config</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Course Name</label>
+                <input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editingCourse.title || ''} onChange={e => setEditingCourse({ ...editingCourse, title: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Fee (Rs)</label>
+                <input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editingCourse.fee || ''} onChange={e => setEditingCourse({ ...editingCourse, fee: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Discount (%)</label>
+                <input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editingCourse.discount || ''} onChange={e => setEditingCourse({ ...editingCourse, discount: Number(e.target.value) })} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Active Batch No.</label>
+                <input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editingCourse.active_batch_no || ''} onChange={e => setEditingCourse({ ...editingCourse, active_batch_no: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
+              <button onClick={() => setCourseModalOpen(false)} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800">Cancel</button>
+              <button onClick={saveCourse} className="px-8 py-3 rounded-2xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 // --- SECTION: BOOKINGS ---
 function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
   const supabase = createClient();
@@ -1016,7 +1339,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   // Payment Editing State
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
   const [editPaid, setEditPaid] = useState<number>(0);
-  const [editRemaining, setEditRemaining] = useState<number>(0);
+  const [editLockedPrice, setEditLockedPrice] = useState<number>(0); // NEW
   
   // Manual Booking State
   const [isAddingBooking, setIsAddingBooking] = useState(false);
@@ -1044,7 +1367,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   const openPaymentEdit = (enr: Enrollment) => {
     setEditingPayment(enr);
     setEditPaid(enr.paid_amount || 0);
-    setEditRemaining(enr.remaining_amount || 0);
+    setEditLockedPrice(enr.locked_price || 0);
   };
 
   const savePayment = async () => {
@@ -1053,25 +1376,25 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     // Automatically construct Order entry if it's completely missing
     if (!editingPayment.order_id) {
        const course = courses.find(c => c.id === editingPayment.course_id);
-       const fee = course ? Number(course.fee) : 0;
-       const discount = course ? Number(course.discount) : 0;
-       const locked_price = fee - (fee * discount / 100);
-
+       
        const { data: newOrder, error: insErr } = await supabase.from('orders_v2').insert([{
          enrollment_id: editingPayment.id,
          full_name: editingPayment.full_name,
          email: editingPayment.email,
-         contact_number: editingPayment.whatsapp_number,
-         order_type: 'course',
+         whatsapp_number: editingPayment.whatsapp_number, // <--- FIXED: mapped to whatsapp_number
+         order_type: 'Online Course', // <--- FIXED: Exact string to match database array constraint
          order_name: editingPayment.course_name || (course?.title || 'Course Enrollment'),
          paid_amount: editPaid,
-         remaining_amount: editRemaining,
-         locked_price: locked_price,
-         status: editPaid >= locked_price ? 'verified' : 'pending'
+         locked_price: editLockedPrice,
+         status: editPaid >= editLockedPrice ? 'verified' : 'pending'
        }]).select().single();
 
        if (insErr) {
-         alert("Failed to auto-create missing order: " + insErr.message);
+         if (insErr.message.includes("order_type_check")) {
+             alert(`Database check constraint failed: Your orders_v2 table rejects "Online Course" as an order_type.\n\nPlease check your Supabase schema. Error: ${insErr.message}`);
+         } else {
+             alert("Failed to auto-create missing order: " + insErr.message);
+         }
          return;
        }
        refresh();
@@ -1082,7 +1405,8 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     // UPDATE ORDERS_V2 DIRECTLY (If exists)
     const { error } = await supabase.from('orders_v2').update({
       paid_amount: editPaid,
-      remaining_amount: editRemaining
+      locked_price: editLockedPrice
+      // REMOVED remaining_amount completely, DB handles it via formula
     }).eq('id', editingPayment.order_id);
     
     if (error) {
@@ -1126,19 +1450,22 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       enrollment_id: enrData.id,
       full_name: newBooking.name,
       email: newBooking.email,
-      contact_number: newBooking.wa,
-      order_type: 'course',
+      whatsapp_number: newBooking.wa, // <--- FIXED: mapped to whatsapp_number
+      order_type: 'Online Course', // <--- FIXED: Exact string to match database array constraint
       order_name: selectedCourse.title,
       paid_amount: 0,
       locked_price: locked_price,
-      remaining_amount: locked_price,
       status: 'pending'
     };
 
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
 
     if (ordErr) {
-      alert("Enrollment added, but auto-order creation failed: " + ordErr.message);
+      if (ordErr.message.includes("order_type_check")) {
+        alert("Enrollment created, but auto-order creation failed because your Database strictly checks for a specific string format.");
+      } else {
+        alert("Enrollment added, but auto-order creation failed: " + ordErr.message);
+      }
     }
 
     setIsAddingBooking(false);
@@ -1159,7 +1486,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   };
 
   // STEP 1: SHOW COURSES LIST (Square Boxes Layout)
-// STEP 1: SHOW COURSES LIST (Square Boxes Layout)
   if (!selectedCourse) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
@@ -1168,15 +1494,14 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
           <p className="text-slate-500 font-medium mt-1">Select an online course to view its batches and enrollments.</p>
         </div>
         
-        {/* Constrained max-width to keep the squares compact */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6 max-w-2xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 mt-6 max-w-7xl">
           {courses.map(course => {
             const batchCount = batches.filter(b => b.course_id === course.id).length;
             return (
               <div 
                 key={course.id} 
                 onClick={() => setSelectedCourse(course)} 
-                className="flex flex-col items-center justify-center p-6 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all aspect-square relative text-center group"
+                className="flex flex-col items-center justify-center p-6 bg-white border border-slate-200 rounded-3xl hover:border-indigo-500 hover:shadow-xl hover:-translate-y-1 cursor-pointer transition-all aspect-square relative text-center group w-full max-w-[300px] mx-auto"
               >
                 <div className="absolute top-4 right-4 bg-indigo-50 text-indigo-700 font-black text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-xl shadow-sm">
                   {batchCount} Batches
@@ -1212,21 +1537,21 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mt-6">
           {availableBatches.map(b => {
             const batchCount = enrollments.filter(e => e.course_id === selectedCourse.id && e.batch_no === b).length;
             return (
-              <div key={b} onClick={() => setSelectedBatch(b)} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all">
+              <div key={b} onClick={() => setSelectedBatch(b)} className="flex items-center justify-between p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-400 hover:shadow-md cursor-pointer transition-all">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-xl">
+                  <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center font-black text-2xl">
                     {b}
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-900 text-lg">Batch {b}</h3>
+                    <h3 className="font-bold text-slate-900 text-xl">Batch {b}</h3>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-black text-emerald-600">{batchCount}</p>
+                  <p className="text-3xl font-black text-emerald-600">{batchCount}</p>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollments</p>
                 </div>
               </div>
@@ -1234,17 +1559,17 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
           })}
 
           {unassignedCount > 0 && (
-             <div onClick={() => setSelectedBatch('unassigned')} className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-2xl hover:border-orange-400 hover:shadow-md cursor-pointer transition-all">
+             <div onClick={() => setSelectedBatch('unassigned')} className="flex items-center justify-between p-6 bg-white border border-slate-200 rounded-2xl hover:border-orange-400 hover:shadow-md cursor-pointer transition-all">
                <div className="flex items-center gap-4">
-                 <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-black text-xl">
+                 <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-black text-2xl">
                    ?
                  </div>
                  <div>
-                   <h3 className="font-bold text-slate-900 text-lg">Unassigned</h3>
+                   <h3 className="font-bold text-slate-900 text-xl">Unassigned</h3>
                  </div>
                </div>
                <div className="text-right">
-                 <p className="text-2xl font-black text-orange-600">{unassignedCount}</p>
+                 <p className="text-3xl font-black text-orange-600">{unassignedCount}</p>
                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enrollments</p>
                </div>
              </div>
@@ -1294,7 +1619,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <button onClick={() => setSelectedBatch(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
             <div>
@@ -1304,19 +1629,19 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             {hiddenBookingIds.size > 0 && (
               <button onClick={handleUnhideAll} className="px-4 py-3 bg-blue-50 text-blue-600 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors flex items-center gap-2 shadow-sm">
                 <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
               </button>
             )}
-            <button onClick={() => setIsAddingBooking(true)} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm shadow-indigo-600/30">
+            <button onClick={() => setIsAddingBooking(true)} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm shadow-indigo-600/30 whitespace-nowrap">
               <Plus size={16} /> Add Booking
             </button>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-wrap gap-4 items-center w-full">
           <div className="relative flex-1 min-w-[250px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
@@ -1338,24 +1663,24 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
       <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
         <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
-        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm">
+        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap">
           <Copy size={14} /> Copy CSV List
         </button>
       </div>
 
       {/* EXCEL SHEET STYLED TABLE */}
-      <div className="bg-white border border-slate-300 shadow-sm overflow-hidden w-full flex flex-col rounded-md">
-        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse table-auto text-xs">
+      <div className="bg-white border border-slate-300 shadow-sm overflow-x-auto w-full flex flex-col rounded-md">
+        <div className="overflow-y-auto max-h-[600px]">
+          <table className="w-full text-left border-collapse table-auto text-xs min-w-[1000px]">
             <thead>
-              <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-black tracking-wider">
-                <th className="p-3 border-r border-slate-300 w-12 text-center">No.</th>
-                <th className="p-3 border-r border-slate-300 w-[20%]">Applicant Details</th>
-                <th className="p-3 border-r border-slate-300 w-[12%]">Date</th>
-                <th className="p-3 border-r border-slate-300 w-[30%]">Remarks</th>
-                <th className="p-3 border-r border-slate-300 w-[15%]">Payment Info</th>
-                <th className="p-3 border-r border-slate-300 w-[8%] text-center">Confirmed</th>
-                <th className="p-3 text-center w-[12%]">Actions</th>
+              <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
+                <th className="p-3 border-r border-slate-300 w-12 text-center bg-slate-100">No.</th>
+                <th className="p-3 border-r border-slate-300 w-[20%] bg-slate-100">Applicant Details</th>
+                <th className="p-3 border-r border-slate-300 w-[12%] bg-slate-100">Date</th>
+                <th className="p-3 border-r border-slate-300 w-[25%] bg-slate-100">Remarks</th>
+                <th className="p-3 border-r border-slate-300 w-[18%] bg-slate-100">Payment Info</th>
+                <th className="p-3 border-r border-slate-300 w-[8%] text-center bg-slate-100">Confirmed</th>
+                <th className="p-3 text-center w-[10%] bg-slate-100">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1365,24 +1690,28 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                     {startIndex + idx + 1}
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top leading-relaxed">
-                    <p className="font-bold text-slate-900 text-sm">{enr.full_name}</p>
-                    <p className="text-slate-600 truncate" title={enr.email}>{enr.email}</p>
+                    <p className="font-bold text-slate-900 text-sm whitespace-nowrap">{enr.full_name}</p>
+                    <p className="text-slate-600 truncate max-w-[200px]" title={enr.email}>{enr.email}</p>
                     <p className="text-slate-600 font-medium">WA: {enr.whatsapp_number}</p>
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top text-slate-700 font-medium">
                     {new Date(enr.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-3 border-r border-slate-300 align-top max-w-[200px] truncate text-slate-700" title={enr.remarks}>
+                  <td className="p-3 border-r border-slate-300 align-top max-w-[250px] truncate text-slate-700" title={enr.remarks}>
                     {enr.remarks || '-'}
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top">
                     <div className="flex justify-between w-full mb-1">
+                      <span className="text-slate-500 font-bold">Total Fee:</span> 
+                      <span className="font-bold text-slate-700">Rs.{enr.locked_price || 0}</span>
+                    </div>
+                    <div className="flex justify-between w-full mb-1">
                       <span className="text-slate-500 font-bold">Paid:</span> 
                       <span className="font-black text-slate-800">Rs.{enr.paid_amount || 0}</span>
                     </div>
-                    <div className="flex justify-between w-full">
+                    <div className="flex justify-between w-full pt-1 border-t border-slate-200 mt-1">
                       <span className="text-slate-500 font-bold">Due:</span> 
-                      <span className="font-black text-red-600">Rs.{enr.remaining_amount || 0}</span>
+                      <span className="font-black text-red-600">Rs.{Math.max(0, (enr.locked_price || 0) - (enr.paid_amount || 0))}</span>
                     </div>
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top text-center">
@@ -1394,7 +1723,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                     />
                   </td>
                   <td className="p-2 align-top text-center">
-                    <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-1.5 w-full max-w-[80px] mx-auto">
                       <button onClick={() => openPaymentEdit(enr)} className="w-full text-[10px] font-bold bg-slate-100 border border-slate-300 text-slate-700 py-1.5 rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-1"><Edit2 size={12}/> Edit Pay</button>
                       <button onClick={() => handleHide(enr.id)} className="w-full text-[10px] font-bold bg-slate-100 border border-slate-300 text-slate-600 py-1.5 rounded hover:bg-slate-200 transition-colors flex items-center justify-center gap-1"><EyeOff size={12}/> Hide</button>
                       <button onClick={async () => { if (confirm('Remove this enrollment?')) { const { error } = await supabase.from('enrollments_v2').delete().eq('id', enr.id); if (error) alert(error.message); else refresh(); } }} className="w-full text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 py-1.5 rounded hover:bg-red-100 transition-colors flex items-center justify-center gap-1"><Trash2 size={12}/> Del</button>
@@ -1461,13 +1790,20 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
             
             <div className="space-y-4">
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
-                <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-emerald-500 font-black text-slate-800 transition-colors" />
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Total Locked Fee (Rs)</label>
+                <input type="number" value={editLockedPrice} onChange={(e) => setEditLockedPrice(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 transition-colors" />
               </div>
+              
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Remaining Amount (Rs)</label>
-                <input type="number" value={editRemaining} onChange={(e) => setEditRemaining(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-red-500 font-black text-red-600 transition-colors" />
+                <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
+                <input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-slate-50 p-3 rounded-xl outline-none border border-slate-200 focus:border-emerald-500 font-black text-emerald-600 transition-colors" />
               </div>
+
+              <div className="p-3 bg-slate-100 rounded-xl flex justify-between items-center border border-slate-200">
+                <label className="block text-[10px] font-black text-slate-500 uppercase">Calculated Due</label>
+                <span className="font-black text-red-600">Rs. {Math.max(0, editLockedPrice - editPaid)}</span>
+              </div>
+
               {!editingPayment.order_id && (
                  <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 mt-2">
                    <p className="text-xs font-bold text-blue-700 flex items-start gap-1"><AlertCircle size={14} className="shrink-0 mt-0.5" /> No linked order found. Saving this will automatically create an order linking to this enrollment.</p>
@@ -1486,177 +1822,6 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   );
 }
 
-// --- SECTION: COURSES ---
-function CoursesManager({ data, batches, refresh }: { data: OnlineCourse[], batches: CourseBatch[], refresh: () => void }) {
-  const supabase = createClient();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingCourse, setEditingCourse] = useState<Partial<OnlineCourse> | null>(null);
-  const [editBatch, setEditBatch] = useState<Partial<CourseBatch>>({});
-
-  const openEdit = (course: OnlineCourse) => {
-    setEditingCourse({ ...course });
-    const courseBatches = batches.filter(b => b.course_id === course.id).sort((a,b) => b.batch_no - a.batch_no);
-    if (courseBatches.length > 0) {
-      setEditBatch({ ...courseBatches[0] });
-    } else {
-      setEditBatch({ batch_no: 1, is_active: true });
-    }
-    setModalOpen(true);
-  };
-
-  const saveCourse = async () => {
-    if (!editingCourse) return;
-    const payload = { ...editingCourse };
-    payload.fee = parseFloat(payload.fee as any) || 0;
-    payload.discount = parseFloat(payload.discount as any) || 0;
-    
-    delete payload.class_info;
-
-    let savedCourseId = editingCourse.id;
-
-    if (payload.id) { 
-      const { error } = await supabase.from('online_courses_v2').update({
-          fee: payload.fee, discount: payload.discount, is_active: payload.is_active
-      }).eq('syllabus_id', payload.id); 
-      if (error) { alert(error.message); return; }
-    } else { 
-      const { data: inserted, error } = await supabase.from('online_courses_v2').insert([{
-          syllabus_id: payload.id, name: payload.title, fee: payload.fee, discount: payload.discount, is_active: payload.is_active
-      }]).select('syllabus_id').single(); 
-      if (error) { alert(error.message); return; }
-      savedCourseId = inserted.syllabus_id;
-    }
-
-    if (savedCourseId && editBatch.batch_no) {
-      const exists = batches.find(b => b.course_id === savedCourseId && b.batch_no === editBatch.batch_no);
-      
-      const batchPayload = {
-        syllabus_id: savedCourseId,
-        course_name: payload.title,
-        batch_no: editBatch.batch_no,
-        online_class_link: editBatch.online_class_link || null,
-        google_classroom_link: editBatch.google_classroom_link || null,
-        whatsapp_group_link: editBatch.whatsapp_group_link || null,
-        is_active: editBatch.is_active ?? true
-      };
-
-      if (exists) {
-        const { error: bErr } = await supabase.from('course_batches_v2')
-          .update(batchPayload)
-          .eq('syllabus_id', savedCourseId)
-          .eq('batch_no', editBatch.batch_no);
-        if (bErr) alert("Batch Update Error: " + bErr.message);
-      } else {
-        const { error: bErr } = await supabase.from('course_batches_v2')
-          .insert([batchPayload]);
-        if (bErr) alert("Batch Create Error: " + bErr.message);
-      }
-    }
-
-    setModalOpen(false); 
-    refresh();
-  };
-
-  const toggleCourseStatus = async (course: OnlineCourse) => {
-    const { error } = await supabase.from('online_courses_v2').update({ is_active: !course.is_active }).eq('syllabus_id', course.id);
-    if (error) alert(error.message); else refresh();
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-slate-900">Online Courses</h2></div>
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
-              <th className="p-6">Course Title</th><th className="p-6">Pricing & Details</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map(course => (
-              <tr key={course.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                <td className="p-6 flex items-center gap-4">
-                  <img src={course.cover_pic || 'https://via.placeholder.com/50'} className="w-12 h-12 rounded-xl object-cover" alt="" />
-                  <div><p className="font-bold text-slate-900 text-lg">{course.title}</p><p className="text-sm text-slate-500">Starts: {course.start_datetime ? new Date(course.start_datetime).toLocaleDateString() : 'N/A'}</p></div>
-                </td>
-                <td className="p-6"><p className="font-bold text-slate-800">Rs. {course.fee}</p>{course.discount > 0 && <p className="text-xs text-green-600 font-bold">{course.discount}% OFF</p>}</td>
-                <td className="p-6"><ToggleSwitch checked={course.is_active} onChange={() => toggleCourseStatus(course)} label={course.is_active ? 'Active' : 'Draft'} /></td>
-                <td className="p-6 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button onClick={() => openEdit(course)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100" title="Edit Pricing"><Edit2 size={16} /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {modalOpen && editingCourse && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setModalOpen(false)}>
-          <div className="bg-white rounded-[30px] shadow-2xl max-w-md w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            {editingCourse.id && <p className="font-mono text-[10px] text-slate-400 absolute top-4 left-6">ID: {editingCourse.id}</p>}
-            <button onClick={() => setModalOpen(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800 z-10"><X /></button>
-            <div className="p-6 border-b border-slate-100 bg-slate-50 mt-4"><h3 className="text-2xl font-black text-slate-900">Edit Course Config</h3><p className="text-sm text-slate-500 font-medium mt-1">{editingCourse.title}</p></div>
-            <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Fee (Rs)</label><input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.fee || ''} onChange={e => setEditingCourse({ ...editingCourse, fee: e.target.value as any })} /></div>
-              <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Discount (%)</label><input type="number" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.discount || ''} onChange={e => setEditingCourse({ ...editingCourse, discount: e.target.value as any })} /></div>
-              <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Start Date/Time</label><input type="datetime-local" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm" value={editingCourse.start_datetime ? new Date(new Date(editingCourse.start_datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={e => setEditingCourse({ ...editingCourse, start_datetime: new Date(e.target.value).toISOString() })} /></div>
-              
-              <hr className="border-slate-200 my-4" />
-              
-              <div className="bg-slate-100 p-4 rounded-xl border border-slate-200">
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-[10px] font-black text-slate-500 uppercase ml-1">Batch Management</label>
-                  <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">Latest Default</span>
-                </div>
-                
-                <div className="mb-3">
-                  <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Target Batch No. (Increment to create new batch)</label>
-                  <input type="number" className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-black text-slate-800 text-sm" value={editBatch.batch_no || 1} onChange={e => setEditBatch({ ...editBatch, batch_no: Number(e.target.value) })} />
-                </div>
-                
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Google Classroom Link</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
-                      value={editBatch.google_classroom_link || ''} 
-                      onChange={e => setEditBatch({ ...editBatch, google_classroom_link: e.target.value })} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">Online Class Link</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
-                      value={editBatch.online_class_link || ''} 
-                      onChange={e => setEditBatch({ ...editBatch, online_class_link: e.target.value })} 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 mb-1 ml-1">WhatsApp Group Link</label>
-                    <input 
-                      type="text" 
-                      className="w-full bg-white p-3 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-medium text-slate-800 text-sm" 
-                      value={editBatch.whatsapp_group_link || ''} 
-                      onChange={e => setEditBatch({ ...editBatch, whatsapp_group_link: e.target.value })} 
-                    />
-                  </div>
-                </div>
-              </div>
-
-            </div>
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
-              <button onClick={() => setModalOpen(false)} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-800">Cancel</button>
-              <button onClick={saveCourse} className="px-8 py-3 rounded-2xl font-black bg-indigo-600 text-white shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-colors">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
-}
 
 // --- SECTION: CERTIFICATES ---
 function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], syllabi: any[], refresh: () => void }) {
@@ -1752,7 +1917,7 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         <h2 className="text-3xl font-black text-slate-900">Certificate Registry</h2>
         <button
           onClick={() => router.push('/admin/bulk-upload')}
-          className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all"
+          className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all whitespace-nowrap"
         >
           <Plus size={18} /> Generate New
         </button>
@@ -1769,9 +1934,9 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         />
       </div>
 
-      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto overflow-y-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse">
+      <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full flex flex-col">
+        <div className="overflow-y-auto max-h-[600px]">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
                 <th className="p-6">Student Info</th><th className="p-6">Course Name</th><th className="p-6">Issue Date & Code</th><th className="p-6 text-right">Actions</th>

@@ -82,6 +82,7 @@ export default function CourseEnrollmentClient() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationMessages, setValidationMessages] = useState<string[]>([]);
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
 
   const [userId, setUserId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -294,6 +295,7 @@ export default function CourseEnrollmentClient() {
     const formattedWhatsapp = `+977${form.whatsapp.replace(/\D/g, '')}`;
 
     try {
+      // 1. Check for existing enrollment
       let query = supabase.from('enrollments_v2').select('id').eq('batch_id', course.batch_id);
 
       if (userId) {
@@ -313,18 +315,52 @@ export default function CourseEnrollmentClient() {
         return;
       }
 
-      const { error: insertError } = await supabase.from('enrollments_v2').insert([
-        {
-          user_id: userId || null,
-          batch_id: course.batch_id,
-          full_name: form.full_name.trim(),
-          email: form.email.trim(),
-          whatsapp_number: formattedWhatsapp,
-          remarks: form.remarks.trim() || null,
-        },
-      ]);
+      // 2. Insert into Enrollments Table & return the newly created record ID
+      const { data: newEnrollment, error: insertError } = await supabase
+        .from('enrollments_v2')
+        .insert([
+          {
+            user_id: userId || null,
+            batch_id: course.batch_id,
+            full_name: form.full_name.trim(),
+            email: form.email.trim(),
+            whatsapp_number: formattedWhatsapp,
+            remarks: form.remarks.trim() || null,
+          },
+        ])
+        .select('id')
+        .single();
 
       if (insertError) throw insertError;
+
+      // 3. Automatically Create Order using the new Enrollment ID
+      if (newEnrollment?.id) {
+        const { data: newOrder, error: orderError } = await supabase
+          .from('orders_v2')
+          .insert([
+            {
+              user_id: userId || null,
+              enrollment_id: newEnrollment.id,
+              order_type: 'Online Course',
+              order_name: course.title,
+              locked_price: pricing.lockedPrice,
+              paid_amount: 0.00,
+              full_name: form.full_name.trim(),
+              email: form.email.trim(),
+              whatsapp_number: formattedWhatsapp,
+              status: 'pending'
+            }
+          ])
+          .select('id')
+          .single();
+
+        if (orderError) throw orderError;
+        
+        // Save order ID to pass to the payment page if they choose "Pay Deposit Now"
+        if (newOrder?.id) {
+          setCreatedOrderId(newOrder.id);
+        }
+      }
 
       triggerConfetti();
       setShowSuccessModal(true);
@@ -338,7 +374,7 @@ export default function CourseEnrollmentClient() {
   };
 
   const handleProceedToPayment = () => {
-    const params = new URLSearchParams({
+    const queryParams = new URLSearchParams({
       name: form.full_name,
       email: form.email,
       phone: form.whatsapp.replace(/\D/g, ''),
@@ -348,7 +384,12 @@ export default function CourseEnrollmentClient() {
       price: String(pricing.depositAmount ?? 0),
     });
 
-    router.push(`/order?${params.toString()}`);
+    // If an order ID was generated, pass it along so the payment page doesn't create a duplicate
+    if (createdOrderId) {
+      queryParams.append('order_id', createdOrderId);
+    }
+
+    router.push(`/order?${queryParams.toString()}`);
   };
 
   if (loading) {
