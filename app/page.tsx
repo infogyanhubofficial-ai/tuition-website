@@ -1,42 +1,75 @@
 import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
 
+const siteUrl = "https://www.gyanhub.com.np";
+const logoUrl =
+  "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
+
 export const metadata: Metadata = {
-  title: "GyanHub | Online Courses & Tutors in Nepal",
-  
+  metadataBase: new URL(siteUrl),
+
+  title: "GyanHub - Learn Today | Lead Tomorrow",
+
   description:
-    "GyanHub is a Nepal-based learning platform offering online and recorded courses in AutoCAD, GIS, Revit, and engineering skills. Find verified tutors or enroll in practical training designed for students and professionals.",
-  
+    "GyanHub is Nepal’s all-in-one learning platform for online courses, recorded courses, verified tutors, tuition vacancies, certificate verification, and job-ready engineering training in AutoCAD, GIS, QGIS, Revit, ETABS, SAFE, RCDC, SolidWorks, estimation, costing, billing, and property valuation.",
+
   keywords: [
+    "GyanHub",
+    "GyanHub Nepal",
     "online courses Nepal",
+    "recorded courses Nepal",
+    "live online courses Nepal",
+    "find tutors Nepal",
+    "verified tutors Nepal",
+    "home tuition Nepal",
+    "online tutors Nepal",
+    "tuition vacancy Nepal",
+    "post tuition Nepal",
+    "certificate verification Nepal",
     "engineering courses Nepal",
+    "civil engineering courses Nepal",
     "AutoCAD course Nepal",
     "GIS training Nepal",
-    "Revit course Nepal",
-    "structural design course Nepal",
+    "ArcGIS course Nepal",
+    "QGIS training Nepal",
+    "Revit BIM course Nepal",
     "ETABS training Nepal",
-    "recorded courses Nepal",
-    "find tutors Nepal",
-    "home tuition Nepal",
-    "GyanHub Nepal"
+    "SAFE training Nepal",
+    "RCDC training Nepal",
+    "structural design course Nepal",
+    "SolidWorks course Nepal",
+    "estimation costing course Nepal",
+    "contract billing course Nepal",
+    "property valuation course Nepal",
+    "architecture visualization course Nepal",
+    "SketchUp course Nepal",
+    "Enscape course Nepal",
+    "job ready skills Nepal",
+    "professional training Nepal",
+    "skill development Nepal",
   ],
 
+  authors: [{ name: "GyanHub" }],
+  creator: "GyanHub",
+  publisher: "GyanHub",
+  category: "Education",
+
   alternates: {
-    canonical: "https://www.gyanhub.com.np",
+    canonical: siteUrl,
   },
 
   openGraph: {
-    title: "GyanHub | Online Courses & Tutors in Nepal",
+    title: "GyanHub - Learn Today | Lead Tomorrow",
     description:
-      "Explore practical online courses and find verified tutors in Nepal. Learn AutoCAD, GIS, Revit, structural design, and more with GyanHub.",
-    url: "https://www.gyanhub.com.np",
+      "Find verified tutors, post tuition requests, join live courses, access recorded courses, verify certificates, and learn job-ready engineering skills with GyanHub.",
+    url: siteUrl,
     siteName: "GyanHub",
     images: [
       {
-        url: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
+        url: logoUrl,
         width: 1200,
         height: 630,
-        alt: "GyanHub - Online Courses and Tutors in Nepal",
+        alt: "GyanHub - Learn Today | Lead Tomorrow",
       },
     ],
     locale: "en_NP",
@@ -45,46 +78,88 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "GyanHub | Online Courses & Tutors in Nepal",
+    title: "GyanHub - Learn Today | Lead Tomorrow",
     description:
-      "Learn practical skills and connect with tutors in Nepal. Join GyanHub for online and recorded courses.",
-    images: [
-      "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
-    ],
+      "Nepal’s learning platform for tutors, live courses, recorded courses, engineering training, and certificate verification.",
+    images: [logoUrl],
   },
 
-  metadataBase: new URL("https://www.gyanhub.com.np"),
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-snippet": -1,
+      "max-image-preview": "large",
+      "max-video-preview": -1,
+    },
+  },
 };
 
 export default function Page() {
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "EducationalOrganization",
-    name: "GyanHub",
-    url: "https://www.gyanhub.com.np",
-    logo: "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp",
-    
-    description:
-      "GyanHub is an online learning and tutor marketplace in Nepal offering engineering courses, recorded training, and tutor discovery services.",
-    
-    address: {
-      "@type": "PostalAddress",
-      addressCountry: "NP",
-    },
-
-    contactPoint: {
-      "@type": "ContactPoint",
-      telephone: "+977-9813111857",
-      contactType: "customer support",
-      availableLanguage: ["English", "Nepali"],
-    },
-
-    sameAs: [
-      "https://www.facebook.com/dashboard.php?id=61569757534336",
-      "https://www.youtube.com/@GyanHubOnline",
-      "https://www.instagram.com/gyanhubonline/",
-      "https://www.linkedin.com/company/gyanhub/",
-      "https://www.tiktok.com/@gyanhubofficial"
+    "@graph": [
+      {
+        "@type": "EducationalOrganization",
+        "@id": `${siteUrl}/#organization`,
+        name: "GyanHub",
+        url: siteUrl,
+        logo: logoUrl,
+        slogan: "Learn Today | Lead Tomorrow",
+        description:
+          "GyanHub is a Nepal-based learning platform offering online courses, recorded courses, verified tutors, tuition posting, certificate verification, and professional skill training.",
+        address: {
+          "@type": "PostalAddress",
+          addressCountry: "NP",
+        },
+        contactPoint: {
+          "@type": "ContactPoint",
+          telephone: "+977-9813111857",
+          contactType: "customer support",
+          availableLanguage: ["English", "Nepali"],
+        },
+        sameAs: [
+          "https://www.facebook.com/dashboard.php?id=61569757534336",
+          "https://www.youtube.com/@GyanHubOnline",
+          "https://www.instagram.com/gyanhubonline/",
+          "https://www.linkedin.com/company/gyanhub/",
+          "https://www.tiktok.com/@gyanhubofficial",
+        ],
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}/#website`,
+        url: siteUrl,
+        name: "GyanHub",
+        publisher: {
+          "@id": `${siteUrl}/#organization`,
+        },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: `${siteUrl}/recording?search={search_term_string}`,
+          "query-input": "required name=search_term_string",
+        },
+      },
+      {
+        "@type": "ItemList",
+        name: "GyanHub Services",
+        itemListElement: [
+          "Find Verified Tutors",
+          "Post Tuition Requests",
+          "Live Online Courses",
+          "Recorded Courses",
+          "Certificate Verification",
+          "Become a Tutor",
+          "Engineering Skill Training",
+          "Career-Ready Course Bundles",
+        ].map((name, index) => ({
+          "@type": "ListItem",
+          position: index + 1,
+          name,
+        })),
+      },
     ],
   };
 

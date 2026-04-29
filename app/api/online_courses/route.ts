@@ -1,32 +1,31 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase"; 
+import { supabase } from "@/lib/supabase";
 
 export async function GET() {
   try {
-    // 1. Fetch Tier 2: Storefront Listings (Only active courses)
     const { data: storefront, error: storefrontError } = await supabase
       .from("online_courses_v2")
       .select("*")
       .eq("is_active", true);
 
     if (storefrontError) throw storefrontError;
+    if (!storefront?.length) return NextResponse.json([]);
 
-    if (!storefront || storefront.length === 0) {
-      return NextResponse.json([]);
-    }
+    const syllabusIds = storefront
+      .map((course) => course.syllabus_id)
+      .filter(Boolean);
 
-    const syllabusIds = storefront.map((c) => c.syllabus_id);
+    if (!syllabusIds.length) return NextResponse.json([]);
 
-    // 2. Fetch Tier 1: Master Templates
-    // FIX: Added 'learning_outcomes' to the select list and removed 'description' if not needed
     const { data: syllabi, error: syllabiError } = await supabase
       .from("syllabi_v2")
-      .select("id, course_code, category, difficulty_level, duration, learning_outcomes, cover_pic, syllabus_pdf")
+      .select(
+        "id, course_code, name, category, difficulty_level, duration, learning_outcomes, cover_pic, syllabus_pdf"
+      )
       .in("id", syllabusIds);
 
     if (syllabiError) throw syllabiError;
 
-    // 3. Fetch Tier 3: Live Logistics (Active Batches Only)
     const { data: batches, error: batchesError } = await supabase
       .from("course_batches_v2")
       .select("id, syllabus_id, batch_no, start_datetime, timing")
@@ -34,44 +33,67 @@ export async function GET() {
 
     if (batchesError) throw batchesError;
 
-    // 4. Merge into the flat interface
     const mappedCourses = storefront.map((course) => {
-      const syllabus = syllabi.find((s) => s.id === course.syllabus_id);
-      
-      const activeBatch = batches.find(
-        (b) => b.syllabus_id === course.syllabus_id && b.batch_no === course.active_batch_no
+      const syllabus = syllabi?.find(
+        (item) => item.id === course.syllabus_id
+      );
+
+      const activeBatch = batches?.find(
+        (batch) =>
+          batch.syllabus_id === course.syllabus_id &&
+          batch.batch_no === course.active_batch_no
       );
 
       return {
-        id: course.syllabus_id.toString(), 
-        course_code: syllabus?.course_code || course.syllabus_id.toString(),
-        title: course.name,
-        batch_id: activeBatch?.id || null, 
+        id: String(course.syllabus_id),
+        syllabus_id: course.syllabus_id,
+        course_code: syllabus?.course_code || String(course.syllabus_id),
+
+        title: course.name || syllabus?.name || "Untitled Course",
+        name: course.name || syllabus?.name || "Untitled Course",
+
+        fee: Number(course.fee || 0),
+        discount: Number(course.discount || 0),
+        is_active: Boolean(course.is_active),
+
+        active_batch_no: course.active_batch_no || null,
+        batch_id: activeBatch?.id || null,
+        active_batch_id: activeBatch?.id || null,
+        batch_no: activeBatch?.batch_no || course.active_batch_no || null,
+
         duration: syllabus?.duration || "Self-Paced",
         timing: activeBatch?.timing || "TBA",
-        fee: course.fee,
-        discount: course.discount,
+
         category: syllabus?.category || "General",
         difficulty_level: syllabus?.difficulty_level || "Beginner",
-        // FIX: Map learning_outcomes instead of description
-        learning_outcomes: syllabus?.learning_outcomes || [],
+
+        learning_outcomes: syllabus?.learning_outcomes || null,
         start_datetime: activeBatch?.start_datetime || null,
+
         syllabus_url: syllabus?.syllabus_pdf || "",
         cover_pic: syllabus?.cover_pic || "/placeholder-course.jpg",
-        is_active: course.is_active,
       };
     });
 
-    // Default sort by Earliest First
     mappedCourses.sort((a, b) => {
-      const timeA = a.start_datetime ? new Date(a.start_datetime).getTime() : Infinity;
-      const timeB = b.start_datetime ? new Date(b.start_datetime).getTime() : Infinity;
+      const timeA = a.start_datetime
+        ? new Date(a.start_datetime).getTime()
+        : Infinity;
+
+      const timeB = b.start_datetime
+        ? new Date(b.start_datetime).getTime()
+        : Infinity;
+
       return timeA - timeB;
     });
 
     return NextResponse.json(mappedCourses);
   } catch (error: any) {
-    console.error("API Error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Online courses API error:", error);
+
+    return NextResponse.json(
+      { error: error?.message || "Failed to fetch online courses" },
+      { status: 500 }
+    );
   }
 }
