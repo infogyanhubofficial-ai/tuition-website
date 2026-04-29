@@ -106,8 +106,8 @@ export async function GET(
       tutor_pic_url: tutorData?.tutor_pic_url || null,
       tutor_bio: tutorData?.tutor_bio || null,
       
-      // ✅ THE FIX: Changed 'batch_id' to 'active_batch_id' so the frontend detects it
-      active_batch_id: activeBatch?.id || null 
+      // ✅ THE FIX: Restored to 'batch_id' to match frontend expectations
+      batch_id: activeBatch?.id || null 
     };
 
     return NextResponse.json(payload);
