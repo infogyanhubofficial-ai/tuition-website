@@ -89,7 +89,7 @@ function CheckoutContent() {
   const urlPrice = searchParams.get("price") || "0"; 
   
   const urlEnrollmentId = searchParams.get("enrollment_id") || searchParams.get("enrollmentId") || null;
-  const urlOrderId = searchParams.get("order_id") || searchParams.get("orderId") || null; // NEW: Get existing order ID
+  const urlOrderId = searchParams.get("order_id") || searchParams.get("orderId") || null; 
   const urlLockedPrice = searchParams.get("locked_price") || null;
 
   // 2. DETERMINE ORDER MODE
@@ -99,7 +99,7 @@ function CheckoutContent() {
   else if (orderTypeParam.includes("verif") || orderTypeParam.includes("batch") || orderTypeParam.includes("badge")) currentMode = "badge";
   else if (requestType === "cv" || requestType === "phone") currentMode = "cv_phone"; 
 
-  // 3. BULLETPROOF FORM STATE (Forces strings, prevents nulls)
+  // 3. BULLETPROOF FORM STATE
   const [fullName, setFullName] = useState<string>(urlName || "");
   const [email, setEmail] = useState<string>(urlEmail || "");
   const [contactNumber, setContactNumber] = useState<string>(urlPhone || "");
@@ -271,29 +271,15 @@ function CheckoutContent() {
       if (uploadError) throw uploadError;
 
       // 2. Decide if we are UPDATING an existing order or INSERTING a new one
-      if (urlOrderId) {
+      let targetOrderId = urlOrderId;
+      let finalEnrollmentId = urlEnrollmentId;
+      let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+
+      // ONLINE COURSE PRE-CHECK: Prevent Duplicate Insertions
+      if (!targetOrderId && config.dbOrderType === "Online Course") {
         
-        // --- UPDATE EXISTING ORDER ---
-        const { error: dbError } = await supabase
-          .from('orders_v2')
-          .update({
-            paid_amount: paidAmount,
-            payment_screenshots: [uploadData.path],
-            full_name: safeName.trim(),
-            email: finalNormalizedEmail,
-            whatsapp_number: safePhone.trim(),
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', urlOrderId);
-
-        if (dbError) throw dbError;
-
-      } else {
-
-        // --- INSERT NEW ORDER ---
-        let finalEnrollmentId = urlEnrollmentId;
-
-        if (!finalEnrollmentId && config.dbOrderType === "Online Course") {
+        // A. Resolve Enrollment ID if missing
+        if (!finalEnrollmentId) {
           const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
             search_email: finalNormalizedEmail
           });
@@ -307,24 +293,63 @@ function CheckoutContent() {
           }
         }
 
-        let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+        // B. Check for existing pending online course order linked to this enrollment ID
+        if (finalEnrollmentId) {
+          const { data: existingOrder } = await supabase
+            .from('orders_v2')
+            .select('id, locked_price')
+            .eq('enrollment_id', finalEnrollmentId)
+            .eq('status', 'pending')
+            .eq('order_type', 'Online Course')
+            .maybeSingle();
 
-        if (finalLockedPrice < paidAmount) {
-          finalLockedPrice = paidAmount;
+          if (existingOrder) {
+            targetOrderId = existingOrder.id; // Intercept: Switch to UPDATE mode
+            
+            // Preserve the original locked price from the database if we didn't fetch one recently
+            if (existingOrder.locked_price && !fetchedLockedPrice) {
+              finalLockedPrice = existingOrder.locked_price;
+            }
+          }
         }
+      }
 
+      // Ensure locked price is never lower than what the user just paid
+      if (finalLockedPrice < paidAmount) {
+        finalLockedPrice = paidAmount;
+      }
+
+      if (targetOrderId) {
+        
+        // --- UPDATE EXISTING ORDER ---
+        const { error: dbError } = await supabase
+          .from('orders_v2')
+          .update({
+            paid_amount: paidAmount,
+            payment_screenshots: [uploadData.path],
+            full_name: safeName.trim(),
+            email: finalNormalizedEmail,
+            whatsapp_number: safePhone.trim(),
+            user_id: currentUserId || null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', targetOrderId);
+
+        if (dbError) throw dbError;
+
+      } else {
+
+        // --- INSERT NEW ORDER ---
         const { error: dbError } = await supabase.from('orders_v2').insert([{
           user_id: currentUserId || null,
           enrollment_id: finalEnrollmentId || null,
           order_type: config.dbOrderType,         
           order_name: config.orderName,
-          
-          locked_price: finalLockedPrice, // CORRECTLY MAPPED TO DB
-          paid_amount: paidAmount,        // CORRECTLY MAPPED TO DB
-          
+          locked_price: finalLockedPrice,
+          paid_amount: paidAmount,
           payment_screenshots: [uploadData.path],
           status: 'pending',
-          full_name: safeName.trim(),           
+          full_name: safeName.trim(),            
           email: finalNormalizedEmail,          
           whatsapp_number: safePhone.trim()     
         }]);

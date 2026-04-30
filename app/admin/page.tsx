@@ -422,7 +422,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const supabase = createClient();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'failed'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified'>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'Online Course' | 'others'>('all'); 
   const [showAllOrders, setShowAllOrders] = useState(true);
 
@@ -454,26 +454,6 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
 
   const handleStatusChange = async (order: Order, newStatus: string) => {
     let updatePayload: any = { status: newStatus };
-
-    // If changing status to verified, optionally prompt the admin for the verified amount
-    if (newStatus === 'verified') {
-      const remaining = (order.locked_amount ?? 0) - (order.price ?? 0);
-      const amountStr = window.prompt(
-        `Order verification:\nEnter the payment amount to ADD to the current paid amount.\n\nLocked Price: Rs. ${order.locked_amount ?? 0}\nCurrently Paid: Rs. ${order.price ?? 0}\nRemaining: Rs. ${remaining}`,
-        remaining.toString()
-      );
-
-      if (amountStr === null) return; // User cancelled
-
-      const amountToAdd = parseFloat(amountStr);
-      if (isNaN(amountToAdd) || amountToAdd < 0) {
-        alert("Invalid amount entered. Please enter a valid positive number.");
-        return;
-      }
-
-      updatePayload.paid_amount = (order.price ?? 0) + amountToAdd;
-    }
-
     const { error } = await supabase.from('orders_v2').update(updatePayload).eq('id', order.id);
     if (error) {
       alert("Update failed: " + error.message);
@@ -490,7 +470,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
     }
   };
 
-  const statusColors: any = { pending: 'bg-orange-100 text-orange-700', verified: 'bg-green-100 text-green-700', failed: 'bg-red-100 text-red-700' };
+  const statusColors: any = { pending: 'bg-orange-100 text-orange-700', verified: 'bg-green-100 text-green-700' };
 
   const getImageUrl = (path: string) => {
     if (!path) return '';
@@ -513,7 +493,6 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
           <option value="all">All Status</option>
           <option value="pending">Pending</option>
           <option value="verified">Verified</option>
-          <option value="failed">Failed</option>
         </select>
         
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)}>
@@ -547,7 +526,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                   <td className="p-6">
                     <p className="font-bold text-slate-800 flex items-center gap-2">
                       <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{order.order_type}</span>
-                      Rs. {order.price} / Rs. {order.locked_amount}
+                      <span>Rs. {order.price} <span className="text-[10px] text-slate-400 font-medium ml-1">/ Rs. {order.locked_amount}</span></span>
                     </p>
                     <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.order_name}>
                       Target: {order.order_name}
@@ -558,7 +537,6 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                       <select value={order.status} onChange={(e) => handleStatusChange(order, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[order.status] || 'bg-slate-100 text-slate-700'}`}>
                         <option value="pending">PENDING</option>
                         <option value="verified">VERIFIED</option>
-                        <option value="failed">FAILED</option>
                       </select>
                       <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                     </div>

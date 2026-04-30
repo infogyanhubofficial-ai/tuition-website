@@ -145,6 +145,8 @@ interface Order {
   status: string;
   created_at: string;
   admin_message?: any;
+  enrollment_id?: string;
+  locked_price?: number;
 }
 
 interface Certificate {
@@ -300,11 +302,14 @@ export default function ProfilePage() {
     if (!email || !uid) return;
     try {
       // 1. Fetch Orders (linked by ID or Email)
-      const { data: ordersV2, error: ordersError } = await supabase
+      const { data: fetchedOrders, error: ordersError } = await supabase
         .from('orders_v2')
         .select('*')
         .or(`user_id.eq.${uid},email.ilike.${email}`)
         .order('created_at', { ascending: false });
+        
+      // Filter out transactions with a paid_amount of 0
+      const ordersV2 = fetchedOrders ? fetchedOrders.filter(o => (o.paid_amount || 0) > 0) : null;
         
       if (ordersError) setOrdersError(ordersError.message);
       else if (ordersV2) {
@@ -370,9 +375,22 @@ export default function ProfilePage() {
           const courseStorefront = coursesV2?.find(c => c.syllabus_id === targetSyllabusId);
           
           const relatedOrders = ordersV2?.filter(o => o.enrollment_id === env2.id && o.status !== 'rejected') || [];
-          const paid = relatedOrders.reduce((sum, o) => sum + (o.paid_amount || 0), 0);
-          const lockedPrice = relatedOrders.length > 0 ? relatedOrders[0].locked_price : (courseStorefront?.fee || 0);
-          const remaining = Math.max(0, lockedPrice - paid);
+          
+          const dbPaid = env2.paid_amount;
+          const dbRemaining = env2.remaining_amount;
+
+          const paid = (dbPaid !== undefined && dbPaid !== null) 
+            ? dbPaid 
+            : relatedOrders.reduce((sum, o) => sum + (o.paid_amount || 0), 0);
+          
+          let lockedPrice = courseStorefront?.fee || 0;
+          if (relatedOrders.length > 0 && relatedOrders[0].locked_price != null) {
+              lockedPrice = relatedOrders[0].locked_price;
+          }
+
+          const remaining = (dbRemaining !== undefined && dbRemaining !== null)
+            ? dbRemaining
+            : Math.max(0, lockedPrice - paid);
           
           return {
             id: env2.id,
@@ -909,7 +927,7 @@ export default function ProfilePage() {
         )}
         
         {selectedTransaction && (
-          <TransactionModal order={selectedTransaction} enrollments={enrollments} onClose={() => setSelectedTransaction(null)} />
+          <TransactionModal order={selectedTransaction} enrollments={enrollments} onClose={() => setSelectedTransaction(null)} router={router} />
         )}
         
         {globalExpiredClassLink && (
@@ -1080,6 +1098,7 @@ export default function ProfilePage() {
                     activeCourseAccess={activeCourseAccess}
                     recordingOrdersVerified={recordingOrdersVerified}
                     onlineCourseDetails={onlineCourseDetails}
+                    router={router}
                   />
                 )}
 
@@ -1897,7 +1916,7 @@ function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatc
 }
 
 // ─── ACCOUNT OVERVIEW ───
-function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, orders, enrollments, certificates, onNavigate, pendingVerificationOrders, pendingCoursePayments, activeCourseAccess, recordingOrdersVerified, onlineCourseDetails }: any) {
+function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, orders, enrollments, certificates, onNavigate, pendingVerificationOrders, pendingCoursePayments, activeCourseAccess, recordingOrdersVerified, onlineCourseDetails, router }: any) {
   const timelineEvents = [
     ...(orders || []).filter((o: Order) => o.order_type?.toLowerCase() === 'recording').map((o: Order) => ({ id: o.id, type: 'Order', title: `Purchased ${o.order_name} recordings`, date: new Date(o.created_at), status: o.status })),
     ...(enrollments || []).map((e: Enrollment) => ({ id: e.id, type: 'Enrollment', title: `Enrolled in ${e.course_name} class`, date: new Date(e.created_at), status: e.remaining_amount === 0 ? 'cleared' : 'pending' })),
@@ -1961,6 +1980,26 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
           </div>
         </div>
       </div>
+
+      {pendingCoursePayments?.length > 0 && (
+        <div className="flex flex-col gap-3 sm:gap-4">
+          {pendingCoursePayments.map((enroll: Enrollment) => (
+            <div key={enroll.id} className={`bg-red-50 border border-red-200 ${tokens.radius.card} p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 shadow-sm relative overflow-hidden group`}>
+              <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-red-400 to-red-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
+              <div className="flex items-start gap-3 sm:gap-4 text-red-800">
+                <div className="p-2.5 sm:p-3 bg-red-100 text-red-600 rounded-xl shrink-0"><AlertCircle className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                <div className="mt-0.5 sm:mt-1">
+                  <p className="text-sm sm:text-base font-extrabold leading-tight mb-1">Action Required: Pending Due</p>
+                  <p className="text-xs sm:text-sm font-medium text-red-700">You have a remaining payment of <strong className="font-extrabold text-red-800">Rs. {enroll.remaining_amount}</strong> for <strong className="font-extrabold text-red-800">{enroll.course_name}</strong>.</p>
+                </div>
+              </div>
+              <button onClick={() => { if(router) { router.push(`/order?order_type=course&courseName=${encodeURIComponent(enroll.course_name)}&price=${enroll.remaining_amount}`); } else { window.location.href = `/order?order_type=course&courseName=${encodeURIComponent(enroll.course_name)}&price=${enroll.remaining_amount}`; } }} className={`w-full md:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold px-5 sm:px-6 py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm shadow-red-600/20`}>
+                Pay Rs. {enroll.remaining_amount}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className={`bg-gradient-to-br from-white to-slate-50/50 p-5 sm:p-6 md:p-8 ${tokens.radius.card} border border-slate-200/60 shadow-sm`}>
         <h3 className="text-[10px] sm:text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 sm:gap-2 mb-5 sm:mb-8"><Activity size={14} className="sm:w-4 sm:h-4" /> Recent Timeline</h3>
@@ -2027,8 +2066,11 @@ function TransactionsView({ orders, ordersError, enrollments, formatDate, select
   );
 }
 
-function TransactionModal({ order, enrollments, onClose }: { order: Order; enrollments: Enrollment[]; onClose: () => void }) {
-  const relatedEnrollment = enrollments?.find((e: Enrollment) => e.course_name.toLowerCase() === order.order_name.toLowerCase());
+function TransactionModal({ order, enrollments, onClose, router }: { order: Order; enrollments: Enrollment[]; onClose: () => void; router?: any }) {
+  const relatedEnrollment = enrollments?.find((e: Enrollment) => 
+    (order.enrollment_id && e.id === order.enrollment_id) || 
+    (e.course_name && order.order_name && e.course_name.toLowerCase() === order.order_name.toLowerCase())
+  );
   const remainingDue = relatedEnrollment ? relatedEnrollment.remaining_amount : 0;
 
   const getScreenshotUrl = (path: string) => {
@@ -2057,9 +2099,16 @@ function TransactionModal({ order, enrollments, onClose }: { order: Order; enrol
               <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest mb-1 sm:mb-2">Date</p>
               <p className="font-semibold text-slate-700 text-sm sm:text-lg tracking-tight mt-0.5 sm:mt-1">{new Date(order.created_at).toLocaleDateString()}</p>
             </div>
-            <div className={`col-span-2 p-4 sm:p-5 ${tokens.radius.badge} border flex justify-between items-center shadow-sm ${remainingDue > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
-              <p className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-widest ${remainingDue > 0 ? 'text-red-600' : 'text-slate-500'}`}>Remaining Due</p>
-              <p className={`font-extrabold text-sm sm:text-lg tracking-tight ${remainingDue > 0 ? 'text-red-700' : 'text-slate-800'}`}>{remainingDue > 0 ? `Rs. ${remainingDue}` : 'No due remaining'}</p>
+            <div className={`col-span-2 p-4 sm:p-5 ${tokens.radius.badge} border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shadow-sm ${remainingDue > 0 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+              <div>
+                <p className={`text-[9px] sm:text-[10px] uppercase font-extrabold tracking-widest ${remainingDue > 0 ? 'text-red-600' : 'text-slate-500'}`}>Remaining Due</p>
+                <p className={`font-extrabold text-sm sm:text-lg tracking-tight ${remainingDue > 0 ? 'text-red-700' : 'text-slate-800'}`}>{remainingDue > 0 ? `Rs. ${remainingDue}` : 'No due remaining'}</p>
+              </div>
+              {remainingDue > 0 && (
+                <button onClick={() => { if(router) { router.push(`/order?order_type=course&courseName=${encodeURIComponent(relatedEnrollment?.course_name || order.order_name)}&price=${remainingDue}`); } else { window.location.href = `/order?order_type=course&courseName=${encodeURIComponent(relatedEnrollment?.course_name || order.order_name)}&price=${remainingDue}`; } }} className={`w-full sm:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold px-5 sm:px-6 py-2.5 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+                  Pay Now
+                </button>
+              )}
             </div>
             <div className={`col-span-2 p-4 sm:p-5 bg-white ${tokens.radius.badge} border border-slate-200 shadow-sm flex justify-between items-center`}>
               <p className="text-[9px] sm:text-[10px] uppercase font-extrabold text-slate-400 tracking-widest">Status</p>
