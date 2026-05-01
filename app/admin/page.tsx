@@ -123,10 +123,16 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const checkAdminAndFetch = async () => {
+      const unlocked = localStorage.getItem('admin_unlocked');
+      if (unlocked === 'true') {
+        setIsLocked(false);
+      }
       await fetchAllData();
       setLoadingAuth(false);
     };
+    
     checkAdminAndFetch();
+    
     const channels = supabase.channel('admin-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vacancy_applications' }, () => fetchAllData())
@@ -137,6 +143,7 @@ export default function AdminDashboard() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders_v2' }, () => fetchAllData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'course_batches_v2' }, () => fetchAllData())
       .subscribe();
+      
     return () => { supabase.removeChannel(channels); };
   }, [router]);
 
@@ -241,10 +248,20 @@ export default function AdminDashboard() {
     if (loginUser === "Nischal" && loginPass === "Xolox900") {
       setIsLocked(false);
       setLoginError("");
+      localStorage.setItem('admin_unlocked', 'true');
     } else {
       setLoginError("Invalid username or password");
     }
   };
+
+  const handleLogout = () => {
+    setIsLocked(true);
+    setLoginPass("");
+    setLoginUser("");
+    localStorage.removeItem('admin_unlocked');
+  };
+
+  if (loadingAuth) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-indigo-500"><Loader2 className="animate-spin" size={48} /></div>;
 
   if (isLocked) {
     return (
@@ -272,8 +289,6 @@ export default function AdminDashboard() {
     );
   }
 
-  if (loadingAuth) return <div className="min-h-screen flex items-center justify-center bg-slate-900 text-indigo-500"><Loader2 className="animate-spin" size={48} /></div>;
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans flex">
       <aside className="w-72 bg-slate-900 text-slate-300 flex flex-col fixed h-full z-40 overflow-y-auto no-scrollbar">
@@ -293,7 +308,7 @@ export default function AdminDashboard() {
           <SidebarBtn icon={<Award size={20}/>} label="Certificates" active={activeTab === "Certificates"} onClick={() => setActiveTab("Certificates")} />
         </nav>
         <div className="p-4 border-t border-slate-800">
-          <SidebarBtn icon={<LogOut size={20}/>} label="Lock Screen" color="text-red-400 hover:bg-red-500/10" onClick={() => { setIsLocked(true); setLoginPass(""); setLoginUser(""); }} />
+          <SidebarBtn icon={<LogOut size={20}/>} label="Lock Screen" color="text-red-400 hover:bg-red-500/10" onClick={handleLogout} />
         </div>
       </aside>
 
@@ -362,8 +377,8 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
   });
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-end">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="space-y-6 w-full max-w-full">
+      <div className="flex justify-between items-end flex-wrap gap-4">
         <div>
           <h2 className="text-4xl font-black text-slate-900 tracking-tight">Inbox</h2>
           <p className="text-slate-500 font-medium mt-1">Manage all user communications.</p>
@@ -375,7 +390,7 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
           </button>
         </div>
       </div>
-      <div className="relative">
+      <div className="relative w-full">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
         <input type="text" placeholder="Search by name or message content..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
       </div>
@@ -395,7 +410,7 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
               return (
                 <div key={msg.id} onClick={() => onOpenChat(msg.user_id)} className="group flex items-center gap-4 p-6 hover:bg-slate-50/80 cursor-pointer transition-colors relative">
                   {isUnread && <div className="absolute left-3 w-2.5 h-2.5 bg-red-500 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>}
-                  <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 ml-2 overflow-hidden">
+                  <div className="w-14 h-14 rounded-full bg-slate-200 flex items-center justify-center font-black text-slate-500 ml-2 overflow-hidden shrink-0">
                     {msg.profiles?.avatar_url ? <img src={msg.profiles.avatar_url} className="w-full h-full object-cover" alt="" /> : name.charAt(0)}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -427,6 +442,10 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   const [showAllOrders, setShowAllOrders] = useState(true);
 
   const filteredData = data.filter((o: Order) => {
+    if (o.price === 0) {
+      return false;
+    }
+
     const s = searchQuery.toLowerCase();
     const matchesSearch = (o.full_name && o.full_name.toLowerCase().includes(s)) || 
                           (o.email && o.email.toLowerCase().includes(s)) || 
@@ -480,7 +499,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <div className="flex justify-between items-center">
         <h2 className="text-3xl font-black text-slate-900">Orders</h2>
       </div>
@@ -503,12 +522,12 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
         </select>
 
         <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-600 bg-white border border-slate-200 px-4 py-3 rounded-2xl shadow-sm whitespace-nowrap">
-          <input type="checkbox" checked={showAllOrders} onChange={(e) => setShowAllOrders(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+          <input type="checkbox" checked={showAllOrders} onChange={(e) => setShowAllOrders(e.target.checked)} className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-50 cursor-pointer" />
           Show All Time
         </label>
       </div>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Date</th><th className="p-6">Customer Details</th><th className="p-6">Order Info</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -524,16 +543,16 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                     <p className="text-xs text-slate-500 mt-1">{order.contact_number} • {order.email}</p>
                   </td>
                   <td className="p-6">
-                    <p className="font-bold text-slate-800 flex items-center gap-2">
-                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500">{order.order_type}</span>
-                      <span>Rs. {order.price} <span className="text-[10px] text-slate-400 font-medium ml-1">/ Rs. {order.locked_amount}</span></span>
+                    <p className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
+                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500 whitespace-nowrap">{order.order_type}</span>
+                      <span className="whitespace-nowrap">Rs. {order.price} <span className="text-[10px] text-slate-400 font-medium ml-1">/ Rs. {order.locked_amount}</span></span>
                     </p>
                     <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.order_name}>
                       Target: {order.order_name}
                     </p>
                   </td>
                   <td className="p-6" onClick={(e) => e.stopPropagation()}>
-                    <div className="relative inline-block w-36">
+                    <div className="relative inline-block w-full max-w-[140px]">
                       <select value={order.status} onChange={(e) => handleStatusChange(order, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[order.status] || 'bg-slate-100 text-slate-700'}`}>
                         <option value="pending">PENDING</option>
                         <option value="verified">VERIFIED</option>
@@ -561,12 +580,12 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
             <button onClick={() => setSelectedOrder(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
             <h3 className="text-2xl font-black mb-6">Order Details</h3>
             
-            <div className="grid grid-cols-2 gap-6 mb-6 text-sm font-medium text-slate-700">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-sm font-medium text-slate-700">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Customer Info</p>
                   <p><span className="font-bold text-slate-800">Name:</span> {selectedOrder.full_name}</p>
-                  <p><span className="font-bold text-slate-800">Email:</span> {selectedOrder.email}</p>
+                  <p className="break-all"><span className="font-bold text-slate-800">Email:</span> {selectedOrder.email}</p>
                   <p><span className="font-bold text-slate-800">Phone:</span> {selectedOrder.contact_number}</p>
                 </div>
                 <a href={`https://wa.me/${(selectedOrder.contact_number || '').replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 bg-[#25D366] hover:bg-[#20b858] text-white px-4 py-2 rounded-xl text-xs font-black shadow-sm transition-colors w-full">
@@ -628,7 +647,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <div className="flex justify-between items-end">
         <h2 className="text-3xl font-black text-slate-900">Tutor Listing</h2>
       </div>
@@ -637,7 +656,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
         <input type="text" placeholder="Search by Tutor Name, Location, or Subjects..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
       </div>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[700px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Tutor Info</th><th className="p-6">Verified</th><th className="p-6">Available</th><th className="p-6 text-right">Actions</th>
@@ -681,7 +700,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
               <h3 className="text-2xl font-black">{selectedTutor.name || 'Unknown'}</h3>
             </div>
             <div className="space-y-4 text-sm font-medium text-slate-700">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <span className="text-xs font-black text-slate-400 uppercase block mb-1">Phone Number</span>
                   {selectedTutor.contact_num || 'Not provided'}
@@ -763,8 +782,8 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
   }) : [];
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex justify-between items-center">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
+      <div className="flex justify-between items-center flex-wrap gap-4">
         <h2 className="text-3xl font-black text-slate-900">Vacancies</h2>
         <button onClick={() => { setEditingData({ status: true, urgent: false }); setModalOpen(true); }} className="bg-indigo-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/20 hover:bg-indigo-700 transition-all whitespace-nowrap">
           <Plus size={18} /> Add Vacancy
@@ -775,7 +794,7 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
         <input type="text" placeholder="Search by subject, location, or contact name..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-white rounded-2xl border border-slate-200 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all font-medium text-slate-700" />
       </div>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Date Posted</th><th className="p-6">Subject & Location</th><th className="p-6">Urgent</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -864,7 +883,7 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
                 <ToggleSwitch checked={!!editingData.urgent} onChange={() => setEditingData({ ...editingData, urgent: !editingData.urgent })} label="Mark as Urgent" activeColor="bg-red-500" activeText="text-red-600" />
                 <ToggleSwitch checked={!!editingData.status} onChange={() => setEditingData({ ...editingData, status: !editingData.status })} label="Status (Open)" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Subject</label><input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm transition-colors" value={editingData.subject || ''} onChange={e => setEditingData({ ...editingData, subject: e.target.value })} /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Location</label><input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm transition-colors" value={editingData.location || ''} onChange={e => setEditingData({ ...editingData, location: e.target.value })} /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1 ml-1">Contact Name</label><input type="text" className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 text-sm transition-colors" value={editingData.contact_name || ''} onChange={e => setEditingData({ ...editingData, contact_name: e.target.value })} /></div>
@@ -899,10 +918,10 @@ function ApplicationsManager({ data, refresh, onOpenChat, tutors }: any) {
   const statusColors: any = { pending: 'bg-orange-100 text-orange-700', accepted: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <h2 className="text-3xl font-black text-slate-900">Applications</h2>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[900px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Applicant (Tutor)</th><th className="p-6">Contact Info</th><th className="p-6">Applied For</th><th className="p-6">Vacancy Poster (Student)</th><th className="p-6">Student Response</th><th className="p-6 text-right">Action</th>
@@ -915,18 +934,18 @@ function ApplicationsManager({ data, refresh, onOpenChat, tutors }: any) {
               return (
                 <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                   <td className="p-6"><a href={tutorLink} target="_blank" className="font-bold text-indigo-600 hover:underline text-base flex items-center gap-1">{item.applicant_name} <ExternalLink size={14} /></a></td>
-                  <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.applicant_phone}</p><p className="text-xs font-medium text-slate-400 truncate max-w-[150px]">{item.applicant_email}</p></td>
+                  <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.applicant_phone}</p><p className="text-xs font-medium text-slate-400 break-all">{item.applicant_email}</p></td>
                   <td className="p-6"><span onClick={() => window.open(`/vacancies/${item.vacancy_id}`, '_blank')} className="cursor-pointer text-sm text-slate-700 font-bold hover:text-indigo-600 hover:underline transition-colors flex items-center gap-1">{item.vacancies?.subject}</span></td>
                   <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.vacancies?.contact_name || 'N/A'}</p><p className="text-xs font-medium text-slate-400">{item.vacancies?.contact_number || 'N/A'}</p></td>
                   <td className="p-6">
                     <div className="flex items-center gap-2">
-                      <div className="relative inline-block w-32">
+                      <div className="relative inline-block w-full max-w-[130px]">
                         <select value={item.status} onChange={(e) => handleStatusChange(item.id, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[item.status] || 'bg-slate-100 text-slate-700'}`}>
                           <option value="pending">PENDING</option><option value="accepted">ACCEPTED</option><option value="rejected">REJECTED</option>
                         </select>
                         <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
                       </div>
-                      {item.user_id && <button onClick={() => onOpenChat(item.user_id as any)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors" title="Chat with Tutor"><MessageSquare size={16} /></button>}
+                      {item.user_id && <button onClick={() => onOpenChat(item.user_id as any)} className="p-2 text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors shrink-0" title="Chat with Tutor"><MessageSquare size={16} /></button>}
                     </div>
                   </td>
                   <td className="p-6 text-right">
@@ -954,10 +973,10 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
   const statusColors: any = { pending: 'bg-orange-100 text-orange-700', accepted: 'bg-green-100 text-green-700', rejected: 'bg-red-100 text-red-700' };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <h2 className="text-3xl font-black text-slate-900">Tuition Requests</h2>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[700px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Student Info</th><th className="p-6">Applied To (Tutor)</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
@@ -979,7 +998,7 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
                   ) : <p className="text-sm text-slate-400 italic">No specific tutor</p>}
                 </td>
                 <td className="p-6" onClick={(e) => e.stopPropagation()}>
-                  <div className="relative inline-block w-36">
+                  <div className="relative inline-block w-full max-w-[140px]">
                     <select value={item.status} onChange={(e) => handleStatusChange(item.id, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[item.status] || 'bg-slate-100 text-slate-700'}`}>
                       <option value="pending">PENDING</option><option value="accepted">ACCEPTED</option><option value="rejected">REJECTED</option>
                     </select>
@@ -1110,7 +1129,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
     });
 
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
             <button onClick={() => setSelectedCourseId(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
@@ -1125,7 +1144,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
         </div>
 
         <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[900px]">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
                 <th className="p-6 w-24 text-center">Batch No</th>
@@ -1218,7 +1237,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
 
   // ROOT VIEW (Show Courses Table)
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <div className="flex justify-between items-center flex-wrap gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900">Batch Management</h2>
@@ -1226,7 +1245,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
         </div>
       </div>
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
               <th className="p-6">Course Overview</th>
@@ -1240,7 +1259,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
             {data.map(course => (
               <tr key={course.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer" onClick={() => openCourseEdit(course)}>
                 <td className="p-6">
-                  <p className="font-bold text-slate-900 text-lg whitespace-nowrap">{course.title}</p>
+                  <p className="font-bold text-slate-900 text-lg">{course.title}</p>
                   <p className="text-xs text-slate-500 font-mono mt-1">ID: {course.id}</p>
                 </td>
                 <td className="p-6 whitespace-nowrap">
@@ -1317,11 +1336,11 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   // Payment Editing State
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
   const [editPaid, setEditPaid] = useState<number>(0);
-  const [editLockedPrice, setEditLockedPrice] = useState<number>(0); // NEW
+  const [editLockedPrice, setEditLockedPrice] = useState<number>(0); 
   
   // Manual Booking State
   const [isAddingBooking, setIsAddingBooking] = useState(false);
-  const [newBooking, setNewBooking] = useState({ name: '', email: '', wa: '' });
+  const [newBooking, setNewBooking] = useState({ name: '', email: '', wa: '', locked_price: 0, paid_amount: 0 });
 
   // Hidden enrollments state
   const [hiddenBookingIds, setHiddenBookingIds] = useState<Set<string>>(new Set());
@@ -1359,8 +1378,8 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
          enrollment_id: editingPayment.id,
          full_name: editingPayment.full_name,
          email: editingPayment.email,
-         whatsapp_number: editingPayment.whatsapp_number, // <--- FIXED: mapped to whatsapp_number
-         order_type: 'Online Course', // <--- FIXED: Exact string to match database array constraint
+         whatsapp_number: editingPayment.whatsapp_number,
+         order_type: 'Online Course',
          order_name: editingPayment.course_name || (course?.title || 'Course Enrollment'),
          paid_amount: editPaid,
          locked_price: editLockedPrice,
@@ -1380,11 +1399,10 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
        return;
     }
 
-    // UPDATE ORDERS_V2 DIRECTLY (If exists)
+    // UPDATE ORDERS_V2 DIRECTLY
     const { error } = await supabase.from('orders_v2').update({
       paid_amount: editPaid,
       locked_price: editLockedPrice
-      // REMOVED remaining_amount completely, DB handles it via formula
     }).eq('id', editingPayment.order_id);
     
     if (error) {
@@ -1395,25 +1413,44 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     }
   };
 
+  const openAddBookingModal = () => {
+    const fee = Number(selectedCourse?.fee) || 0;
+    const discount = Number(selectedCourse?.discount) || 0;
+    const defaultLocked = fee - (fee * discount / 100);
+    
+    setNewBooking({ name: '', email: '', wa: '', locked_price: defaultLocked, paid_amount: 0 });
+    setIsAddingBooking(true);
+  };
+
   const saveManualBooking = async () => {
     if (!selectedCourse) return;
     if (!newBooking.name || !newBooking.email || !newBooking.wa) {
-      alert("Please fill all booking details!");
+      alert("Please fill all contact details!");
       return;
     }
 
-    const fee = Number(selectedCourse.fee) || 0;
-    const discount = Number(selectedCourse.discount) || 0;
-    const locked_price = fee - (fee * discount / 100);
+    // 1. Find the actual UUID of the currently selected batch
+    let resolvedBatchId = null;
+    if (selectedBatch !== 'unassigned' && selectedBatch !== null) {
+      const matchedBatch = batches.find(b => b.course_id === selectedCourse.id && b.batch_no === selectedBatch);
+      if (matchedBatch) {
+        resolvedBatchId = matchedBatch.id;
+      }
+    }
 
-    // 1. Insert Enrollment
+    // Strict Check
+    if (!resolvedBatchId) {
+      alert("Error: You must be inside a specific valid batch to add a booking.");
+      return;
+    }
+
+    // 2. Insert Enrollment
     const enrPayload = {
-      course_id: selectedCourse.id,
-      batch_no: selectedBatch === 'unassigned' ? null : selectedBatch,
+      batch_id: resolvedBatchId,
       full_name: newBooking.name,
       email: newBooking.email,
       whatsapp_number: newBooking.wa,
-      is_confirmed: true // Assuming confirmed by default for manual additions
+      is_confirmed: true 
     };
 
     const { data: enrData, error: enrErr } = await supabase.from('enrollments_v2').insert([enrPayload]).select().single();
@@ -1423,17 +1460,17 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       return;
     }
 
-    // 2. Insert corresponding Order auto
+    // 3. Insert corresponding Order auto using the modal's financial inputs
     const ordPayload = {
       enrollment_id: enrData.id,
       full_name: newBooking.name,
       email: newBooking.email,
-      whatsapp_number: newBooking.wa, // <--- FIXED: mapped to whatsapp_number
-      order_type: 'Online Course', // <--- FIXED: Exact string to match database array constraint
+      whatsapp_number: newBooking.wa,
+      order_type: 'Online Course', 
       order_name: selectedCourse.title,
-      paid_amount: 0,
-      locked_price: locked_price,
-      status: 'pending'
+      paid_amount: newBooking.paid_amount,
+      locked_price: newBooking.locked_price,
+      status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
     };
 
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
@@ -1446,8 +1483,9 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       }
     }
 
+    // 4. Cleanup and refresh UI
     setIsAddingBooking(false);
-    setNewBooking({ name: '', email: '', wa: '' });
+    setNewBooking({ name: '', email: '', wa: '', locked_price: 0, paid_amount: 0 });
     refresh();
   };
 
@@ -1466,13 +1504,13 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   // STEP 1: SHOW COURSES LIST (Square Boxes Layout)
   if (!selectedCourse) {
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
         <div>
           <h2 className="text-3xl font-black text-slate-900">Course Bookings</h2>
           <p className="text-slate-500 font-medium mt-1">Select an online course to view its batches and enrollments.</p>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 mt-6 max-w-7xl">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 mt-6 w-full">
           {courses.map(course => {
             const batchCount = batches.filter(b => b.course_id === course.id).length;
             return (
@@ -1506,7 +1544,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     const unassignedCount = enrollments.filter(e => e.course_id === selectedCourse.id && !e.batch_no).length;
 
     return (
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
         <div className="flex items-center gap-4">
           <button onClick={() => setSelectedCourse(null)} className="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors shadow-sm"><ArrowLeft size={20} className="text-slate-600" /></button>
           <div>
@@ -1557,7 +1595,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     );
   }
 
-  // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH (Excel Sheet Look)
+  // STEP 3: SHOW ENROLLMENTS FOR SELECTED BATCH
   let courseEnrollments = enrollments.filter(e => {
     if (e.course_id !== selectedCourse.id) return false;
     if (hiddenBookingIds.has(e.id)) return false;
@@ -1583,6 +1621,15 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
     return dateSort === 'desc' ? timeB - timeA : timeA - timeB;
   });
 
+  // Calculate Aggregates
+  const totalVolume = courseEnrollments.reduce((sum, e) => sum + (e.locked_price || 0), 0);
+  const predictedVolume = courseEnrollments.reduce((sum, e) => sum + (e.confirmed ? (e.locked_price || 0) : 0), 0);
+  const collectedVolume = courseEnrollments.reduce((sum, e) => sum + (e.paid_amount || 0), 0);
+  const remainingVolume = courseEnrollments.reduce((sum, e) => {
+    if (!e.confirmed) return sum;
+    return sum + Math.max(0, (e.locked_price || 0) - (e.paid_amount || 0));
+  }, 0);
+
   const totalPages = Math.ceil(courseEnrollments.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedEnrollments = courseEnrollments.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -1594,7 +1641,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1613,7 +1660,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                 <Eye size={16} /> Unhide All ({hiddenBookingIds.size})
               </button>
             )}
-            <button onClick={() => setIsAddingBooking(true)} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm shadow-indigo-600/30 whitespace-nowrap">
+            <button onClick={openAddBookingModal} className="px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm shadow-indigo-600/30 whitespace-nowrap">
               <Plus size={16} /> Add Booking
             </button>
           </div>
@@ -1639,17 +1686,33 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4">
-        <span className="text-sm font-black text-slate-600">Showing {courseEnrollments.length} Booking(s)</span>
-        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-4 gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm font-black text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm whitespace-nowrap">
+            Showing {courseEnrollments.length} Booking(s)
+          </span>
+          <span className="text-sm font-bold text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm whitespace-nowrap">
+            Total Vol: <span className="text-slate-900 font-black">Rs. {totalVolume}</span>
+          </span>
+          <span className="text-sm font-bold text-blue-800 bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm whitespace-nowrap">
+            Predicted Vol: <span className="font-black">Rs. {predictedVolume}</span>
+          </span>
+          <span className="text-sm font-bold text-emerald-800 bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-200 shadow-sm whitespace-nowrap">
+            Collected: <span className="font-black">Rs. {collectedVolume}</span>
+          </span>
+          <span className="text-sm font-bold text-rose-800 bg-rose-100 px-3 py-1.5 rounded-lg border border-rose-200 shadow-sm whitespace-nowrap">
+            Remaining: <span className="font-black">Rs. {remainingVolume}</span>
+          </span>
+        </div>
+        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap shrink-0">
           <Copy size={14} /> Copy CSV List
         </button>
       </div>
 
       {/* EXCEL SHEET STYLED TABLE */}
       <div className="bg-white border border-slate-300 shadow-sm overflow-x-auto w-full flex flex-col rounded-md">
-        <div className="overflow-y-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse table-auto text-xs min-w-[1000px]">
+        <div className="overflow-y-auto max-h-[600px] w-full">
+          <table className="w-full text-left border-collapse table-auto text-xs">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 uppercase font-black tracking-wider sticky top-0 z-10 shadow-sm">
                 <th className="p-3 border-r border-slate-300 w-12 text-center bg-slate-100">No.</th>
@@ -1668,26 +1731,26 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                     {startIndex + idx + 1}
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top leading-relaxed">
-                    <p className="font-bold text-slate-900 text-sm whitespace-nowrap">{enr.full_name}</p>
-                    <p className="text-slate-600 truncate max-w-[200px]" title={enr.email}>{enr.email}</p>
+                    <p className="font-bold text-slate-900 text-sm">{enr.full_name}</p>
+                    <p className="text-slate-600 break-all">{enr.email}</p>
                     <p className="text-slate-600 font-medium">WA: {enr.whatsapp_number}</p>
                   </td>
-                  <td className="p-3 border-r border-slate-300 align-top text-slate-700 font-medium">
+                  <td className="p-3 border-r border-slate-300 align-top text-slate-700 font-medium whitespace-nowrap">
                     {new Date(enr.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-3 border-r border-slate-300 align-top max-w-[250px] truncate text-slate-700" title={enr.remarks}>
+                  <td className="p-3 border-r border-slate-300 align-top text-slate-700 break-words" title={enr.remarks}>
                     {enr.remarks || '-'}
                   </td>
-                  <td className="p-3 border-r border-slate-300 align-top">
-                    <div className="flex justify-between w-full mb-1">
+                  <td className="p-3 border-r border-slate-300 align-top whitespace-nowrap">
+                    <div className="flex justify-between w-full mb-1 gap-2">
                       <span className="text-slate-500 font-bold">Total Fee:</span> 
                       <span className="font-bold text-slate-700">Rs.{enr.locked_price || 0}</span>
                     </div>
-                    <div className="flex justify-between w-full mb-1">
+                    <div className="flex justify-between w-full mb-1 gap-2">
                       <span className="text-slate-500 font-bold">Paid:</span> 
                       <span className="font-black text-slate-800">Rs.{enr.paid_amount || 0}</span>
                     </div>
-                    <div className="flex justify-between w-full pt-1 border-t border-slate-200 mt-1">
+                    <div className="flex justify-between w-full pt-1 border-t border-slate-200 mt-1 gap-2">
                       <span className="text-slate-500 font-bold">Due:</span> 
                       <span className="font-black text-red-600">Rs.{Math.max(0, (enr.locked_price || 0) - (enr.paid_amount || 0))}</span>
                     </div>
@@ -1715,7 +1778,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
         </div>
 
         {courseEnrollments.length > 0 && (
-          <div className="flex items-center justify-between p-4 border-t border-slate-300 bg-slate-50 shrink-0">
+          <div className="flex flex-wrap items-center justify-between p-4 border-t border-slate-300 bg-slate-50 shrink-0 gap-4">
             <span className="text-xs font-bold text-slate-600">
               Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, courseEnrollments.length)} of {courseEnrollments.length} entries
             </span>
@@ -1747,6 +1810,17 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">WhatsApp Number</label>
                 <input type="text" value={newBooking.wa} onChange={(e) => setNewBooking({...newBooking, wa: e.target.value})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" placeholder="98XXXXXXXX" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Locked Price (Rs)</label>
+                  <input type="number" value={newBooking.locked_price} onChange={(e) => setNewBooking({...newBooking, locked_price: Number(e.target.value)})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-indigo-500 font-bold text-slate-800 transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Paid Amount (Rs)</label>
+                  <input type="number" value={newBooking.paid_amount} onChange={(e) => setNewBooking({...newBooking, paid_amount: Number(e.target.value)})} className="w-full bg-slate-50 p-3.5 rounded-xl outline-none border border-slate-200 focus:border-emerald-500 font-bold text-emerald-600 transition-colors" />
+                </div>
               </div>
             </div>
             
@@ -1890,8 +1964,8 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
   const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
-      <div className="flex justify-between items-center">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
+      <div className="flex justify-between items-center flex-wrap gap-4">
         <h2 className="text-3xl font-black text-slate-900">Certificate Registry</h2>
         <button
           onClick={() => router.push('/admin/bulk-upload')}
@@ -1913,8 +1987,8 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
       </div>
 
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full flex flex-col">
-        <div className="overflow-y-auto max-h-[600px]">
-          <table className="w-full text-left border-collapse min-w-[800px]">
+        <div className="overflow-y-auto max-h-[600px] w-full">
+          <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
                 <th className="p-6">Student Info</th><th className="p-6">Course Name</th><th className="p-6">Issue Date & Code</th><th className="p-6 text-right">Actions</th>
@@ -1929,7 +2003,7 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
                 >
                   <td className="p-6">
                     <p className="font-bold text-slate-900">{cert.name}</p>
-                    <p className="text-sm text-slate-500 mt-1">{cert.email}</p>
+                    <p className="text-sm text-slate-500 mt-1 break-all">{cert.email}</p>
                   </td>
                   <td className="p-6"><p className="font-bold text-slate-800">{cert.syllabus_name}</p></td>
                   <td className="p-6">
@@ -1950,7 +2024,7 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
         </div>
 
         {filteredData.length > 0 && (
-          <div className="flex items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0">
+          <div className="flex flex-wrap items-center justify-between p-6 border-t border-slate-100 bg-slate-50 shrink-0 gap-4">
             <span className="text-sm font-medium text-slate-500">
               Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} entries
             </span>
