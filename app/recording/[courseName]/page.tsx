@@ -142,9 +142,10 @@ export default async function RecordingDetailPage(props: PageProps) {
   const orderUrl = `/order?type=recording&courseId=${course.id}&courseName=${encodeURIComponent(course.course_name)}&price=${salePrice}&cover=${encodeURIComponent(course.cover_pic_url || '')}`;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 font-sans selection:bg-blue-100 pb-16 md:pb-24">
+    // Note the `pb-28 md:pb-24` ensuring mobile users can scroll completely past the fixed bottom bar
+    <div className="min-h-screen bg-slate-50/50 font-sans selection:bg-blue-100 pb-28 md:pb-24 relative">
       
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 md:py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 md:py-8">
         <Link href="/recording" className="text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1.5 w-fit">
            &larr; Back to all recordings
         </Link>
@@ -169,7 +170,7 @@ export default async function RecordingDetailPage(props: PageProps) {
               )}
             </div>
 
-            <div className="p-5 md:p-10 flex-grow">
+            <div className="p-4 sm:p-5 md:p-10 flex-grow">
               <div className="flex flex-wrap gap-2 mb-4 md:mb-6">
                 {course.category && (
                   <span className="bg-blue-50/50 border border-blue-100/50 text-blue-600 text-[11px] md:text-xs font-semibold px-2.5 py-1 rounded-md">
@@ -183,13 +184,13 @@ export default async function RecordingDetailPage(props: PageProps) {
                 )}
               </div>
 
-              <h1 className="text-2xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-6 md:mb-10 tracking-tight leading-tight">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 mb-6 md:mb-10 tracking-tight leading-tight">
                 {course.course_name}
               </h1>
 
               {course.description && (
-                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 md:p-6 mb-8 md:mb-12 shadow-sm">
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Included in this recording</h3>
+                <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-4 sm:p-5 md:p-6 mb-8 md:mb-12 shadow-sm">
+                  <h3 className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 sm:mb-4">Included in this recording</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
                     {parseDescription(course.description).map((feature, idx) => (
                       <div key={idx} className="flex items-start gap-2.5">
@@ -203,7 +204,7 @@ export default async function RecordingDetailPage(props: PageProps) {
 
               {extractedOutcomes.length > 0 && (
                 <div className="mb-4">
-                  <h2 className="text-lg md:text-xl font-bold text-slate-900 mb-5 flex items-center gap-2">
+                  <h2 className="text-lg md:text-xl font-bold text-slate-900 mb-4 sm:mb-5 flex items-center gap-2">
                     <Award size={20} className="text-blue-600" /> What you will learn
                   </h2>
                   <ul className="space-y-3">
@@ -224,34 +225,36 @@ export default async function RecordingDetailPage(props: PageProps) {
 
           {/* Sidebar / Checkout Area */}
           <div className="w-full md:w-[35%] bg-slate-50/50 border-t md:border-t-0 md:border-l border-slate-200 flex flex-col">
-            <div className="p-5 md:p-8 lg:p-10 sticky top-6">
+            <div className="p-4 sm:p-5 md:p-8 lg:p-10 sticky top-6">
               
-              <div className="mb-6 md:mb-8">
+              {/* DESKTOP ONLY: Checkout block */}
+              <div className="hidden md:block mb-8">
                 {activeDiscount > 0 && (
                   <div className="inline-block bg-blue-50 text-blue-600 font-semibold px-2.5 py-1 rounded-md text-[11px] uppercase tracking-wider mb-3">
                     Limited Time {activeDiscount}% Off
                   </div>
                 )}
-                <div className="text-[10px] md:text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Total Price</div>
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-widest mb-1">Total Price</div>
                 <div className="flex flex-wrap items-end gap-2 mb-1">
-                  <span className="text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight leading-none">
+                  <span className="text-4xl lg:text-5xl font-bold text-slate-900 tracking-tight leading-none">
                     {formatCurrency(salePrice)}
                   </span>
                 </div>
                 {activeDiscount > 0 && (
-                  <div className="text-slate-400 font-medium text-xs md:text-sm mt-1.5">
+                  <div className="text-slate-400 font-medium text-sm mt-1.5">
                     <span className="line-through">{formatCurrency(course.standard_fee)}</span>
                   </div>
                 )}
+
+                <Link 
+                  href={orderUrl}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-lg py-4 mt-6 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98]"
+                >
+                  <ShoppingCart size={18} className="stroke-[2]" /> Buy Recording
+                </Link>
               </div>
 
-              <Link 
-                href={orderUrl}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-base md:text-lg py-3.5 md:py-4 rounded-xl shadow-sm hover:shadow-md transition-all active:scale-[0.98] mb-3 md:mb-4"
-              >
-                <ShoppingCart size={18} className="stroke-[2]" /> Buy Recording
-              </Link>
-
+              {/* Shared Options */}
               {course.syllabus_url && course.syllabus_url !== "#" && (
                 <a 
                   href={course.syllabus_url} 
@@ -263,7 +266,7 @@ export default async function RecordingDetailPage(props: PageProps) {
                 </a>
               )}
 
-              <div className="space-y-3.5 pt-6 border-t border-slate-200/80">
+              <div className="space-y-3.5 pt-6 md:pt-0 md:border-t border-slate-200/80">
                 <div className="flex items-center gap-3 text-sm text-slate-600 font-medium">
                   <Clock size={16} className="text-slate-400 stroke-[2]" />
                   <span>{course.course_hours} Hours of HD Video</span>
@@ -317,6 +320,37 @@ export default async function RecordingDetailPage(props: PageProps) {
 
         </div>
       </div>
+
+      {/* --- MOBILE ONLY: STICKY BOTTOM CTA --- */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full bg-white border-t border-slate-200/80 p-4 z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.04)]">
+        <div className="flex items-center justify-between gap-4 max-w-6xl mx-auto">
+          <div className="flex flex-col">
+            {activeDiscount > 0 && (
+              <span className="text-[10px] font-bold text-blue-600 uppercase tracking-wider mb-0.5">
+                {activeDiscount}% Off
+              </span>
+            )}
+            <div className="flex items-end gap-1.5">
+              <span className="text-xl sm:text-2xl font-bold text-slate-900 leading-none">
+                {formatCurrency(salePrice)}
+              </span>
+              {activeDiscount > 0 && (
+                <span className="text-xs text-slate-400 line-through mb-0.5">
+                  {formatCurrency(course.standard_fee)}
+                </span>
+              )}
+            </div>
+          </div>
+          
+          <Link 
+            href={orderUrl}
+            className="flex-shrink-0 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-sm sm:text-base px-6 py-3.5 rounded-xl shadow-sm active:scale-[0.98] transition-transform"
+          >
+            <ShoppingCart size={16} className="stroke-[2]" /> Buy Now
+          </Link>
+        </div>
+      </div>
+
     </div>
   );
 }

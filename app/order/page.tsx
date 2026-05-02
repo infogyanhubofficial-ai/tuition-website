@@ -274,9 +274,28 @@ function CheckoutContent() {
       let targetOrderId = urlOrderId;
       let finalEnrollmentId = urlEnrollmentId;
       let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+      
+      let previousPaidAmount = 0;
+      let previousScreenshots: string[] = [];
 
+      // Check if we have an exact order_id first
+      if (targetOrderId) {
+        const { data: existingOrder } = await supabase
+          .from('orders_v2')
+          .select('id, locked_price, paid_amount, payment_screenshots')
+          .eq('id', targetOrderId)
+          .maybeSingle();
+
+        if (existingOrder) {
+          previousPaidAmount = existingOrder.paid_amount || 0;
+          previousScreenshots = existingOrder.payment_screenshots || [];
+          if (existingOrder.locked_price && !fetchedLockedPrice) {
+            finalLockedPrice = existingOrder.locked_price;
+          }
+        }
+      } 
       // ONLINE COURSE PRE-CHECK: Prevent Duplicate Insertions
-      if (!targetOrderId && config.dbOrderType === "Online Course") {
+      else if (config.dbOrderType === "Online Course") {
         
         // A. Resolve Enrollment ID if missing
         if (!finalEnrollmentId) {
@@ -297,7 +316,7 @@ function CheckoutContent() {
         if (finalEnrollmentId) {
           const { data: existingOrder } = await supabase
             .from('orders_v2')
-            .select('id, locked_price')
+            .select('id, locked_price, paid_amount, payment_screenshots')
             .eq('enrollment_id', finalEnrollmentId)
             .eq('status', 'pending')
             .eq('order_type', 'Online Course')
@@ -305,6 +324,8 @@ function CheckoutContent() {
 
           if (existingOrder) {
             targetOrderId = existingOrder.id; // Intercept: Switch to UPDATE mode
+            previousPaidAmount = existingOrder.paid_amount || 0;
+            previousScreenshots = existingOrder.payment_screenshots || [];
             
             // Preserve the original locked price from the database if we didn't fetch one recently
             if (existingOrder.locked_price && !fetchedLockedPrice) {
@@ -314,9 +335,9 @@ function CheckoutContent() {
         }
       }
 
-      // Ensure locked price is never lower than what the user just paid
-      if (finalLockedPrice < paidAmount) {
-        finalLockedPrice = paidAmount;
+      // Ensure locked price is never lower than what the user paid in total
+      if (finalLockedPrice < (previousPaidAmount + paidAmount)) {
+        finalLockedPrice = previousPaidAmount + paidAmount;
       }
 
       if (targetOrderId) {
@@ -325,8 +346,8 @@ function CheckoutContent() {
         const { error: dbError } = await supabase
           .from('orders_v2')
           .update({
-            paid_amount: paidAmount,
-            payment_screenshots: [uploadData.path],
+            paid_amount: previousPaidAmount + paidAmount, // Accumulate total paid amount
+            payment_screenshots: [...previousScreenshots, uploadData.path], // Keep past screenshots
             full_name: safeName.trim(),
             email: finalNormalizedEmail,
             whatsapp_number: safePhone.trim(),

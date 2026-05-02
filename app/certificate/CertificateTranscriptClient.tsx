@@ -5,8 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { 
   Award, Download, Linkedin, Globe, Calendar, User, ShieldCheck,
-  ArrowLeft, Printer, Copy, CheckCircle2, X, Maximize2, QrCode, Medal, Mail,
-  Clock, BookOpen, ExternalLink, FileText
+  ArrowLeft, Printer, Copy, CheckCircle2, X, Maximize2, Medal, Mail,
+  Clock, BookOpen, FileText
 } from 'lucide-react';
 
 export default function CertificateTranscriptClient({ name, email }: { name: string, email: string }) {
@@ -23,15 +23,18 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
   const SUPABASE_STORAGE_URL = 'https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/';
 
   const safeDecode = (value: string) => {
+    if (!value) return '';
+    let decoded = value;
     try {
-      return decodeURIComponent(decodeURIComponent(value));
+      decoded = decodeURIComponent(decodeURIComponent(value));
     } catch {
       try {
-        return decodeURIComponent(value);
+        decoded = decodeURIComponent(value);
       } catch {
-        return value;
+        decoded = value;
       }
     }
+    return decoded.trim().toLowerCase(); 
   };
 
   const decodedEmail = safeDecode(email);
@@ -43,16 +46,26 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
         return;
       }
       
-      const { data, error } = await supabase
-        .from('certificates')
-        .select('*, syllabi(duration, description, syllabus_pdf)')
-        .eq('email', decodedEmail)
-        .order('issue_date', { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from('certificates')
+          // FIX: Updated relationship from 'syllabi' to 'syllabi_v2' based on DB hint
+          .select('*, syllabi_v2(duration, description, syllabus_pdf)') 
+          .ilike('email', decodedEmail) 
+          .order('issue_date', { ascending: false });
 
-      if (!error && data) {
-        setCerts(data);
+        if (error) {
+          const errorString = JSON.stringify(error, Object.getOwnPropertyNames(error), 2);
+          console.error("Supabase Fetch Error:", errorString || String(error));
+          setCerts([]);
+        } else if (data) {
+          setCerts(data);
+        }
+      } catch (err: any) {
+        console.error("Unexpected error fetching transcript:", err?.message || String(err));
+      } finally {
+        setTimeout(() => setLoading(false), 800); 
       }
-      setTimeout(() => setLoading(false), 800); 
     }
     fetchTranscript();
   }, [decodedEmail]);
@@ -138,7 +151,8 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
   const shareUrl = typeof window !== 'undefined' ? window.location.href : '';
   const linkedInUrl = `https://www.linkedin.com/dashboard/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(cert.syllabus_name || 'Professional Certification')}&organizationName=GyanHub&certUrl=${encodeURIComponent(shareUrl)}&certId=${cert.certificate_code || cert.id}`;
 
-  const syllabusData = cert.syllabi; 
+  // FIX: Read from the new nested object key 'syllabi_v2'
+  const syllabusData = cert.syllabi_v2; 
   const duration = syllabusData?.duration || cert.duration || 'Not specified';
   const pdfLink = syllabusData?.syllabus_pdf || cert.syllabus_pdf;
   const description = syllabusData?.description;
@@ -257,8 +271,6 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
                       alt="Certificate" 
                       className="w-full h-full object-contain drop-shadow-sm relative z-20 transition-transform duration-500 group-hover:scale-[1.01] print:drop-shadow-none"
                     />
-
-                  
 
                     <button onClick={() => setShowLightbox(true)} className="absolute bottom-6 right-6 z-40 bg-[#0F1E3A]/90 backdrop-blur-sm text-white p-3 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[#E86A2C] print:hidden">
                       <Maximize2 className="w-5 h-5" />

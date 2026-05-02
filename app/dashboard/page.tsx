@@ -9,7 +9,7 @@ import {
   DollarSign, Trash2, Save, GraduationCap,
   Briefcase, User, ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle, AlertCircle,
   CheckCircle, Flame, Sparkles, RotateCcw, Home, Award, ShoppingBag, PlayCircle,
-  ChevronDown, ChevronUp, Video, Info, ArrowRight, Menu
+  ChevronDown, ChevronUp, Video, Info, ArrowRight, Menu, Receipt
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -286,7 +286,7 @@ export default function ProfilePage() {
   useEffect(() => { document.title = `GyanHub | ${activeTab}`; }, [activeTab]);
 
   useEffect(() => {
-    const sharedTabs = ['Overview', 'Online Courses', 'Recording Courses', 'My Certificates', 'Transactions', 'Support Chatbot'];
+    const sharedTabs = ['Overview', 'Online Courses', 'Recording Courses', 'My Certificates', 'Invoices', 'Support Chatbot'];
     if (dashboardMode === 'home') {
       if (!sharedTabs.includes(activeTab)) setActiveTab('Overview');
     } else if (dashboardMode === 'tutor' && hasTutorProfile) {
@@ -838,7 +838,7 @@ export default function ProfilePage() {
         </div>
 
         <NavButton icon={<Award size={18} />} label="My Certificates" active={activeTab === 'My Certificates'} onClick={() => handleTabClick('My Certificates')} colorTheme="blue" />
-        <NavButton icon={<DollarSign size={18} />} label="Transactions" active={activeTab === 'Transactions'} onClick={() => handleTabClick('Transactions')} colorTheme="blue" />
+        <NavButton icon={<Receipt size={18} />} label="Invoices" active={activeTab === 'Invoices'} onClick={() => handleTabClick('Invoices')} colorTheme="blue" />
         <NavButton icon={<MessageCircle size={18} />} label="Support Chatbot" active={activeTab === 'Support Chatbot'} onClick={() => handleTabClick('Support Chatbot')} colorTheme="blue" />
 
         <div className="h-px bg-slate-200/60 my-5 mx-4" />
@@ -1122,7 +1122,7 @@ export default function ProfilePage() {
 
                 {activeTab === 'My Certificates' && <MyCertificatesView certificates={certificates} formatDate={formatDate} />}
 
-                {activeTab === 'Transactions' && (
+                {activeTab === 'Invoices' && (
                   <TransactionsView 
                     orders={orders} 
                     ordersError={ordersError} 
@@ -1130,6 +1130,7 @@ export default function ProfilePage() {
                     formatDate={formatDate} 
                     selectedTransaction={selectedTransaction}
                     setSelectedTransaction={setSelectedTransaction}
+                    router={router}
                   />
                 )}
 
@@ -1470,14 +1471,6 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
     return () => clearInterval(timer);
   }, []);
 
-  const getCoverPic = () => {
-    if (matched?.cover_pic) return matched.cover_pic;
-    if (matched?.cover_pic_url) return matched.cover_pic_url;
-    if (type === 'recording') return (course as Order).screenshot_url; 
-    return null;
-  };
-  const coverPic = getCoverPic();
-
   if (type === 'recording') {
     const record = course as Order;
     const isVerified = record.status.toLowerCase() === 'verified';
@@ -1486,60 +1479,55 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 
     return (
       <div className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden ${tokens.shadow.card} ${tokens.shadow.hover} flex flex-col w-full group relative cursor-pointer`} onClick={() => router.push(`/recording/${encodeURIComponent(record.order_name)}`)}>
-        <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-500 to-blue-700 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
-        {/* Visual Cover Area */}
-        <div className="h-28 sm:h-40 bg-slate-100 relative w-full overflow-hidden shrink-0 border-b border-slate-100">
-          {coverPic ? (
-            <img src={coverPic} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Course Cover" />
-          ) : (
-            <div className="absolute inset-0 bg-slate-100 flex items-center justify-center">
-               <Video className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
-            </div>
-          )}
-        </div>
+        {/* Accent Top Bar */}
+        <div className="absolute top-0 left-0 w-full h-1 bg-blue-600 z-50"></div>
+        <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-blue-400 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
 
-        <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between">
-          <div>
-            <div className="flex justify-between items-start mb-3 sm:mb-4">
+        <div className="p-5 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between relative overflow-hidden">
+          {/* Background Icon replacing Image */}
+          <Video className="absolute -bottom-8 -right-8 w-48 h-48 text-slate-50/80 rotate-[-10deg] pointer-events-none group-hover:scale-110 group-hover:-rotate-12 transition-all duration-700" />
+
+          <div className="relative z-10">
+            <div className="flex justify-between items-start mb-4 sm:mb-5">
               <div className="flex flex-col">
-                <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                  <span className={`bg-slate-100 text-slate-600 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
-                    <PlayCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Recordings
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`bg-slate-100 text-slate-600 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
+                    <PlayCircle className="w-3.5 h-3.5" /> Recordings
                   </span>
                   {isVerified
-                    ? <span className={`bg-blue-50 text-blue-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge}`}>Unlocked</span>
-                    : <span className={`bg-orange-50 text-orange-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge}`}>Verifying</span>
+                    ? <span className={`bg-blue-50 text-blue-700 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge}`}>Unlocked</span>
+                    : <span className={`bg-orange-50 text-orange-700 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge}`}>Verifying</span>
                   }
                 </div>
-                <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug sm:leading-tight break-words group-hover:text-blue-700 transition-colors">{record.order_name}</h3>
+                <h3 className="font-extrabold text-2xl sm:text-3xl text-slate-900 leading-snug sm:leading-tight break-words group-hover:text-blue-700 transition-colors">{record.order_name}</h3>
               </div>
             </div>
             {matched && (
-              <div className={`mb-4 sm:mb-6 bg-slate-50 p-3 sm:p-4 ${tokens.radius.badge} border border-slate-100 flex flex-wrap gap-3 sm:gap-6`}>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" /><span>{displayHours}</span></div>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-orange-400 text-orange-400" /><span>{matched.rating || '4.5'} Rating</span></div>
-                {matched.category && <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold text-slate-600"><BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500" /><span>{matched.category}</span></div>}
+              <div className={`mb-5 sm:mb-6 bg-slate-50 p-4 ${tokens.radius.badge} border border-slate-100 flex flex-wrap gap-4 sm:gap-6`}>
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Clock className="w-4 h-4 text-blue-500" /><span>{displayHours}</span></div>
+                <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600"><Star className="w-4 h-4 fill-orange-400 text-orange-400" /><span>{matched.rating || '4.5'} Rating</span></div>
+                {matched.category && <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-600"><BookOpen className="w-4 h-4 text-blue-500" /><span>{matched.category}</span></div>}
               </div>
             )}
             {matched?.learning_outcomes?.length > 0 && (
-              <div className="mb-4 sm:mb-6 hidden sm:block">
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2 sm:mb-3">What you'll learn</p>
-                <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+              <div className="mb-5 sm:mb-6 hidden sm:block">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-3">What you'll learn</p>
+                <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
                   {matched.learning_outcomes.slice(0, 4).map((out: string, i: number) => (
-                    <li key={i} className="flex items-start gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
+                    <li key={i} className="flex items-start gap-2"><Check className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
                   ))}
                 </ul>
               </div>
             )}
           </div>
-          <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100">
+          <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100 relative z-10">
             {isVerified ? (
-              <a href={matched?.recording_link || '#'} onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}>
+              <a href={matched?.recording_link || '#'} onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener noreferrer" className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-700 hover:bg-blue-800 text-white px-6 sm:px-8 py-3.5 ${tokens.radius.button} font-bold text-sm transition-colors shadow-sm`}>
                 <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5" /> Watch Recording
               </a>
             ) : (
-              <div className={`w-full sm:w-auto inline-flex justify-center bg-orange-50 text-orange-800 px-6 sm:px-8 py-3 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm border border-orange-200 items-center gap-2`}>
-                <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Pending Verification
+              <div className={`w-full sm:w-auto inline-flex justify-center bg-orange-50 text-orange-800 px-6 sm:px-8 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm border border-orange-200 items-center gap-2`}>
+                <Lock className="w-4 h-4" /> Pending Verification
               </div>
             )}
           </div>
@@ -1562,8 +1550,8 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   const isFinished = (batch && batch.is_active === false) || daysSinceStart > 30;
 
   const isUnverifiedPayment = pendingVerificationOrders.some((o: { order_name: string }) =>
-  o.order_name.toLowerCase() === enroll.course_name.toLowerCase()
-);
+    o.order_name.toLowerCase() === enroll.course_name.toLowerCase()
+  );
 
   const totalFee = enroll.paid_amount + enroll.remaining_amount;
   const tenPercentFee = Math.round(totalFee * 0.1);
@@ -1623,66 +1611,60 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 
   return (
     <div className={`bg-white border border-slate-200/60 ${tokens.radius.card} overflow-hidden ${tokens.shadow.card} ${tokens.shadow.hover} flex flex-col w-full group relative`}>
+      {/* Accent Top Bar */}
+      <div className="absolute top-0 left-0 w-full h-1 bg-orange-500 z-50"></div>
       <div className="absolute top-0 left-0 w-full h-[3px] bg-gradient-to-r from-orange-400 to-orange-600 opacity-0 group-hover:opacity-100 transition-opacity z-50"></div>
       
-      {/* Visual Cover Area */}
-      <div className="h-28 sm:h-40 bg-slate-100 relative w-full overflow-hidden shrink-0 border-b border-slate-100">
-        {coverPic ? (
-          <img src={coverPic} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Course Cover" />
-        ) : (
-          <div className="absolute inset-0 bg-slate-100 flex items-center justify-center">
-             <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
-          </div>
-        )}
-      </div>
+      <div className="p-5 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between relative overflow-hidden">
+        {/* Background Icon replacing Image */}
+        <BookOpen className="absolute -bottom-8 -right-8 w-48 h-48 text-slate-50/80 rotate-[-10deg] pointer-events-none group-hover:scale-110 group-hover:-rotate-12 transition-all duration-700" />
 
-      <div className="p-4 sm:p-6 md:p-8 flex flex-col flex-grow w-full justify-between">
-        <div>
-          <div className="flex flex-col items-start gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <span className={`bg-blue-50 text-blue-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
+        <div className="relative z-10">
+          <div className="flex flex-col items-start gap-3 mb-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`bg-blue-50 text-blue-700 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge} flex items-center gap-1.5`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shadow-[0_0_8px_rgba(29,78,216,0.8)]"></span> Live Class
               </span>
-              <span className={`text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-1 sm:px-2.5 sm:py-1 ${tokens.radius.badge} border ${statusBadge.classes}`}>
+              <span className={`text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge} border ${statusBadge.classes}`}>
                 {statusBadge.label}
               </span>
             </div>
             {countdownStr && (
-              <div className={`inline-flex items-center w-fit bg-slate-800 text-white shadow-md text-[10px] sm:text-[11px] font-bold uppercase tracking-widest px-2.5 py-1 sm:px-3 sm:py-1.5 ${tokens.radius.badge}`}>
-                <Calendar className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1.5 text-orange-400" />{countdownStr}
+              <div className={`inline-flex items-center w-fit bg-slate-800 text-white shadow-md text-[10px] sm:text-[11px] font-bold uppercase tracking-widest px-3 py-1.5 ${tokens.radius.badge}`}>
+                <Calendar className="w-3.5 h-3.5 mr-1.5 text-orange-400" />{countdownStr}
               </div>
             )}
-            <h3 className="font-extrabold text-xl sm:text-2xl text-slate-900 leading-snug sm:leading-tight break-words mt-1">{enroll.course_name}</h3>
+            <h3 className="font-extrabold text-2xl sm:text-3xl text-slate-900 leading-snug sm:leading-tight break-words mt-1">{enroll.course_name}</h3>
           </div>
 
-          <div className="flex flex-wrap gap-2 sm:gap-6 mb-4 sm:mb-6 text-xs sm:text-sm font-semibold text-slate-600">
-            {matched?.tutor_name && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.tutor_name}</span>}
-            {matched?.duration && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.duration}</span>}
-            {matched?.category && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />{matched.category}</span>}
-            {batch?.batch_no && <span className="flex items-center gap-1 sm:gap-1.5 shrink-0"><Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />Batch {batch.batch_no}</span>}
+          <div className="flex flex-wrap gap-4 sm:gap-6 mb-5 sm:mb-6 text-xs sm:text-sm font-semibold text-slate-600">
+            {matched?.tutor_name && <span className="flex items-center gap-1.5 shrink-0"><User className="w-4 h-4" />{matched.tutor_name}</span>}
+            {matched?.duration && <span className="flex items-center gap-1.5 shrink-0"><Clock className="w-4 h-4" />{matched.duration}</span>}
+            {matched?.category && <span className="flex items-center gap-1.5 shrink-0"><BookOpen className="w-4 h-4" />{matched.category}</span>}
+            {batch?.batch_no && <span className="flex items-center gap-1.5 shrink-0"><Users className="w-4 h-4" />Batch {batch.batch_no}</span>}
           </div>
 
-          <div className={`mb-4 sm:mb-6 bg-slate-50 p-3 sm:p-4 ${tokens.radius.badge} border border-slate-100 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-6`}>
+          <div className={`mb-5 sm:mb-6 bg-slate-50 p-4 ${tokens.radius.badge} border border-slate-100 flex flex-col sm:flex-row flex-wrap gap-4 sm:gap-6`}>
             <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700">
-              <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+              <Calendar className="w-4 h-4 text-blue-600" />
               <span>Start: {new Date(effectiveStartDatetime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
             </div>
             <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-700">
-              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+              <Clock className="w-4 h-4 text-blue-600" />
               <span>Time: {effectiveTiming || 'TBA'}</span>
             </div>
           </div>
 
           {matched?.learning_outcomes?.length > 0 && (
-            <div className="mb-4 sm:mb-6 hidden sm:block">
-              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-2 sm:mb-3">Overview</p>
-              <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2">
+            <div className="mb-5 sm:mb-6 hidden sm:block">
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-widest mb-3">Overview</p>
+              <ul className="text-xs sm:text-sm text-slate-600 font-medium grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
                 {matched.learning_outcomes.slice(0, 4).map((out: string, i: number) => (
-                  <li key={i} className="flex items-start gap-1.5 sm:gap-2"><Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
+                  <li key={i} className="flex items-start gap-2"><Check className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" /><span className="line-clamp-2">{out}</span></li>
                 ))}
               </ul>
               {matched.syllabus_url && (
-                <a href={matched.syllabus_url} target="_blank" rel="noreferrer" className="mt-3 sm:mt-4 text-[10px] sm:text-[11px] font-extrabold text-blue-700 hover:text-orange-600 hover:underline inline-flex items-center gap-1 uppercase tracking-wide transition-colors">
+                <a href={matched.syllabus_url} target="_blank" rel="noreferrer" className="mt-4 text-[10px] sm:text-[11px] font-extrabold text-blue-700 hover:text-orange-600 hover:underline inline-flex items-center gap-1 uppercase tracking-wide transition-colors">
                   View Full Syllabus <ExternalLink size={10} className="sm:w-3 sm:h-3" />
                 </a>
               )}
@@ -1690,30 +1672,30 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
           )}
         </div>
 
-        <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100 flex flex-col gap-3 sm:gap-4">
+        <div className="mt-2 sm:mt-4 pt-4 sm:pt-5 border-t border-slate-100 flex flex-col gap-3 sm:gap-4 relative z-10">
           {accessTier === 'BLOCKED_VERIFY' && (
-            <div className={`flex items-center gap-2 sm:gap-3 bg-orange-50 border border-orange-200 ${tokens.radius.badge} px-4 py-3 sm:px-5 sm:py-4 text-orange-800 shadow-sm`}>
-              <Clock className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 text-orange-500" />
+            <div className={`flex items-center gap-3 bg-orange-50 border border-orange-200 ${tokens.radius.badge} px-5 py-4 text-orange-800 shadow-sm`}>
+              <Clock className="w-5 h-5 shrink-0 text-orange-500" />
               <p className="text-xs sm:text-sm font-semibold leading-snug">Payment verifying. Access will unlock shortly.</p>
             </div>
           )}
           {accessTier === 'BLOCKED_NO_PAY' && (
-            <div className={`bg-slate-50 border border-slate-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 shadow-sm`}>
-              <div className="flex items-start gap-2 sm:gap-3 text-slate-700">
-                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-blue-600" />
+            <div className={`bg-slate-50 border border-slate-200 ${tokens.radius.badge} p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm`}>
+              <div className="flex items-start gap-3 text-slate-700">
+                <AlertCircle className="w-6 h-6 shrink-0 text-blue-600" />
                 <p className="text-xs sm:text-sm font-medium leading-tight">
                   Pay <strong>10% seat booking fee (Rs. {tenPercentFee})</strong> to lock enrollment and get class access.
                 </p>
               </div>
-              <button onClick={() => payRoute(tenPercentFee)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+              <button onClick={() => payRoute(tenPercentFee)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
                 Book Seat (Rs. {tenPercentFee})
               </button>
             </div>
           )}
           {accessTier === 'PARTIAL_ACTIVE' && enroll.remaining_amount > 0 && (
-            <div className={`bg-blue-50 border border-blue-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 text-blue-900 shadow-sm`}>
-              <div className="flex items-start gap-2 sm:gap-3">
-                <Info className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 text-blue-600" />
+            <div className={`bg-blue-50 border border-blue-200 ${tokens.radius.badge} p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-blue-900 shadow-sm`}>
+              <div className="flex items-start gap-3">
+                <Info className="w-6 h-6 shrink-0 text-blue-600" />
                 <div>
                   <p className="text-xs sm:text-sm font-medium leading-tight mb-1">
                     Due: <strong>Rs. {enroll.remaining_amount}</strong>. Pay after orientation on <strong>{new Date(effectiveStartDatetime).toLocaleDateString()}</strong>.
@@ -1721,27 +1703,27 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                   <p className="text-[10px] sm:text-xs font-semibold text-blue-700/80">Classroom & WhatsApp unlock fully upon payment.</p>
                 </div>
               </div>
-              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-blue-700 hover:bg-blue-800 text-white font-bold px-6 py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
                 Pay Now
               </button>
             </div>
           )}
           {accessTier === 'PARTIAL_OVERDUE' && (
-            <div className={`bg-red-50 border border-red-200 ${tokens.radius.badge} p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-3 sm:gap-4 shadow-sm`}>
-              <div className="flex items-start gap-2 sm:gap-3 text-red-800">
-                <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 shrink-0 mt-0.5 text-red-600" />
+            <div className={`bg-red-50 border border-red-200 ${tokens.radius.badge} p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm`}>
+              <div className="flex items-start gap-3 text-red-800">
+                <AlertCircle className="w-6 h-6 shrink-0 mt-0.5 text-red-600" />
                 <div>
-                  <p className="text-xs sm:text-sm font-bold leading-tight mb-0.5 sm:mb-1">Immediate clearance required.</p>
+                  <p className="text-xs sm:text-sm font-bold leading-tight mb-1">Immediate clearance required.</p>
                   <p className="text-xs sm:text-sm font-medium text-red-700">Due: <strong>Rs. {enroll.remaining_amount}</strong></p>
                 </div>
               </div>
-              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold px-4 py-2.5 sm:px-6 sm:py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
+              <button onClick={() => payRoute(enroll.remaining_amount)} className={`w-full md:w-auto shrink-0 bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-3 ${tokens.radius.button} text-xs sm:text-sm whitespace-nowrap transition-colors shadow-sm`}>
                 Clear Dues
               </button>
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {(() => {
               const locked = !canUseOnline;
               const buttonLabel = isOrientation ? 'Join Orientation' : 'Join Live Class';
@@ -1753,8 +1735,8 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 
               if (!onlineLink) {
                 return (
-                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
-                    <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Link Soon
+                  <div className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <Video className="w-4 h-4 shrink-0" /> Link Soon
                   </div>
                 );
               }
@@ -1762,7 +1744,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 return (
                   <LockedLinkButton
                     label={buttonLabel}
-                    icon={<Video className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    icon={<Video className="w-4 h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'BLOCKED_NO_PAY' ? () => payRoute(tenPercentFee) : accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
@@ -1772,17 +1754,17 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 return (
                   <button
                     onClick={() => onOpenExpiredModal(classroomLink || '')}
-                    className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-800 text-white hover:bg-slate-700 transition-colors min-w-0 shadow-sm`}
+                    className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-800 text-white hover:bg-slate-700 transition-colors min-w-0 shadow-sm`}
                   >
-                    <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> Class Ended
+                    <Lock className="w-4 h-4" /> Class Ended
                   </button>
                 );
               }
               return (
                 <a href={onlineLink} target="_blank" rel="noopener noreferrer"
-                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-blue-700 text-white hover:bg-blue-800 transition-colors min-w-0 shadow-[0_4px_15px_rgba(29,78,216,0.2)]`}
+                  className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-blue-700 text-white hover:bg-blue-800 transition-colors min-w-0 shadow-[0_4px_15px_rgba(29,78,216,0.2)]`}
                 >
-                  <Video className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> {buttonLabel}
+                  <Video className="w-4 h-4 shrink-0" /> {buttonLabel}
                 </a>
               );
             })()}
@@ -1798,8 +1780,8 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 
               if (!classroomLink) {
                 return (
-                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
-                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Classroom Soon
+                  <div className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <BookOpen className="w-4 h-4 shrink-0" /> Classroom Soon
                   </div>
                 );
               }
@@ -1807,7 +1789,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 return (
                   <LockedLinkButton
                     label="Classroom"
-                    icon={<BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    icon={<BookOpen className="w-4 h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'PARTIAL_ACTIVE' || accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
@@ -1815,9 +1797,9 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
               }
               return (
                 <a href={classroomLink} target="_blank" rel="noopener noreferrer"
-                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
+                  className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
                 >
-                  <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-500 shrink-0" /> Classroom
+                  <BookOpen className="w-4 h-4 text-orange-500 shrink-0" /> Classroom
                 </a>
               );
             })()}
@@ -1833,8 +1815,8 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 
               if (!whatsappLink) {
                 return (
-                  <div className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
-                    <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" /> Group Soon
+                  <div className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-slate-50 text-slate-400 border border-dashed border-slate-200 min-w-0`}>
+                    <MessageCircle className="w-4 h-4 shrink-0" /> Group Soon
                   </div>
                 );
               }
@@ -1842,7 +1824,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                 return (
                   <LockedLinkButton
                     label="WhatsApp"
-                    icon={<MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+                    icon={<MessageCircle className="w-4 h-4" />}
                     reason={lockedReason}
                     onPayClick={accessTier === 'PARTIAL_ACTIVE' || accessTier === 'PARTIAL_OVERDUE' ? () => payRoute(enroll.remaining_amount) : undefined}
                   />
@@ -1850,18 +1832,18 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
               }
               return (
                 <a href={whatsappLink} target="_blank" rel="noopener noreferrer"
-                  className={`flex-1 flex justify-center items-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-4 sm:py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
+                  className={`flex-1 flex justify-center items-center gap-2 px-4 py-3.5 ${tokens.radius.button} font-bold text-xs sm:text-sm bg-white text-slate-700 hover:bg-slate-50 border border-slate-200 shadow-sm transition-colors min-w-0`}
                 >
-                  <MessageCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 shrink-0" /> WhatsApp
+                  <MessageCircle className="w-4 h-4 text-green-500 shrink-0" /> WhatsApp
                 </a>
               );
             })()}
           </div>
 
           <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer"
-            className={`flex justify-center items-center gap-1.5 sm:gap-2 bg-transparent text-slate-500 hover:text-blue-700 px-4 sm:px-6 py-2 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-colors mt-2 sm:mt-3`}
+            className={`flex justify-center items-center gap-2 bg-transparent text-slate-500 hover:text-blue-700 px-6 py-2 ${tokens.radius.button} font-bold text-xs sm:text-sm transition-colors mt-3`}
           >
-            <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" /> Contact Support
+            <Phone className="w-4 h-4 text-slate-400" /> Contact Support
           </a>
         </div>
       </div>
@@ -2033,11 +2015,11 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
   );
 }
 
-// ─── TRANSACTIONS VIEW ───
-function TransactionsView({ orders, ordersError, enrollments, formatDate, selectedTransaction, setSelectedTransaction }: any) {
+// ─── INVOICES / TRANSACTIONS VIEW ───
+function TransactionsView({ orders, ordersError, enrollments, formatDate, selectedTransaction, setSelectedTransaction, router }: any) {
   return (
     <div className="space-y-6 sm:space-y-8 w-full pb-10">
-      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Transactions</h2>
+      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-900">Invoices</h2>
       
       <div className="space-y-4 sm:space-y-5 max-w-4xl">
         {ordersError && <div className="p-4 sm:p-5 bg-red-50 text-red-600 text-xs sm:text-sm rounded-xl border border-red-200 font-bold shadow-sm">Error loading billing history. Please refresh.</div>}
@@ -2055,9 +2037,22 @@ function TransactionsView({ orders, ordersError, enrollments, formatDate, select
                 <p className="text-[9px] sm:text-[11px] font-bold text-slate-400 mt-1 sm:mt-1.5 uppercase tracking-widest">{order.order_type} • {formatDate(order.created_at)}</p>
               </div>
             </div>
-            <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 shrink-0">
-              <p className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">Rs. {order.price}</p>
-              <div className="mt-1 sm:mt-2"><StatusBadge status={order.status} /></div>
+            <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 shrink-0 gap-2">
+              <div className="flex flex-col items-start sm:items-end">
+                <p className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">Rs. {order.price}</p>
+                <div className="mt-1 sm:mt-1.5 flex flex-wrap justify-end gap-2">
+                  <StatusBadge status={order.status} />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/invoice/${order.id}`);
+                    }}
+                    className={`px-2 py-1 bg-white hover:bg-blue-50 text-blue-600 border border-slate-200 hover:border-blue-200 ${tokens.radius.badge} font-bold text-[10px] sm:text-xs flex items-center gap-1 transition-all shadow-sm`}
+                  >
+                    <Receipt size={12} /> View Invoice
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         ))}
@@ -2132,9 +2127,21 @@ function TransactionModal({ order, enrollments, onClose, router }: { order: Orde
               </div>
             )}
             
-            <button onClick={onClose} className={`w-full mt-4 sm:mt-6 py-3 sm:py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold ${tokens.radius.button} transition-colors shadow-sm`}>
-              Close Details
-            </button>
+            <div className="flex flex-wrap gap-2 sm:gap-3 mt-4 sm:mt-6">
+              <button 
+                onClick={onClose} 
+                className={`flex-1 min-w-[80px] py-3 sm:py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs sm:text-sm font-bold ${tokens.radius.button} transition-colors shadow-sm`}
+              >
+                Close
+              </button>
+              <button 
+                onClick={() => router.push(`/invoice/${order.id}`)}
+                className={`flex-1 min-w-[120px] py-3 sm:py-3.5 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 text-xs sm:text-sm font-bold flex justify-center items-center gap-2 ${tokens.radius.button} transition-colors shadow-sm`}
+              >
+                <Receipt size={16} /> View Invoice
+              </button>
+            </div>
+
           </div>
         </div>
       </motion.div>
