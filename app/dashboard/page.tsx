@@ -38,6 +38,29 @@ const tokens = {
   }
 };
 
+// --- BUNDLE DEFINITIONS ---
+const BUNDLES: Record<string, string[]> = {
+  "architectural design bundle": [
+    "AutoCAD Basic to Advanced Course",
+    "Autodesk Revit",
+    "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop"
+  ],
+  "civil engineering bundle": [
+    "Structural Design and Analysis",
+    "Estimation, Costing & Contract Billing",
+    "Property Valuation"
+  ],
+  "complete engineering package": [
+    "AutoCAD Basic to Advanced Course",
+    "Autodesk Revit",
+    "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop",
+    "Structural Design and Analysis",
+    "Estimation, Costing & Contract Billing",
+    "Property Valuation",
+    "ArcGIS and Mapping"
+  ]
+};
+
 // --- TYPES ---
 interface Vacancy {
   id: number;
@@ -273,12 +296,35 @@ export default function ProfilePage() {
   const [studentRequests, setStudentRequests] = useState<StudentRequest[]>([]);
 
   // Derived Properties
+
+  // Bundle Expansion Logic for Recordings
+  const expandedRecordingOrders = useMemo(() => {
+    const recOrders = orders.filter(o => o.order_type === 'recording');
+    return recOrders.flatMap(o => {
+      // Clean name for matching
+      const key = o.order_name.toLowerCase().replace(' (featured)', '').trim();
+      const courses = BUNDLES[key] || BUNDLES[o.order_name.toLowerCase().trim()];
+      
+      if (courses) {
+        return courses.map((courseName, idx) => ({
+          ...o,
+          id: `${o.id}-${idx}`, // Keep key unique for React mapping
+          order_name: courseName,
+          original_bundle: o.order_name
+        }));
+      }
+      return [o];
+    });
+  }, [orders]);
+
+  const recordingOrdersVerified = useMemo(() => 
+    expandedRecordingOrders.filter(o => o.status.toLowerCase() === 'verified'), [expandedRecordingOrders]);
+
   const pendingVerificationOrders = useMemo(() =>
     orders.filter(o => o.status.toLowerCase() === 'pending' || o.status.toLowerCase() === 'processing'), [orders]);
+  
   const pendingCoursePayments = useMemo(() => enrollments.filter(e => e.remaining_amount > 0), [enrollments]);
   const activeCourseAccess = useMemo(() => enrollments, [enrollments]);
-  const recordingOrdersVerified = useMemo(() =>
-    orders.filter(o => o.order_type === 'recording' && o.status.toLowerCase() === 'verified'), [orders]);
 
   // Derived Modal Tracker for Floating UI Management
   const isAnyModalOpen = isApplicationsOpen || !!selectedTransaction || !!globalExpiredClassLink;
@@ -1106,7 +1152,7 @@ export default function ProfilePage() {
                   <MyCoursesView 
                     activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} 
                     courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} 
-                    orders={orders} recordingsList={recordingsList} router={router}
+                    orders={orders} expandedRecordingOrders={expandedRecordingOrders} recordingsList={recordingsList} router={router}
                     onOpenExpiredModal={setGlobalExpiredClassLink}
                   />
                 )}
@@ -1115,7 +1161,7 @@ export default function ProfilePage() {
                   <MyCoursesView 
                     activeTab={activeTab} enrollments={enrollments} onlineCourseDetails={onlineCourseDetails} 
                     courseBatches={courseBatches} pendingVerificationOrders={pendingVerificationOrders} 
-                    orders={orders} recordingsList={recordingsList} router={router}
+                    orders={orders} expandedRecordingOrders={expandedRecordingOrders} recordingsList={recordingsList} router={router}
                     onOpenExpiredModal={setGlobalExpiredClassLink}
                   />
                 )}
@@ -1237,6 +1283,7 @@ export default function ProfilePage() {
 }
 
 // ─── CHAT BOX ───
+// ... [No changes required in ChatBox, assuming rest follows similar layout] ...
 function ChatBox({ userId, userName, isTutor }: { userId: string | null; userName: string; isTutor: boolean }) {
   const supabase = createClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -1472,7 +1519,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
   }, []);
 
   if (type === 'recording') {
-    const record = course as Order;
+    const record = course as any; // Using any to access expanded properties like original_bundle
     const isVerified = record.status.toLowerCase() === 'verified';
     const rawHours = matched?.course_hours?.toString().match(/\d+/) || [];
     const displayHours = rawHours.length > 0 ? `${rawHours[0]}+ hours` : matched?.course_hours || 'N/A';
@@ -1499,6 +1546,11 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
                     : <span className={`bg-orange-50 text-orange-700 text-[10px] sm:text-xs font-extrabold uppercase tracking-widest px-2.5 py-1 ${tokens.radius.badge}`}>Verifying</span>
                   }
                 </div>
+                {record.original_bundle && (
+                  <span className={`bg-violet-50 text-violet-700 text-[9px] sm:text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 sm:px-2.5 sm:py-1 ${tokens.radius.badge} flex items-center gap-1 mb-2 w-fit`}>
+                    <Sparkles className="w-3.5 h-3.5" /> Part of {record.original_bundle}
+                  </span>
+                )}
                 <h3 className="font-extrabold text-2xl sm:text-3xl text-slate-900 leading-snug sm:leading-tight break-words group-hover:text-blue-700 transition-colors">{record.order_name}</h3>
               </div>
             </div>
@@ -1536,6 +1588,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
     );
   }
 
+  // Live class rendering below stays exactly the same as previously defined
   const enroll = course as Enrollment;
   const effectiveStartDatetime = batch?.start_datetime || enroll.starting_date || matched?.start_datetime;
   const effectiveTiming = batch?.timing || matched?.timing;
@@ -1852,7 +1905,7 @@ function CourseCard({ course, type, matched, batch, pendingVerificationOrders, r
 }
 
 // ─── MY COURSES VIEW ───
-function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatches, pendingVerificationOrders, orders, recordingsList, router, onOpenExpiredModal }: any) {
+function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatches, pendingVerificationOrders, orders, expandedRecordingOrders, recordingsList, router, onOpenExpiredModal }: any) {
   const isOnline = activeTab === 'Online Courses';
 
   return (
@@ -1880,13 +1933,13 @@ function MyCoursesView({ activeTab, enrollments, onlineCourseDetails, courseBatc
           })
           )
         ) : (
-          !orders || orders.filter((o: Order) => o.order_type === 'recording').length === 0 ? (
+          !expandedRecordingOrders || expandedRecordingOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center bg-white rounded-3xl py-16 sm:py-20 px-4 sm:px-6 border border-dashed border-slate-200 text-center shadow-sm">
                <Video size={40} className="text-slate-300 mb-3 sm:mb-4 sm:w-12 sm:h-12" />
                <p className="text-slate-500 font-bold text-sm sm:text-lg">No recording orders found.</p>
             </div>
           ) : (
-            orders.filter((o: Order) => o.order_type === 'recording').map((record: Order) => {
+            expandedRecordingOrders.map((record: any) => {
               const matched = recordingsList.find((r: RecordingInfo) => r.course_name.toLowerCase() === record.order_name.toLowerCase());
               return <CourseCard key={record.id} course={record} type="recording" matched={matched} pendingVerificationOrders={pendingVerificationOrders} router={router} onOpenExpiredModal={onOpenExpiredModal} />;
             })
@@ -2016,6 +2069,7 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
 }
 
 // ─── INVOICES / TRANSACTIONS VIEW ───
+// ... [Remaining UI components stay exactly as they were, e.g., TransactionsView, CertificateView, DashboardView, VacanciesView, etc...] ...
 function TransactionsView({ orders, ordersError, enrollments, formatDate, selectedTransaction, setSelectedTransaction, router }: any) {
   return (
     <div className="space-y-6 sm:space-y-8 w-full pb-10">
@@ -2324,7 +2378,6 @@ function SkeletonLoader() {
   );
 }
 
-// ─── TUTOR MARQUEE ───
 function TutorsMarquee({ tutors, className = "h-full" }: { tutors: Tutor[]; className?: string }) {
   const router = useRouter();
   if (!tutors || tutors.length === 0) return null;
