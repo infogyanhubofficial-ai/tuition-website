@@ -239,10 +239,20 @@ export default function SingleInvoicePage({ params }: { params: Promise<{ id: st
           ========================================== */}
       {isDue && (
         <div className="w-full bg-amber-50 border-b border-amber-200 text-amber-800 text-sm py-2.5 px-4 flex items-center justify-between print:hidden z-50 sticky top-0 shadow-sm">
-          <div className="flex-1 overflow-hidden flex items-center mr-4">
-            <marquee scrollamount="5" className="font-medium tracking-wide">
+          <div className="flex-1 overflow-hidden flex items-center mr-4 whitespace-nowrap">
+            <style>{`
+              @keyframes scrollText {
+                0% { transform: translateX(100%); }
+                100% { transform: translateX(-100%); }
+              }
+              .animate-scroll {
+                display: inline-block;
+                animation: scrollText 15s linear infinite;
+              }
+            `}</style>
+            <div className="font-medium tracking-wide animate-scroll">
               💡 <strong className="uppercase">Sponsorship Tip:</strong> If someone is sponsoring you for this service, you can copy this link and send it to them. They can initiate the payment easily from their side!
-            </marquee>
+            </div>
           </div>
           <button 
             onClick={handleCopyLink} 
