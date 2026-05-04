@@ -176,7 +176,6 @@ function CheckoutContent() {
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
   const getOrderConfig = () => {
-    // If a specific price is passed via URL (like a partial payment from an invoice), use it.
     const customPrice = parseInt(urlPrice);
 
     switch (currentMode) {
@@ -291,13 +290,13 @@ function CheckoutContent() {
       if (targetOrderId) {
         const { data: existingOrder } = await supabase
           .from('orders_v2')
-          .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') // Added pending_amount
+          .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') 
           .eq('id', targetOrderId)
           .maybeSingle();
 
         if (existingOrder) {
           previousPaidAmount = existingOrder.paid_amount || 0;
-          previousPendingAmount = existingOrder.pending_amount || 0; // Capture existing pending
+          previousPendingAmount = existingOrder.pending_amount || 0; 
           previousScreenshots = existingOrder.payment_screenshots || [];
           if (existingOrder.locked_price && !fetchedLockedPrice) {
             finalLockedPrice = existingOrder.locked_price;
@@ -326,7 +325,7 @@ function CheckoutContent() {
         if (finalEnrollmentId) {
           const { data: existingOrder } = await supabase
             .from('orders_v2')
-            .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') // Added pending_amount
+            .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') 
             .eq('enrollment_id', finalEnrollmentId)
             .eq('status', 'pending')
             .eq('order_type', 'Online Course')
@@ -335,7 +334,7 @@ function CheckoutContent() {
           if (existingOrder) {
             targetOrderId = existingOrder.id; // Intercept: Switch to UPDATE mode
             previousPaidAmount = existingOrder.paid_amount || 0;
-            previousPendingAmount = existingOrder.pending_amount || 0; // Capture existing pending
+            previousPendingAmount = existingOrder.pending_amount || 0; 
             previousScreenshots = existingOrder.payment_screenshots || [];
             
             // Preserve the original locked price from the database if we didn't fetch one recently
@@ -357,11 +356,9 @@ function CheckoutContent() {
         const { error: dbError } = await supabase
           .from('orders_v2')
           .update({
-            // EXPLICIT CHANGE: Money goes into pending until admin verifies it. 
-            // We do NOT update paid_amount here at all.
             pending_amount: previousPendingAmount + paidAmount, 
-            payment_screenshots: [...previousScreenshots, uploadData.path], // Keep past screenshots
-            status: 'pending', // Explicitly reset to pending so admin sees it
+            payment_screenshots: [...previousScreenshots, uploadData.path], 
+            status: 'pending', 
             full_name: safeName.trim(),
             email: finalNormalizedEmail,
             whatsapp_number: safePhone.trim(),
@@ -378,11 +375,11 @@ function CheckoutContent() {
         const { error: dbError } = await supabase.from('orders_v2').insert([{
           user_id: currentUserId || null,
           enrollment_id: finalEnrollmentId || null,
-          order_type: config.dbOrderType,         
+          order_type: config.dbOrderType,        
           order_name: config.orderName,
           locked_price: finalLockedPrice,
-          paid_amount: 0, // MUST be 0 initially. Admin verifies it later.
-          pending_amount: paidAmount, // Initial payment goes here
+          paid_amount: 0, 
+          pending_amount: paidAmount, 
           payment_screenshots: [uploadData.path],
           status: 'pending',
           full_name: safeName.trim(),            
@@ -691,3 +688,13 @@ function CheckoutContent() {
     </div>
   );
 }
+
+// THIS IS THE FIX: Wrap it in a Suspense boundary and export default it!
+export default function OrderPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading secure checkout...</div>}>
+      <CheckoutContent />
+    </Suspense>
+  );
+}
+```</Suspense>
