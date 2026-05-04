@@ -8,7 +8,8 @@ import {
   ExternalLink, Phone, Monitor, SearchX, Send, Lock, MessageCircle,
   AlertCircle, CheckCircle, Flame, Sparkles, Link as LinkIcon, RotateCcw,
   ShoppingCart, CalendarDays, Award, ChevronDown, Search, EyeOff, Eye,
-  Loader2, MessageSquare, ArrowLeft, Upload, Copy, Settings, Layers
+  Loader2, MessageSquare, ArrowLeft, Upload, Copy, Settings, Layers,
+  CheckSquare
 } from "lucide-react";
 import { motion, AnimatePresence, Variants } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -24,7 +25,7 @@ interface Vacancy {
 interface VacancyApplication {
   id: number; vacancy_id: number; applicant_name: string; applicant_phone: string;
   applicant_email: string; cover_message: string; status: string; user_id?: string;
-  vacancies?: { subject: string; location: string; salary_range: string; contact_name: string; contact_number: string; };
+  vacancies?: { subject: string; location: string; salary_range: string; contact_name: string; contact_number: string; user_id?: string; };
 }
 interface StudentRequest {
   id: number; student_name: string; phone: string; grade: string;
@@ -74,12 +75,17 @@ interface Message {
 interface Certificate {
   id: string; name: string; email: string; syllabus_name: string;
   syllabus_id: number | null; issue_date: string; certificate_image: string;
-  certificate_code: string; created_at: string;
+  certificate_code: string; created_at: string; user_id?: string;
 }
 interface Order {
   id: string; full_name: string; email: string; contact_number: string;
-  order_type: string; order_name: string; price: number; locked_amount?: number; screenshot_url: string;
-  status: string; created_at: string;
+  order_type: string; order_name: string; 
+  paid_amount: number; 
+  pending_amount: number; 
+  locked_price: number; 
+  screenshot_url: string;
+  payment_screenshots: string[]; // Support for multiple screenshots
+  status: string; created_at: string; user_id?: string;
 }
 
 // --- UTILS ---
@@ -150,7 +156,7 @@ export default function AdminDashboard() {
   const fetchAllData = async () => {
     const [vacRes, appRes, reqRes, curRes, tutRes, msgRes, certRes, sylRes, enrRes, ordRes, batchRes] = await Promise.all([
       supabase.from("vacancies").select("*").order("created_at", { ascending: false }),
-      supabase.from("vacancy_applications").select("*, vacancies(subject, location, salary_range, contact_name, contact_number)").order("id", { ascending: false }),
+      supabase.from("vacancy_applications").select("*, vacancies(subject, location, salary_range, contact_name, contact_number, user_id)").order("id", { ascending: false }),
       supabase.from("student_requests").select("*, tutors(name, contact_num, hour_rate, user_id)").order("id", { ascending: false }),
       supabase.from("online_courses_v2").select("*").order("created_at", { ascending: false }),
       supabase.from("tutors").select("*").order("created_at", { ascending: false }),
@@ -166,7 +172,6 @@ export default function AdminDashboard() {
     if (appRes.data) setApplications(appRes.data);
     if (reqRes.data) setRequests(reqRes.data);
     
-    // Map V2 structure to V1 state to prevent UI crashes
     if (curRes.data) setCourses(curRes.data.map((c: any) => ({ ...c, id: c.syllabus_id?.toString() || c.id, title: c.name || c.title })));
     if (tutRes.data) setTutors(tutRes.data);
     if (certRes.data) setCertificates(certRes.data);
@@ -180,15 +185,16 @@ export default function AdminDashboard() {
         full_name: o.full_name || 'N/A',
         email: o.email || 'N/A',
         contact_number: o.whatsapp_number || o.contact_number || 'N/A', 
-        price: o.paid_amount ?? 0,
-        locked_amount: o.locked_price ?? 0,
+        paid_amount: o.paid_amount ?? 0,
+        pending_amount: o.pending_amount ?? 0,
+        locked_price: o.locked_price ?? 0,
         order_type: o.order_type || 'Online Course',
         order_name: o.order_name || 'Course Enrollment',
-        screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[0] : o.screenshot_url 
+        payment_screenshots: o.payment_screenshots || [],
+        screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[o.payment_screenshots.length - 1] : o.screenshot_url 
       })));
     }
 
-    // Link financial data from orders_v2 to enrollments_v2
     if (enrRes.data) {
       setEnrollments(enrRes.data.map((e: any) => {
         const linkedOrder = fetchedOrders.find((o: any) => o.enrollment_id === e.id);
@@ -315,14 +321,14 @@ export default function AdminDashboard() {
       <main className="ml-72 flex-1 p-10 bg-slate-100/50 min-h-screen relative overflow-x-hidden">
         <AnimatePresence mode="wait">
           {activeTab === "Dashboard" && <DashboardView key="dash" conversations={conversations} loading={loadingConversations} onOpenChat={openChat} />}
-          {activeTab === "Orders" && <OrdersManager key="ord" data={orders} refresh={fetchAllData} />}
-          {activeTab === "Tutors" && <TutorsManager key="tut" data={tutors} refresh={fetchAllData} />}
-          {activeTab === "Vacancies" && <VacanciesManager key="vac" data={vacancies} applications={applications} tutors={tutors} refresh={fetchAllData} />}
+          {activeTab === "Orders" && <OrdersManager key="ord" data={orders} refresh={fetchAllData} onOpenChat={openChat} />}
+          {activeTab === "Tutors" && <TutorsManager key="tut" data={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
+          {activeTab === "Vacancies" && <VacanciesManager key="vac" data={vacancies} applications={applications} tutors={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Applications" && <ApplicationsManager key="app" data={applications} tutors={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Tuition Requests" && <RequestsManager key="req" data={requests} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Batch Management" && <BatchManager key="batch" data={courses} batches={batches} refresh={fetchAllData} />}
-          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} refresh={fetchAllData} />}
-          {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={fetchAllData} />}
+          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} refresh={fetchAllData} onOpenChat={openChat} />}
+          {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={fetchAllData} onOpenChat={openChat} />}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -433,25 +439,24 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
 }
 
 // --- SECTION: ORDERS ---
-function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }) {
+function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: () => void, onOpenChat: (id: string) => void }) {
   const supabase = createClient();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all');
   const [orderTypeFilter, setOrderTypeFilter] = useState<'all' | 'recording' | 'Online Course' | 'others'>('all'); 
   const [showAllOrders, setShowAllOrders] = useState(true);
 
   const filteredData = data.filter((o: Order) => {
-    if (o.price === 0) {
-      return false;
-    }
-
     const s = searchQuery.toLowerCase();
     const matchesSearch = (o.full_name && o.full_name.toLowerCase().includes(s)) || 
                           (o.email && o.email.toLowerCase().includes(s)) || 
                           (o.order_name && o.order_name.toLowerCase().includes(s));
     
-    const matchesStatus = statusFilter === 'all' ? true : o.status === statusFilter;
+    const matchesStatus = statusFilter === 'all' ? true : 
+                          (statusFilter === 'pending' && (o.status === 'pending' || o.pending_amount > 0)) ? true :
+                          (statusFilter === 'verified' && o.status === 'verified' && o.pending_amount === 0) ? true :
+                          o.status === statusFilter;
     
     let matchesType = true;
     if (orderTypeFilter !== 'all') {
@@ -471,25 +476,57 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
     return matchesSearch && matchesStatus && matchesType && matchesDate;
   });
 
-  const handleStatusChange = async (order: Order, newStatus: string) => {
-    let updatePayload: any = { status: newStatus };
-    const { error } = await supabase.from('orders_v2').update(updatePayload).eq('id', order.id);
-    if (error) {
-      alert("Update failed: " + error.message);
-    } else {
-      refresh();
-    }
+  // --- ACTIONS ---
+  const handleStatusChange = async (orderId: string, newStatus: string) => {
+    const { error } = await supabase.from('orders_v2').update({ status: newStatus }).eq('id', orderId);
+    if (error) alert("Status update failed: " + error.message);
+    else refresh();
   };
 
+  const handleVerifyPayment = async (order: Order) => {
+    if(order.pending_amount <= 0) return;
+    if(!confirm(`Verify Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
+
+    const newPaid = order.paid_amount + order.pending_amount;
+    const { error } = await supabase.from('orders_v2').update({
+        paid_amount: newPaid,
+        pending_amount: 0,
+        status: 'verified'
+    }).eq('id', order.id);
+
+    if(error) alert("Verification failed: " + error.message);
+    else {
+        refresh();
+        setSelectedOrder(null);
+    }
+  }
+
+  const handleRejectPayment = async (order: Order) => {
+    if(order.pending_amount <= 0) return;
+    if(!confirm(`Reject pending payment of Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
+
+    const newStatus = order.paid_amount > 0 ? 'verified' : 'rejected';
+    const { error } = await supabase.from('orders_v2').update({
+        pending_amount: 0,
+        status: newStatus
+    }).eq('id', order.id);
+
+    if(error) alert("Rejection failed: " + error.message);
+    else {
+        refresh();
+        setSelectedOrder(null);
+    }
+  }
+
   const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to delete this order?")) {
+    if (confirm("Are you sure you want to delete this order entirely?")) {
       const { error } = await supabase.from('orders_v2').delete().eq('id', id);
       if (error) alert("Delete failed: " + error.message);
       else refresh();
     }
   };
 
-  const statusColors: any = { pending: 'bg-orange-100 text-orange-700', verified: 'bg-green-100 text-green-700' };
+  const statusColors: any = { pending: 'bg-orange-100 text-orange-700 border-orange-200', verified: 'bg-green-100 text-green-700 border-green-200', rejected: 'bg-red-100 text-red-700 border-red-200' };
 
   const getImageUrl = (path: string) => {
     if (!path) return '';
@@ -501,7 +538,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
       <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-black text-slate-900">Orders</h2>
+        <h2 className="text-3xl font-black text-slate-900">Orders & Invoices</h2>
       </div>
       <div className="flex flex-wrap gap-4 items-center w-full">
         <div className="relative flex-1 min-w-[250px]">
@@ -510,8 +547,9 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
         </div>
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
           <option value="all">All Status</option>
-          <option value="pending">Pending</option>
-          <option value="verified">Verified</option>
+          <option value="pending">Needs Review (Pending)</option>
+          <option value="verified">Verified Only</option>
+          <option value="rejected">Rejected Only</option>
         </select>
         
         <select className="bg-white border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none shadow-sm cursor-pointer" value={orderTypeFilter} onChange={e => setOrderTypeFilter(e.target.value as any)}>
@@ -526,44 +564,85 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
           Show All Time
         </label>
       </div>
+      
       <div className="bg-white rounded-[30px] shadow-xl border border-slate-100 overflow-x-auto w-full">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-100 text-xs font-black text-slate-400 uppercase tracking-widest">
-              <th className="p-6">Date</th><th className="p-6">Customer Details</th><th className="p-6">Order Info</th><th className="p-6">Status</th><th className="p-6 text-right">Actions</th>
+              <th className="p-6">Date</th>
+              <th className="p-6">Customer Details</th>
+              <th className="p-6">Order Info</th>
+              <th className="p-6">Approval Action</th>
+              <th className="p-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredData.map(order => {
+              const remainingAmount = Math.max(0, order.locked_price - order.paid_amount - order.pending_amount);
               return (
                 <tr key={order.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer" onClick={() => setSelectedOrder(order)}>
-                  <td className="p-6 text-sm text-slate-500 font-bold whitespace-nowrap">{new Date(order.created_at).toLocaleDateString()}</td>
-                  <td className="p-6">
-                    <p className="font-bold text-slate-900">{order.full_name}</p>
-                    <p className="text-xs text-slate-500 mt-1">{order.contact_number} • {order.email}</p>
-                  </td>
-                  <td className="p-6">
-                    <p className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
-                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500 whitespace-nowrap">{order.order_type}</span>
-                      <span className="whitespace-nowrap">Rs. {order.price} <span className="text-[10px] text-slate-400 font-medium ml-1">/ Rs. {order.locked_amount}</span></span>
+                  <td className="p-6 text-sm text-slate-500 font-bold whitespace-nowrap align-top">{new Date(order.created_at).toLocaleDateString()}</td>
+                  <td className="p-6 align-top">
+                    <p className="font-bold text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline" onClick={(e) => { e.stopPropagation(); order.user_id ? onOpenChat(order.user_id) : alert('No linked user account found for this order.'); }}>
+                      {order.full_name}
                     </p>
-                    <p className="text-xs font-medium text-slate-500 mt-1 truncate max-w-[200px]" title={order.order_name}>
+                    <p className="text-xs text-slate-500 mt-1">{order.contact_number}</p>
+                    <p className="text-xs text-slate-500">{order.email}</p>
+                  </td>
+                  <td className="p-6 align-top">
+                    <p className="font-bold text-slate-800 flex items-center gap-2 flex-wrap mb-2">
+                      <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500 whitespace-nowrap">{order.order_type}</span>
+                    </p>
+                    
+                    {/* NEW: Explicit Breakdown Box */}
+                    <div className="flex flex-col gap-1.5 mt-1 mb-3 bg-slate-50 p-3 rounded-xl border border-slate-100 min-w-[220px]">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-500">Paid:</span>
+                        <span className="font-black text-emerald-600">Rs.{order.paid_amount} <span className="text-slate-400 font-medium">/ Rs.{order.locked_price}</span></span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-500">Pending:</span>
+                        <span className="font-black text-orange-500">Rs.{order.pending_amount} <span className="text-orange-300 font-medium">/ Rs.{order.locked_price}</span></span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs border-t border-slate-200 pt-1.5 mt-0.5">
+                        <span className="font-bold text-slate-500">Remaining:</span>
+                        <span className="font-black text-red-500">Rs.{remainingAmount} <span className="text-red-300 font-medium">/ Rs.{order.locked_price}</span></span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs font-medium text-slate-500 truncate max-w-[250px]" title={order.order_name}>
                       Target: {order.order_name}
                     </p>
                   </td>
-                  <td className="p-6" onClick={(e) => e.stopPropagation()}>
-                    <div className="relative inline-block w-full max-w-[140px]">
-                      <select value={order.status} onChange={(e) => handleStatusChange(order, e.target.value)} className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border border-transparent hover:border-slate-300 transition-all ${statusColors[order.status] || 'bg-slate-100 text-slate-700'}`}>
-                        <option value="pending">PENDING</option>
-                        <option value="verified">VERIFIED</option>
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                  <td className="p-6 align-top" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-col gap-3">
+                      {/* NEW: Always Clickable Status Dropdown */}
+                      <div className="relative inline-block w-full max-w-[140px]">
+                        <select
+                          value={order.status}
+                          onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                          className={`appearance-none w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider outline-none cursor-pointer border shadow-sm transition-all hover:opacity-80 ${statusColors[order.status] || 'bg-slate-100 text-slate-700 border-slate-200'}`}
+                        >
+                          <option value="pending">PENDING</option>
+                          <option value="verified">VERIFIED</option>
+                          <option value="rejected">REJECTED</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50" />
+                      </div>
+
+                      {/* Verify Action buttons show up underneath if there is money pending */}
+                      {order.pending_amount > 0 && (
+                          <div className="flex flex-col gap-1.5 mt-1 border-t border-slate-100 pt-3">
+                              <button onClick={() => handleVerifyPayment(order)} className="px-3 py-1.5 bg-emerald-500 text-white text-[10px] font-bold rounded shadow-sm hover:bg-emerald-600 flex items-center justify-center gap-1"><CheckSquare size={12}/> Verify Funds</button>
+                              <button onClick={() => handleRejectPayment(order)} className="px-3 py-1.5 bg-red-50 text-red-600 text-[10px] font-bold rounded shadow-sm hover:bg-red-100">Reject Funds</button>
+                          </div>
+                      )}
                     </div>
                   </td>
-                  <td className="p-6 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex justify-end items-center gap-4">
+                  <td className="p-6 text-right align-top" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex justify-end items-center gap-4 mt-2">
                       <button onClick={() => handleDelete(order.id)} className="p-2 text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors" title="Delete Order"><Trash2 size={16} /></button>
-                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Details</span>
+                      <span className="text-sm font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}>View Details</span>
                     </div>
                   </td>
                 </tr>
@@ -578,13 +657,13 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
           <div className="bg-white rounded-[30px] shadow-2xl p-8 max-w-2xl w-full relative overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedOrder(null)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-800"><X /></button>
-            <h3 className="text-2xl font-black mb-6">Order Details</h3>
+            <h3 className="text-2xl font-black mb-6 flex items-center gap-2">Order Details <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border ${statusColors[selectedOrder.status] || 'bg-slate-100 text-slate-700'}`}>{selectedOrder.status}</span></h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-sm font-medium text-slate-700">
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Customer Info</p>
-                  <p><span className="font-bold text-slate-800">Name:</span> {selectedOrder.full_name}</p>
+                  <p><span className="font-bold text-slate-800">Name:</span> <span className="cursor-pointer hover:text-indigo-600 hover:underline" onClick={() => selectedOrder.user_id ? onOpenChat(selectedOrder.user_id) : alert('No linked user account.')}>{selectedOrder.full_name}</span></p>
                   <p className="break-all"><span className="font-bold text-slate-800">Email:</span> {selectedOrder.email}</p>
                   <p><span className="font-bold text-slate-800">Phone:</span> {selectedOrder.contact_number}</p>
                 </div>
@@ -593,24 +672,53 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
                 </a>
               </div>
               
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 relative">
+                {selectedOrder.pending_amount > 0 && (
+                   <div className="absolute -top-3 -right-3 bg-orange-500 text-white rounded-full p-2 shadow-lg animate-bounce">
+                     <AlertCircle size={16} />
+                   </div>
+                )}
                 <p className="text-[10px] font-black uppercase text-slate-400 mb-2">Order Info</p>
                 <p><span className="font-bold text-slate-800">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
                 <p><span className="font-bold text-slate-800">Order Name:</span> {selectedOrder.order_name}</p>
-                <p><span className="font-bold text-slate-800">Paid Amount:</span> Rs. {selectedOrder.price}</p>
-                <p><span className="font-bold text-slate-800">Locked Price:</span> Rs. {selectedOrder.locked_amount}</p>
-                <p><span className="font-bold text-slate-800">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
+                <p><span className="font-bold text-slate-800 text-emerald-600">Verified Paid:</span> Rs. {selectedOrder.paid_amount} / Rs. {selectedOrder.locked_price}</p>
+                <p><span className="font-bold text-slate-800 text-orange-600">Pending Review:</span> Rs. {selectedOrder.pending_amount} / Rs. {selectedOrder.locked_price}</p>
+                <p><span className="font-bold text-slate-800 text-red-500">Remaining Due:</span> Rs. {Math.max(0, selectedOrder.locked_price - selectedOrder.paid_amount - selectedOrder.pending_amount)}</p>
+                <p className="pt-2 border-t border-slate-200 mt-2"><span className="font-bold text-slate-800">Date:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
               </div>
             </div>
 
+            {selectedOrder.pending_amount > 0 && (
+                <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 flex items-center justify-between gap-4 mb-6">
+                    <div>
+                        <p className="text-orange-800 font-bold text-sm">Action Required</p>
+                        <p className="text-orange-600 text-xs font-medium">Verify the screenshot below to approve Rs. {selectedOrder.pending_amount}.</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                        <button onClick={() => handleVerifyPayment(selectedOrder)} className="px-4 py-2 bg-emerald-500 text-white text-xs font-bold rounded-lg shadow hover:bg-emerald-600 flex items-center gap-1"><CheckSquare size={14}/> Verify Funds</button>
+                        <button onClick={() => handleRejectPayment(selectedOrder)} className="px-4 py-2 bg-red-100 text-red-600 text-xs font-bold rounded-lg shadow hover:bg-red-200">Reject</button>
+                    </div>
+                </div>
+            )}
+
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col items-center">
-              <p className="text-[10px] font-black uppercase text-slate-400 mb-4 w-full">Payment Screenshot</p>
-              {selectedOrder.screenshot_url ? (
+              <p className="text-[10px] font-black uppercase text-slate-400 mb-4 w-full">Payment Screenshots ({selectedOrder.payment_screenshots?.length || (selectedOrder.screenshot_url ? 1 : 0)})</p>
+              
+              {selectedOrder.payment_screenshots && selectedOrder.payment_screenshots.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+                    {selectedOrder.payment_screenshots.map((path, idx) => (
+                        <a key={idx} href={getImageUrl(path)} target="_blank" rel="noreferrer" className="block max-w-full relative group">
+                            <div className="absolute top-2 left-2 bg-slate-900/70 text-white text-[10px] font-bold px-2 py-1 rounded-md z-10 backdrop-blur-md">Upload {idx + 1}</div>
+                            <img src={getImageUrl(path)} alt={`Payment Receipt ${idx + 1}`} className="rounded-lg shadow-sm border border-slate-200 w-full h-48 object-cover cursor-zoom-in group-hover:opacity-90 transition-opacity" />
+                        </a>
+                    ))}
+                </div>
+              ) : selectedOrder.screenshot_url ? (
                 <a href={getImageUrl(selectedOrder.screenshot_url)} target="_blank" rel="noreferrer" className="block max-w-full">
                   <img src={getImageUrl(selectedOrder.screenshot_url)} alt="Payment Receipt" className="rounded-lg shadow-sm border border-slate-200 max-h-96 object-contain cursor-zoom-in" />
                 </a>
               ) : (
-                <p className="text-slate-400 italic">No screenshot provided.</p>
+                <p className="text-slate-400 italic py-4">No screenshot provided.</p>
               )}
             </div>
           </div>
@@ -621,7 +729,7 @@ function OrdersManager({ data, refresh }: { data: Order[], refresh: () => void }
 }
 
 // --- SECTION: TUTOR LISTING ---
-function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }) {
+function TutorsManager({ data, refresh, onOpenChat }: { data: Tutor[], refresh: () => void, onOpenChat: (id: string) => void }) {
   const supabase = createClient();
   const [selectedTutor, setSelectedTutor] = useState<Tutor | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -670,7 +778,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
                     {tutor.avatar_url ? <img src={tutor.avatar_url} className="w-full h-full object-cover" /> : <User size={24} />}
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900">{tutor.name || 'Unknown'}</p>
+                    <p className="font-bold text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline" onClick={(e) => { e.stopPropagation(); tutor.user_id ? onOpenChat(tutor.user_id) : alert('No linked user account found.'); }}>{tutor.name || 'Unknown'}</p>
                     <p className="text-xs text-slate-500 mt-1">{tutor.location || 'No Location'} • {tutor.subject?.length > 0 ? tutor.subject.join(', ') : 'No Subjects'}</p>
                   </div>
                 </td>
@@ -697,7 +805,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
               <div className="w-16 h-16 rounded-full bg-slate-200 border border-slate-300 overflow-hidden shrink-0 flex items-center justify-center text-slate-400">
                 {selectedTutor.avatar_url ? <img src={selectedTutor.avatar_url} className="w-full h-full object-cover" /> : <User size={32} />}
               </div>
-              <h3 className="text-2xl font-black">{selectedTutor.name || 'Unknown'}</h3>
+              <h3 className="text-2xl font-black cursor-pointer hover:text-indigo-600 hover:underline" onClick={() => selectedTutor.user_id ? onOpenChat(selectedTutor.user_id) : alert('No linked user account.')}>{selectedTutor.name || 'Unknown'}</h3>
             </div>
             <div className="space-y-4 text-sm font-medium text-slate-700">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -731,7 +839,7 @@ function TutorsManager({ data, refresh }: { data: Tutor[], refresh: () => void }
 }
 
 // --- SECTION: VACANCIES ---
-function VacanciesManager({ data, applications, refresh, tutors }: any) {
+function VacanciesManager({ data, applications, refresh, tutors, onOpenChat }: any) {
   const supabase = createClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingData, setEditingData] = useState<Partial<Vacancy> | null>(null);
@@ -834,7 +942,7 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
             </div>
             <div className="p-6 overflow-y-auto space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Contact Name</p><p className="font-bold text-slate-800">{viewVacancy.contact_name || '-'}</p></div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Contact Name</p><p className="font-bold text-slate-800 cursor-pointer hover:text-indigo-600 hover:underline" onClick={() => viewVacancy.user_id ? onOpenChat(viewVacancy.user_id) : alert('No linked user account.')}>{viewVacancy.contact_name || '-'}</p></div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Phone</p><p className="font-bold text-slate-800">{viewVacancy.contact_number || '-'}</p></div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Salary Range</p><p className="font-bold text-slate-800 text-green-600">{viewVacancy.salary_range || '-'}</p></div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100"><p className="text-[10px] font-black uppercase text-slate-400 mb-1">Class Time</p><p className="font-bold text-slate-800">{viewVacancy.class_time || '-'}</p></div>
@@ -848,12 +956,10 @@ function VacanciesManager({ data, applications, refresh, tutors }: any) {
                 {vacancyApps.length === 0 ? <p className="text-slate-500 text-center py-6 bg-slate-50 rounded-2xl">No applications yet.</p> : (
                   <div className="space-y-3">
                     {vacancyApps.map((app: any) => {
-                      const matchedTutor = tutors?.find((t: any) => t.user_id === app.user_id);
-                      const tutorLink = matchedTutor ? `/tutors/${matchedTutor.id}` : '#';
                       return (
                         <div key={app.id} className={`flex justify-between items-center p-4 rounded-2xl border ${app.status === 'accepted' ? 'bg-green-50 border-green-200' : app.status === 'rejected' ? 'bg-red-50 border-red-200' : 'bg-white border-slate-200 shadow-sm'}`}>
                           <div>
-                            <a href={tutorLink} target="_blank" className="font-bold text-base text-indigo-600 hover:underline flex items-center gap-1">{app.applicant_name} <ExternalLink size={14} /></a>
+                            <span onClick={() => app.user_id ? onOpenChat(app.user_id) : alert('No linked user account.')} className="cursor-pointer font-bold text-base text-indigo-600 hover:underline flex items-center gap-1">{app.applicant_name} <MessageSquare size={14} /></span>
                             <p className="text-sm text-slate-500 mt-0.5">{app.applicant_phone} • {app.applicant_email}</p>
                           </div>
                           <div className="text-right">
@@ -929,14 +1035,19 @@ function ApplicationsManager({ data, refresh, onOpenChat, tutors }: any) {
           </thead>
           <tbody>
             {data.map((item: VacancyApplication) => {
-              const matchedTutor = tutors?.find((t: any) => t.user_id === item.user_id);
-              const tutorLink = matchedTutor ? `/tutors/${matchedTutor.id}` : '#';
               return (
                 <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                  <td className="p-6"><a href={tutorLink} target="_blank" className="font-bold text-indigo-600 hover:underline text-base flex items-center gap-1">{item.applicant_name} <ExternalLink size={14} /></a></td>
+                  <td className="p-6">
+                    <span onClick={() => item.user_id ? onOpenChat(item.user_id) : alert('No linked user account.')} className="cursor-pointer font-bold text-indigo-600 hover:underline text-base flex items-center gap-1">
+                      {item.applicant_name} <MessageSquare size={14} />
+                    </span>
+                  </td>
                   <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.applicant_phone}</p><p className="text-xs font-medium text-slate-400 break-all">{item.applicant_email}</p></td>
                   <td className="p-6"><span onClick={() => window.open(`/vacancies/${item.vacancy_id}`, '_blank')} className="cursor-pointer text-sm text-slate-700 font-bold hover:text-indigo-600 hover:underline transition-colors flex items-center gap-1">{item.vacancies?.subject}</span></td>
-                  <td className="p-6"><p className="text-sm font-bold text-slate-700 whitespace-nowrap">{item.vacancies?.contact_name || 'N/A'}</p><p className="text-xs font-medium text-slate-400">{item.vacancies?.contact_number || 'N/A'}</p></td>
+                  <td className="p-6">
+                    <p className="text-sm font-bold text-slate-700 cursor-pointer hover:text-indigo-600 hover:underline" onClick={() => item.vacancies?.user_id ? onOpenChat(item.vacancies.user_id) : alert('No linked user account.')}>{item.vacancies?.contact_name || 'N/A'}</p>
+                    <p className="text-xs font-medium text-slate-400">{item.vacancies?.contact_number || 'N/A'}</p>
+                  </td>
                   <td className="p-6">
                     <div className="flex items-center gap-2">
                       <div className="relative inline-block w-full max-w-[130px]">
@@ -986,13 +1097,13 @@ function RequestsManager({ data, refresh, onOpenChat }: any) {
             {data.map((item: StudentRequest) => (
               <tr key={item.id} className="border-b border-slate-50 hover:bg-slate-50/50 cursor-pointer transition-colors" onClick={() => setViewMessage(item.message)}>
                 <td className="p-6">
-                  <p className="font-bold text-indigo-600 hover:underline text-lg transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); if (item.user_id) onOpenChat(item.user_id); }} title="Chat with Student">{item.student_name}</p>
+                  <p className="font-bold text-indigo-600 hover:underline text-lg transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); item.user_id ? onOpenChat(item.user_id) : alert('No user account linked.'); }} title="Chat with Student">{item.student_name}</p>
                   <p className="text-sm text-slate-500 mt-1">{item.phone}</p>
                 </td>
                 <td className="p-6">
                   {item.tutors ? (
                     <div>
-                      <p className="font-bold text-indigo-600 hover:underline text-base transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); if (item.tutors?.user_id) onOpenChat(item.tutors.user_id); }} title="Chat with Tutor">{item.tutors.name}</p>
+                      <p className="font-bold text-indigo-600 hover:underline text-base transition-colors inline-block whitespace-nowrap" onClick={(e) => { e.stopPropagation(); item.tutors?.user_id ? onOpenChat(item.tutors.user_id) : alert('No user account linked.'); }} title="Chat with Tutor">{item.tutors.name}</p>
                       <p className="text-sm text-slate-500 mt-0.5 whitespace-nowrap">{item.tutors.contact_num} • Rs. {item.tutors.hour_rate}/hr</p>
                     </div>
                   ) : <p className="text-sm text-slate-400 italic">No specific tutor</p>}
@@ -1325,7 +1436,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
 }
 
 // --- SECTION: BOOKINGS ---
-function BookingsManager({ courses, enrollments, batches, refresh }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void }) {
+function BookingsManager({ courses, enrollments, batches, refresh, onOpenChat }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void, onOpenChat: (id: string) => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
@@ -1382,6 +1493,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
          order_type: 'Online Course',
          order_name: editingPayment.course_name || (course?.title || 'Course Enrollment'),
          paid_amount: editPaid,
+         pending_amount: 0, // Admin override, defaults to verified paid
          locked_price: editLockedPrice,
          status: editPaid >= editLockedPrice ? 'verified' : 'pending'
        }]).select().single();
@@ -1469,6 +1581,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
       order_type: 'Online Course', 
       order_name: selectedCourse.title,
       paid_amount: newBooking.paid_amount,
+      pending_amount: 0,
       locked_price: newBooking.locked_price,
       status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
     };
@@ -1731,7 +1844,9 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
                     {startIndex + idx + 1}
                   </td>
                   <td className="p-3 border-r border-slate-300 align-top leading-relaxed">
-                    <p className="font-bold text-slate-900 text-sm">{enr.full_name}</p>
+                    <p className="font-bold text-slate-900 text-sm cursor-pointer hover:text-indigo-600 hover:underline" onClick={(e) => { e.stopPropagation(); enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.'); }}>
+                      {enr.full_name}
+                    </p>
                     <p className="text-slate-600 break-all">{enr.email}</p>
                     <p className="text-slate-600 font-medium">WA: {enr.whatsapp_number}</p>
                   </td>
@@ -1876,7 +1991,7 @@ function BookingsManager({ courses, enrollments, batches, refresh }: { courses: 
 
 
 // --- SECTION: CERTIFICATES ---
-function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], syllabi: any[], refresh: () => void }) {
+function CertificatesManager({ data, syllabi, refresh, onOpenChat }: { data: Certificate[], syllabi: any[], refresh: () => void, onOpenChat: (id: string) => void }) {
   const supabase = createClient();
   const router = useRouter();
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -2002,7 +2117,7 @@ function CertificatesManager({ data, syllabi, refresh }: { data: Certificate[], 
                   onClick={() => cert.certificate_image && setPreviewImage(cert.certificate_image)}
                 >
                   <td className="p-6">
-                    <p className="font-bold text-slate-900">{cert.name}</p>
+                    <p className="font-bold text-slate-900 cursor-pointer hover:text-indigo-600 hover:underline" onClick={(e) => { e.stopPropagation(); cert.user_id ? onOpenChat(cert.user_id) : alert('No linked user account.'); }}>{cert.name}</p>
                     <p className="text-sm text-slate-500 mt-1 break-all">{cert.email}</p>
                   </td>
                   <td className="p-6"><p className="font-bold text-slate-800">{cert.syllabus_name}</p></td>

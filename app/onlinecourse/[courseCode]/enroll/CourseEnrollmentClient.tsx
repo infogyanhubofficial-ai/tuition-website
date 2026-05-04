@@ -309,9 +309,7 @@ export default function CourseEnrollmentClient() {
       if (checkError) throw checkError;
 
       if (existingRecords && existingRecords.length > 0) {
-        setErrors({
-          general: 'You have already registered for this course batch. Please check your WhatsApp/Email.',
-        });
+        router.push('/dashboard');
         return;
       }
 

@@ -2070,6 +2070,7 @@ function AccountOverviewView({ userName, userEmail, userWhatsapp, onSaveUser, or
 
 // ─── INVOICES / TRANSACTIONS VIEW ───
 // ... [Remaining UI components stay exactly as they were, e.g., TransactionsView, CertificateView, DashboardView, VacanciesView, etc...] ...
+// ─── INVOICES / TRANSACTIONS VIEW ───
 function TransactionsView({ orders, ordersError, enrollments, formatDate, selectedTransaction, setSelectedTransaction, router }: any) {
   return (
     <div className="space-y-6 sm:space-y-8 w-full pb-10">
@@ -2084,13 +2085,25 @@ function TransactionsView({ orders, ordersError, enrollments, formatDate, select
           </div>
         ) : orders.map((order: Order) => (
           <div key={order.id} onClick={() => setSelectedTransaction(order)} className={`cursor-pointer bg-white p-4 sm:p-5 md:p-6 ${tokens.radius.card} border border-slate-200/60 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5 transition-all group`}>
-            <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto">
-              <div className="p-2.5 sm:p-3 bg-slate-50 text-slate-400 rounded-xl shrink-0 border border-slate-100 group-hover:bg-blue-50 group-hover:text-blue-600 group-hover:border-blue-100 transition-colors"><ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" /></div>
-              <div className="overflow-hidden">
-                <p className="font-bold text-slate-900 text-base sm:text-lg leading-tight truncate group-hover:text-blue-700 transition-colors">{order.order_name}</p>
-                <p className="text-[9px] sm:text-[11px] font-bold text-slate-400 mt-1 sm:mt-1.5 uppercase tracking-widest">{order.order_type} • {formatDate(order.created_at)}</p>
+            
+            {/* FIX: Added `flex-1 min-w-0` to the left container to allow truncation */}
+            <div className="flex items-center gap-3 sm:gap-4 w-full sm:w-auto flex-1 min-w-0">
+              <div className="p-2.5 sm:p-3 bg-slate-50 text-slate-400 rounded-xl shrink-0 border border-slate-100 group-hover:bg-blue-50 group-hover:text-blue-600 group-hover:border-blue-100 transition-colors">
+                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5" />
+              </div>
+              
+              {/* FIX: Added `flex-1 min-w-0` here to ensure text truncates properly */}
+              <div className="overflow-hidden flex-1 min-w-0">
+                <p className="font-bold text-slate-900 text-base sm:text-lg leading-tight truncate group-hover:text-blue-700 transition-colors" title={order.order_name}>
+                  {order.order_name}
+                </p>
+                <p className="text-[9px] sm:text-[11px] font-bold text-slate-400 mt-1 sm:mt-1.5 uppercase tracking-widest truncate">
+                  {order.order_type} • {formatDate(order.created_at)}
+                </p>
               </div>
             </div>
+
+            {/* Right side pricing/buttons (kept shrink-0 so it doesn't get crushed) */}
             <div className="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between items-center sm:items-end border-t sm:border-0 border-slate-100 pt-3 sm:pt-0 shrink-0 gap-2">
               <div className="flex flex-col items-start sm:items-end">
                 <p className="font-extrabold text-lg sm:text-xl text-slate-900 tracking-tight">Rs. {order.price}</p>
@@ -2108,6 +2121,7 @@ function TransactionsView({ orders, ordersError, enrollments, formatDate, select
                 </div>
               </div>
             </div>
+
           </div>
         ))}
       </div>

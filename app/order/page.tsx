@@ -92,12 +92,17 @@ function CheckoutContent() {
   const urlOrderId = searchParams.get("order_id") || searchParams.get("orderId") || null; 
   const urlLockedPrice = searchParams.get("locked_price") || null;
 
+  // FIELD LOCKING STATE: If data came from URL (like Invoice page), lock it down.
+  const isNameLocked = Boolean(urlName);
+  const isEmailLocked = Boolean(urlEmail);
+  const isPhoneLocked = Boolean(urlPhone);
+
   // 2. DETERMINE ORDER MODE
   let currentMode: OrderMode = "unknown";
   if (urlType === "recording") currentMode = "recording";
-  else if (orderTypeParam.includes("course") || requestType === "course") currentMode = "course";
+  else if (orderTypeParam.includes("course") || requestType === "course" || orderTypeParam === "online course") currentMode = "course";
   else if (orderTypeParam.includes("verif") || orderTypeParam.includes("batch") || orderTypeParam.includes("badge")) currentMode = "badge";
-  else if (requestType === "cv" || requestType === "phone") currentMode = "cv_phone"; 
+  else if (requestType === "cv" || requestType === "phone" || orderTypeParam === "tutoring") currentMode = "cv_phone"; 
 
   // 3. BULLETPROOF FORM STATE
   const [fullName, setFullName] = useState<string>(urlName || "");
@@ -140,7 +145,7 @@ function CheckoutContent() {
           else setFetchedTutorName(`Tutor #${tutorId}`);
         }
 
-        if (currentMode === 'course' && urlCourseName) {
+        if (currentMode === 'course' && urlCourseName && !urlOrderId) {
           const { data: syllabus } = await supabase
             .from('syllabi_v2')
             .select('id')
@@ -167,38 +172,41 @@ function CheckoutContent() {
       }
     };
     initializeCheckout();
-  }, [tutorId, urlTutorName, urlName, urlEmail, urlCourseName, currentMode, supabase]);
+  }, [tutorId, urlTutorName, urlName, urlEmail, urlCourseName, currentMode, urlOrderId, supabase]);
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
   const getOrderConfig = () => {
+    // If a specific price is passed via URL (like a partial payment from an invoice), use it.
+    const customPrice = parseInt(urlPrice);
+
     switch (currentMode) {
       case "recording":
         return {
-          title: "Recording Video Access",
+          title: urlOrderId ? "Invoice Payment" : "Recording Video Access",
           orderName: urlCourseName || "Selected Course",
-          price: parseInt(urlPrice) || 0,
+          price: customPrice || 0,
           dbOrderType: "recording",
           icon: <PlayCircle className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: `You are purchasing instant access to "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
+          notice: `You are making a payment for "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
           noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
           noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
         };
       case "course":
         return {
-          title: "Online Course Enrollment",
+          title: urlOrderId ? "Invoice Payment" : "Online Course Enrollment",
           orderName: urlCourseName || "Selected Course",
-          price: parseInt(urlPrice) || 0, 
+          price: customPrice || 0, 
           dbOrderType: "Online Course",
           icon: <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: `You are securing your enrollment for "${urlCourseName || 'this course'}". We will process your deposit and lock your discount for the online class within 24 hours.`,
+          notice: `You are processing a payment for "${urlCourseName || 'this course'}". We will verify your deposit within 24 hours.`,
           noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
           noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
         };
       case "badge":
         return {
-          title: "Verification Badge (1-Year)",
+          title: urlOrderId ? "Invoice Payment" : "Verification Badge (1-Year)",
           orderName: fullName || urlName || "Your Profile Verification",
-          price: 500,
+          price: customPrice || 500,
           dbOrderType: "other",
           icon: <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "You must submit original documents later. Badge won't be verified otherwise and payment is non-refundable.",
@@ -207,9 +215,9 @@ function CheckoutContent() {
         };
       case "cv_phone":
         return {
-          title: "CV & Contact Detail Unlock",
-          orderName: fetchedTutorName || `Tutor #${tutorId || 'Unknown'}`,
-          price: 1000,
+          title: urlOrderId ? "Invoice Payment" : "CV & Contact Detail Unlock",
+          orderName: fetchedTutorName || urlCourseName || `Tutor #${tutorId || 'Unknown'}`,
+          price: customPrice || 1000,
           dbOrderType: "tutoring",
           icon: <FileText className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
@@ -218,14 +226,14 @@ function CheckoutContent() {
         };
       default:
         return {
-          title: "Unknown Service",
-          orderName: "Unknown",
-          price: 0,
-          dbOrderType: "other",
-          icon: <Info className="w-5 h-5 text-slate-400 shrink-0" />,
-          notice: "Invalid request. Please go back and try again.",
-          noticeStyle: "bg-slate-50 border-slate-200 text-slate-700",
-          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5" />
+          title: urlOrderId ? "Invoice Payment" : "General Service",
+          orderName: urlCourseName || "Selected Service",
+          price: customPrice || 0,
+          dbOrderType: orderTypeParam || "other",
+          icon: <Receipt className="w-5 h-5 text-slate-600 shrink-0" />,
+          notice: "You are making a secure payment. Please ensure your details match your invoice.",
+          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
+          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
         };
     }
   };
@@ -250,7 +258,7 @@ function CheckoutContent() {
     if (!screenshot) { alert("Please upload your payment screenshot."); document.getElementById("dropzone-file")?.focus(); return; }
     if (!agreeRefund) { alert("Please agree to the Refund & Return Policy."); document.getElementById("agreeRefund")?.focus(); return; }
     if (!agreePrivacy) { alert("Please agree to the User's Data Policy."); document.getElementById("agreePrivacy")?.focus(); return; }
-    if (currentMode === "unknown") { alert("Invalid order type. Please restart the checkout process."); return; }
+    if (currentMode === "unknown" && !urlOrderId) { alert("Invalid order type. Please restart the checkout process."); return; }
 
     setIsUploading(true);
 
@@ -276,28 +284,30 @@ function CheckoutContent() {
       let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
       
       let previousPaidAmount = 0;
+      let previousPendingAmount = 0; // NEW: Track pending amount
       let previousScreenshots: string[] = [];
 
-      // Check if we have an exact order_id first
+      // A. Check if we have an exact order_id first (From Invoice URL)
       if (targetOrderId) {
         const { data: existingOrder } = await supabase
           .from('orders_v2')
-          .select('id, locked_price, paid_amount, payment_screenshots')
+          .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') // Added pending_amount
           .eq('id', targetOrderId)
           .maybeSingle();
 
         if (existingOrder) {
           previousPaidAmount = existingOrder.paid_amount || 0;
+          previousPendingAmount = existingOrder.pending_amount || 0; // Capture existing pending
           previousScreenshots = existingOrder.payment_screenshots || [];
           if (existingOrder.locked_price && !fetchedLockedPrice) {
             finalLockedPrice = existingOrder.locked_price;
           }
         }
       } 
-      // ONLINE COURSE PRE-CHECK: Prevent Duplicate Insertions
+      // B. ONLINE COURSE PRE-CHECK: Prevent Duplicate Insertions
       else if (config.dbOrderType === "Online Course") {
         
-        // A. Resolve Enrollment ID if missing
+        // Resolve Enrollment ID if missing
         if (!finalEnrollmentId) {
           const { data: rpcId, error: rpcError } = await supabase.rpc('get_latest_enrollment_id_for_checkout', {
             search_email: finalNormalizedEmail
@@ -312,11 +322,11 @@ function CheckoutContent() {
           }
         }
 
-        // B. Check for existing pending online course order linked to this enrollment ID
+        // Check for existing pending online course order linked to this enrollment ID
         if (finalEnrollmentId) {
           const { data: existingOrder } = await supabase
             .from('orders_v2')
-            .select('id, locked_price, paid_amount, payment_screenshots')
+            .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') // Added pending_amount
             .eq('enrollment_id', finalEnrollmentId)
             .eq('status', 'pending')
             .eq('order_type', 'Online Course')
@@ -325,6 +335,7 @@ function CheckoutContent() {
           if (existingOrder) {
             targetOrderId = existingOrder.id; // Intercept: Switch to UPDATE mode
             previousPaidAmount = existingOrder.paid_amount || 0;
+            previousPendingAmount = existingOrder.pending_amount || 0; // Capture existing pending
             previousScreenshots = existingOrder.payment_screenshots || [];
             
             // Preserve the original locked price from the database if we didn't fetch one recently
@@ -335,19 +346,22 @@ function CheckoutContent() {
         }
       }
 
-      // Ensure locked price is never lower than what the user paid in total
-      if (finalLockedPrice < (previousPaidAmount + paidAmount)) {
-        finalLockedPrice = previousPaidAmount + paidAmount;
+      // Ensure locked price is never lower than what the user paid + pending total
+      if (finalLockedPrice < (previousPaidAmount + previousPendingAmount + paidAmount)) {
+        finalLockedPrice = previousPaidAmount + previousPendingAmount + paidAmount;
       }
 
       if (targetOrderId) {
         
-        // --- UPDATE EXISTING ORDER ---
+        // --- UPDATE EXISTING ORDER (ADD TO PENDING, NOT PAID) ---
         const { error: dbError } = await supabase
           .from('orders_v2')
           .update({
-            paid_amount: previousPaidAmount + paidAmount, // Accumulate total paid amount
+            // EXPLICIT CHANGE: Money goes into pending until admin verifies it. 
+            // We do NOT update paid_amount here at all.
+            pending_amount: previousPendingAmount + paidAmount, 
             payment_screenshots: [...previousScreenshots, uploadData.path], // Keep past screenshots
+            status: 'pending', // Explicitly reset to pending so admin sees it
             full_name: safeName.trim(),
             email: finalNormalizedEmail,
             whatsapp_number: safePhone.trim(),
@@ -367,7 +381,8 @@ function CheckoutContent() {
           order_type: config.dbOrderType,         
           order_name: config.orderName,
           locked_price: finalLockedPrice,
-          paid_amount: paidAmount,
+          paid_amount: 0, // MUST be 0 initially. Admin verifies it later.
+          pending_amount: paidAmount, // Initial payment goes here
           payment_screenshots: [uploadData.path],
           status: 'pending',
           full_name: safeName.trim(),            
@@ -379,11 +394,11 @@ function CheckoutContent() {
       }
 
       // 3. Handle Success Redirects
-      if (currentMode === "recording") {
+      if (currentMode === "recording" && !urlOrderId) {
         setIsUploading(false);
         setShowRecordingSuccess(true);
       } else {
-        alert("Payment screenshot uploaded successfully! Your order is being verified.");
+        alert("Payment screenshot uploaded successfully! Your payment is being verified.");
         router.push("/dashboard"); 
       }
       
@@ -424,45 +439,68 @@ function CheckoutContent() {
           <div className="lg:col-span-7 space-y-6">
             
             <section className="bg-white p-5 sm:p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-900 mb-5 flex items-center gap-2">
-                <User className="w-5 h-5 text-blue-600" /> Contact Information
-              </h2>
+              <div className="flex justify-between items-center mb-5">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-600" /> Contact Information
+                </h2>
+                {(isNameLocked || isEmailLocked) && (
+                  <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Invoice Locked
+                  </span>
+                )}
+              </div>
+              
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="fullName" className="block text-sm font-medium text-slate-700 mb-1.5">Full Name <span className="text-red-500">*</span></label>
-                    <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
+                    <div className={`flex items-center border border-slate-200 rounded-xl transition-all overflow-hidden ${isNameLocked ? 'bg-slate-50 cursor-not-allowed' : 'bg-white focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400'}`}>
                       <div className="pl-4 text-slate-400"><User className="w-4 h-4" /></div>
                       <input 
                         id="fullName"
-                        type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe"
-                        className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                        type="text" 
+                        value={fullName} 
+                        onChange={(e) => !isNameLocked && setFullName(e.target.value)} 
+                        placeholder="John Doe"
+                        readOnly={isNameLocked}
+                        className={`w-full px-3 py-2.5 outline-none bg-transparent font-medium placeholder:text-slate-400 ${isNameLocked ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'}`}
                       />
+                      {isNameLocked && <div className="pr-4 text-slate-400"><Lock className="w-4 h-4" /></div>}
                     </div>
                   </div>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email Address <span className="text-red-500">*</span></label>
-                    <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
+                    <div className={`flex items-center border border-slate-200 rounded-xl transition-all overflow-hidden ${isEmailLocked ? 'bg-slate-50 cursor-not-allowed' : 'bg-white focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400'}`}>
                       <div className="pl-4 text-slate-400"><Mail className="w-4 h-4" /></div>
                       <input 
                         id="email"
-                        type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
-                        className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                        type="email" 
+                        value={email} 
+                        onChange={(e) => !isEmailLocked && setEmail(e.target.value)} 
+                        placeholder="you@example.com"
+                        readOnly={isEmailLocked}
+                        className={`w-full px-3 py-2.5 outline-none bg-transparent font-medium placeholder:text-slate-400 ${isEmailLocked ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'}`}
                       />
+                      {isEmailLocked && <div className="pr-4 text-slate-400"><Lock className="w-4 h-4" /></div>}
                     </div>
                   </div>
                 </div>
                 <div>
                   <label htmlFor="contactNumber" className="block text-sm font-medium text-slate-700 mb-1.5">Contact Number <span className="text-red-500">*</span></label>
-                  <div className="flex items-center border border-slate-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400 bg-white transition-all overflow-hidden">
-                    <span className="flex items-center gap-1.5 text-slate-500 px-3 py-2.5 border-r border-slate-200 font-medium bg-slate-50">
+                  <div className={`flex items-center border border-slate-200 rounded-xl transition-all overflow-hidden ${isPhoneLocked ? 'bg-slate-50 cursor-not-allowed' : 'bg-white focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-400'}`}>
+                    <span className={`flex items-center gap-1.5 px-3 py-2.5 border-r border-slate-200 font-medium ${isPhoneLocked ? 'text-slate-400 bg-slate-100' : 'text-slate-500 bg-slate-50'}`}>
                       <Phone className="w-4 h-4" /> +977
                     </span>
                     <input 
                       id="contactNumber"
-                      type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} placeholder="98XXXXXXXX"
-                      className="w-full px-3 py-2.5 outline-none bg-transparent font-medium text-slate-900 placeholder:text-slate-400"
+                      type="tel" 
+                      value={contactNumber} 
+                      onChange={(e) => !isPhoneLocked && setContactNumber(e.target.value)} 
+                      placeholder="98XXXXXXXX"
+                      readOnly={isPhoneLocked}
+                      className={`w-full px-3 py-2.5 outline-none bg-transparent font-medium placeholder:text-slate-400 ${isPhoneLocked ? 'text-slate-500 cursor-not-allowed' : 'text-slate-900'}`}
                     />
+                    {isPhoneLocked && <div className="pr-4 text-slate-400"><Lock className="w-4 h-4" /></div>}
                   </div>
                 </div>
               </div>
@@ -563,7 +601,7 @@ function CheckoutContent() {
                 </div>
               </div>
 
-              {currentMode === 'recording' && (
+              {currentMode === 'recording' && !urlOrderId && (
                 <div className="bg-slate-50 border border-slate-100 p-4 rounded-xl flex gap-3 mb-1">
                   <GraduationCap className="w-5 h-5 text-slate-600 shrink-0" />
                   <p className="text-sm font-medium text-slate-700 leading-snug">
@@ -572,7 +610,7 @@ function CheckoutContent() {
                 </div>
               )}
 
-              {currentMode !== 'recording' && (
+              {(currentMode !== 'recording' || urlOrderId) && (
                 <div className={`border rounded-xl p-4 flex gap-3 ${config.noticeStyle}`}>
                   {config.noticeIcon}
                   <p className="text-sm leading-relaxed font-medium">{config.notice}</p>
@@ -581,7 +619,7 @@ function CheckoutContent() {
 
               <div className="pt-1">
                 <div className="flex items-center justify-between mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <span className="text-slate-600 font-semibold">Total Amount</span>
+                  <span className="text-slate-600 font-semibold">{urlOrderId ? "Remaining Amount" : "Total Amount"}</span>
                   <span className="text-xl font-bold text-slate-900 tracking-tight">
                     Rs. {config.price.toLocaleString()}
                   </span>
@@ -651,17 +689,5 @@ function CheckoutContent() {
         </div>
       )}
     </div>
-  );
-}
-
-export default function CheckoutPage() {
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => setIsMounted(true), []);
-  if (!isMounted) return null;
-
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500 gap-3"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /><p className="font-medium text-sm text-slate-600">Loading secure checkout...</p></div>}>
-      <CheckoutContent />
-    </Suspense>
   );
 }
