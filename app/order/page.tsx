@@ -690,6 +690,7 @@ function CheckoutContent() {
 }
 
 // THIS IS THE FIX: Wrap it in a Suspense boundary and export default it!
+// THIS IS THE FIX: Wrap it in a Suspense boundary and export default it!
 export default function OrderPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading secure checkout...</div>}>
@@ -697,4 +698,3 @@ export default function OrderPage() {
     </Suspense>
   );
 }
-```</Suspense>
