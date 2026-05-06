@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, Suspense } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { 
@@ -85,8 +85,8 @@ function MobileNavButton({ icon, label, active, onClick, href, colorTheme = "blu
   return <motion.button whileTap={{ scale: 0.92 }} onClick={onClick}>{innerContent}</motion.button>;
 }
 
-// --- 2. MAIN LAYOUT COMPONENT ---
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+// --- 2. MAIN CONTENT COMPONENT (Wrapped below) ---
+function DashboardContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -738,5 +738,21 @@ function ChatWidget({ userId, showToast, onClose }: any) {
         </button>
       </div>
     </div>
+  );
+}
+
+// --- 3. WRAPPER FOR NEXT.JS BUILD COMPATIBILITY ---
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense 
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4">
+          <Loader2 className="animate-spin text-blue-600 w-10 h-10" />
+          <p className="text-slate-500 font-bold text-sm tracking-wide">Loading your dashboard...</p>
+        </div>
+      }
+    >
+      <DashboardContent>{children}</DashboardContent>
+    </Suspense>
   );
 }
