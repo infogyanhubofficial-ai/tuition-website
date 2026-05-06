@@ -101,6 +101,8 @@ function SkeletonCard() {
 function TutorCard({ tutor, onQuickView }: { tutor: Tutor; onQuickView: (t: Tutor) => void }) {
   const router = useRouter();
   const [imageError, setImageError] = useState(false);
+  
+  // Directly use the avatar/photo from the tutors table
   const avatarUrl = tutor.avatar_url || tutor.photo;
   
   const displaySubject = Array.isArray(tutor.subject) 
@@ -115,7 +117,6 @@ function TutorCard({ tutor, onQuickView }: { tutor: Tutor; onQuickView: (t: Tuto
 
   return (
     <div 
-      // [SEO FIX] Use generateSeoSlug for programmatic routing
       onClick={() => router.push(`/tutors/${generateSeoSlug(tutor)}`)}
       className={cn(
         "cursor-pointer group flex flex-col justify-between h-full rounded-3xl bg-white/70 backdrop-blur-md p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-blue-500/10 relative overflow-hidden",
@@ -148,6 +149,7 @@ function TutorCard({ tutor, onQuickView }: { tutor: Tutor; onQuickView: (t: Tuto
                 src={avatarUrl}
                 alt={`${tutor.name || 'Expert'} - Verified Tutor in Nepal`}
                 onError={() => setImageError(true)}
+                referrerPolicy="no-referrer" /* [FIX] Prevents Google from throwing a 403 Forbidden */
                 className="h-20 w-20 object-cover transition-transform duration-700 group-hover:scale-110"
               />
             ) : (
@@ -225,7 +227,6 @@ function TutorCard({ tutor, onQuickView }: { tutor: Tutor; onQuickView: (t: Tuto
             <Eye className="h-4 w-4" /> View Info
           </button>
           <Link 
-            // [SEO FIX] Use generateSeoSlug for Link href
             href={`/tutors/${generateSeoSlug(tutor)}`}
             onClick={(e) => e.stopPropagation()}
             aria-label={`Go to full profile for ${tutor.name || 'this tutor'}`}
@@ -257,12 +258,16 @@ export default function TutorsPageClient() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      
+      // Fixed: Reverted back to a simple select('*') to prevent foreign key errors
       const { data: tutorData } = await supabase
         .from('tutors')
         .select('*')
         .order('id', { ascending: false });
 
-      if (tutorData) setTutors(tutorData as Tutor[]);
+      if (tutorData) {
+        setTutors(tutorData as Tutor[]);
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -544,8 +549,10 @@ export default function TutorsPageClient() {
               </button>
               <div className="flex items-center gap-5 mb-6">
                 <img 
+                  /* [FIX] Maintains referrer policy in the quick view modal while using pure tutors table fields */
                   src={quickViewTutor.avatar_url || quickViewTutor.photo || ''} 
                   alt={`${quickViewTutor.name || 'Tutor'} Profile Picture`} 
+                  referrerPolicy="no-referrer"
                   className="h-20 w-20 rounded-3xl object-cover bg-slate-100 shadow-sm border border-slate-100" 
                 />
                 <div>
@@ -569,7 +576,6 @@ export default function TutorsPageClient() {
               </div>
 
               <Link 
-                // [SEO FIX] Use generateSeoSlug for quick view modal Link href
                 href={`/tutors/${generateSeoSlug(quickViewTutor)}`} 
                 className="flex w-full items-center justify-center rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-95"
               >

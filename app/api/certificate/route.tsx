@@ -34,6 +34,7 @@ const DEFAULTS = {
   verifyBaseUrl: "https://www.gyanhub.com.np/certificate",
   logoUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BG_REMOVED.png",
+  // Stamp and director signature URLs updated to new constant, working URLs
   sealUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/STAMP.png",
   directorSignatureUrl:
@@ -48,7 +49,6 @@ type CreateCertificateInput = {
   email: string;
   syllabus_id: number;
   issue_date?: string;
-  created_by?: number | null;
 };
 
 type CertificateRow = {
@@ -56,7 +56,6 @@ type CertificateRow = {
   name: string | null;
   syllabus_id: number | null;
   certificate_image: string | null;
-  created_by: number | null;
   created_at: string | null;
   updated_at: string | null;
   email: string | null;
@@ -160,12 +159,6 @@ function validateStudent(student: Partial<CreateCertificateInput>, index: number
     student.syllabus_id <= 0
   )
     throw new Error(`Row ${r}: syllabus_id must be a positive integer`);
-  if (
-    student.created_by !== undefined &&
-    student.created_by !== null &&
-    (!Number.isInteger(student.created_by) || student.created_by <= 0)
-  )
-    throw new Error(`Row ${r}: created_by must be a positive integer`);
 }
 
 function sanitizeFileName(value: string) {
@@ -185,9 +178,10 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1).trim()}…`;
 }
 
+// Increased max length to effectively prevent description truncation
 function cleanDescription(value?: string | null): string {
   if (!value || !value.trim()) return "";
-  return truncateText(value.replace(/\s+/g, " ").trim(), 125);
+  return truncateText(value.replace(/\s+/g, " ").trim(), 2000); 
 }
 
 function buildVerificationUrl(name: string, email: string) {
@@ -208,7 +202,7 @@ async function getCertificateContext(supabase: SupabaseClient, cert: Certificate
   if (!syllabusId) throw new Error(`Certificate ${cert.id} has no syllabus_id`);
 
   const { data: syllabus, error: syllabusError } = await supabase
-    .from("syllabi")
+    .from("syllabi_v2")
     .select(
       "id, name, description, duration, syllabus_pdf, status, tutor_id, course_code"
     )
@@ -233,7 +227,7 @@ async function getCertificateContext(supabase: SupabaseClient, cert: Certificate
 
 async function getCourseCodeForSyllabus(supabase: SupabaseClient, syllabusId: number) {
   const { data: syllabus, error } = await supabase
-    .from("syllabi")
+    .from("syllabi_v2")
     .select("id, course_code")
     .eq("id", syllabusId)
     .single<{ id: number; course_code: string | null }>();
@@ -243,7 +237,7 @@ async function getCourseCodeForSyllabus(supabase: SupabaseClient, syllabusId: nu
 
   const rawCourseCode = syllabus.course_code?.trim();
   if (!rawCourseCode)
-    throw new Error(`Missing course_code in syllabi for syllabus_id=${syllabusId}`);
+    throw new Error(`Missing course_code in syllabi_v2 for syllabus_id=${syllabusId}`);
 
   return sanitizeCourseCode(rawCourseCode);
 }
@@ -300,12 +294,11 @@ async function insertCertificateWithRetry(
         email: student.email.trim().toLowerCase(),
         syllabus_id: student.syllabus_id,
         issue_date: issueDate,
-        created_by: student.created_by ?? null,
         certificate_code: certificateCode,
         updated_at: new Date().toISOString(),
       })
       .select(
-        `id, name, syllabus_id, certificate_image, created_by, created_at,
+        `id, name, syllabus_id, certificate_image, created_at,
          updated_at, email, syllabus_name, syllabus_pdf, issue_date,
          certificate_code, status`
       )
@@ -371,18 +364,18 @@ async function buildTemplateData(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CERTIFICATE TEMPLATE
-// Changes vs previous version:
-//   QR-MOVE  — QR code removed from footer right column; now rendered as an
-//              absolute badge in the top-left, mirroring the Credential ID
-//              badge in the top-right. (left:20px / top:20px)
-//   FOOTER   — Right column is now director-only, styled identically to the
-//              left (instructor) column: flexDirection column, alignItems
-//              center, justifyContent flex-end. All three footer blocks are
-//              now equidistant from the centre seal and share the same
-//              vertical axis as the logo above.
 // ─────────────────────────────────────────────────────────────────────────────
 function CertificateTemplate(data: CertificateTemplateData) {
   const FOOTER_H = 128;
+
+  // Dynamically calculate font size so long names fit onto a single line
+  const nameLength = data.studentName.length;
+  let nameFontSize = 110; // Default font size
+  if (nameLength > 16) {
+    // Proportional scaling down for strings longer than 16 characters
+    // Math.max prevents the font from getting impractically small
+    nameFontSize = Math.max(40, Math.floor(110 * (16 / nameLength)));
+  }
 
   return (
     <div
@@ -628,7 +621,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 style={{
                   display: "flex",
                   padding: "0 28px",
-                  fontSize: "110px",
+                  fontSize: `${nameFontSize}px`,
+                  whiteSpace: "nowrap", // Crucial for single-line enforcement
                   lineHeight: 0.96,
                   color: COLORS.navy,
                   fontWeight: 800,
@@ -699,7 +693,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
               style={{
                 display: "flex",
                 marginTop: "12px",
-                maxWidth: "620px",
+                maxWidth: "820px", // widened slightly to allow more text
                 textAlign: "center",
                 fontSize: "13.5px",
                 color: COLORS.navySoft,
@@ -753,8 +747,6 @@ function CertificateTemplate(data: CertificateTemplateData) {
               ZONE 3 — FOOTER
               Three equal columns (33.3% / 33.4% / 33.3%).
               Left = Instructor | Centre = Seal + date | Right = Director.
-              All columns use identical flex settings so each signature block
-              sits equidistant from the centre seal.
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -874,11 +866,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
               </div>
             </div>
 
-            {/* ── Right: Director Signature only ──
-                QR-MOVE: QR is no longer here — it lives in the top-left badge.
-                This column now mirrors the left (instructor) column exactly so
-                both signatures are equidistant from the centre seal.
-            ── */}
+            {/* ── Right: Director Signature ── */}
             <div
               style={{
                 display: "flex",
@@ -934,9 +922,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
           </div>
 
           {/* ══════════════════════════════════════════
-              TOP-LEFT: QR Code badge  (QR-MOVE)
-              Mirrors the Credential ID badge at top-right in card style.
-              Position: left:20px / top:20px (vs right:20px / top:20px).
+              TOP-LEFT: QR Code badge
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -990,7 +976,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
           </div>
 
           {/* ══════════════════════════════════════════
-              TOP-RIGHT: Credential ID badge (unchanged)
+              TOP-RIGHT: Credential ID badge
           ══════════════════════════════════════════ */}
           <div
             style={{
@@ -1167,7 +1153,7 @@ export async function POST(req: Request) {
     const syllabusIds = [...new Set(students.map((s) => s.syllabus_id))];
 
     const { data: syllabusRows, error: syllabusError } = await supabase
-      .from("syllabi")
+      .from("syllabi_v2")
       .select("id, status, course_code")
       .in("id", syllabusIds);
 

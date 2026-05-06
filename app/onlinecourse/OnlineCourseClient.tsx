@@ -20,9 +20,7 @@ export interface Course {
   discount: number; 
   category: string;
   difficulty_level: string;
-  // Allows for direct property
   learning_outcomes?: any; 
-  // Added to catch data if the backend returns it as a joined relation
   syllabi_v2?: any; 
   start_datetime: string;
   syllabus_url: string;
@@ -36,6 +34,71 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   Professional: "text-rose-700 bg-rose-50/50 dark:text-rose-400 dark:bg-rose-950/20 ring-rose-500/10",
 };
 
+// Instantiated once outside the component to save memory
+const CURRENCY_FORMATTER = new Intl.NumberFormat('en-NP', { 
+  style: 'currency', 
+  currency: 'NPR', 
+  minimumFractionDigits: 0 
+});
+
+// --- Pure Helper Functions ---
+// Moved outside components to prevent re-allocation on every render
+
+const formatCurrency = (amount: number) => CURRENCY_FORMATTER.format(amount).replace('NPR', 'NPR ');
+
+const getBikramSambatDate = (isoString: string) => {
+  if (!isoString) return 'TBA';
+  try {
+    const date = new Date(isoString);
+    // Fallback if date is invalid to prevent crash
+    if (isNaN(date.getTime())) throw new Error("Invalid date");
+    return new NepaliDate(date).format('DD MMMM, YYYY');
+  } catch (e) {
+    return new Date(isoString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  }
+};
+
+const extractOutcomeBullets = (course: Course): string[] => {
+  let rawPayload = course.learning_outcomes;
+  
+  if (!rawPayload && course.syllabi_v2) {
+    const syllabusData = Array.isArray(course.syllabi_v2) ? course.syllabi_v2[0] : course.syllabi_v2;
+    if (syllabusData) rawPayload = syllabusData.learning_outcomes;
+  }
+
+  if (!rawPayload) return [];
+
+  let extractedOutcomes: any[] = [];
+  let parsedData = rawPayload;
+
+  if (typeof rawPayload === 'string') {
+    try {
+      parsedData = JSON.parse(rawPayload);
+    } catch (e) {
+      parsedData = [rawPayload];
+    }
+  }
+
+  if (Array.isArray(parsedData)) {
+    extractedOutcomes = parsedData;
+  } else if (parsedData && typeof parsedData === 'object') {
+    if (Array.isArray(parsedData.learning_outcomes)) {
+      extractedOutcomes = parsedData.learning_outcomes;
+    } else if (typeof parsedData.learning_outcomes === 'string') {
+      try {
+        const innerParse = JSON.parse(parsedData.learning_outcomes);
+        if (Array.isArray(innerParse)) extractedOutcomes = innerParse;
+      } catch(e) {}
+    }
+  }
+
+  return extractedOutcomes
+    .filter(item => typeof item === 'string' && item.trim().length > 0)
+    .map(item => item.replace(/✔️|✅|▪️|-/g, '').trim())
+    .slice(0, 2); 
+};
+
+
 // --- Custom Hooks ---
 function useDebounce<T>(value: T, delay: number): T {
   const [debouncedValue, setDebouncedValue] = useState<T>(value);
@@ -46,14 +109,6 @@ function useDebounce<T>(value: T, delay: number): T {
   return debouncedValue;
 }
 
-function useGlobalTimer() {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 60000); 
-    return () => clearInterval(timer);
-  }, []);
-  return now;
-}
 
 // --- Main Page Component ---
 export default function OnlineCoursesPage() {
@@ -65,7 +120,6 @@ export default function OnlineCoursesPage() {
   const [error, setError] = useState<string | null>(null);
 
   const debouncedSearch = useDebounce(searchTerm, 300);
-  const globalTime = useGlobalTimer();
 
   const fetchCourses = useCallback(async () => {
     try {
@@ -90,12 +144,17 @@ export default function OnlineCoursesPage() {
 
   useEffect(() => { fetchCourses(); }, [fetchCourses]);
 
+  const categories = useMemo(() => {
+    return ["All", ...Array.from(new Set(courses.map(c => c.category).filter(Boolean)))];
+  }, [courses]);
+
   const filteredAndSortedCourses = useMemo(() => {
     let result = [...courses];
 
     if (debouncedSearch) {
+      const lowerSearch = debouncedSearch.toLowerCase();
       result = result.filter(course =>
-        course?.title?.toLowerCase().includes(debouncedSearch.toLowerCase())
+        course?.title?.toLowerCase().includes(lowerSearch)
       );
     }
 
@@ -104,16 +163,10 @@ export default function OnlineCoursesPage() {
     }
 
     return result.sort((a, b) => {
-      if (sortBy === "price_low") {
+      if (sortBy === "price_low" || sortBy === "price_high") {
         const priceA = a.fee * (1 - (a.discount || 0) / 100);
         const priceB = b.fee * (1 - (b.discount || 0) / 100);
-        return priceA - priceB;
-      }
-      
-      if (sortBy === "price_high") {
-        const priceA = a.fee * (1 - (a.discount || 0) / 100);
-        const priceB = b.fee * (1 - (b.discount || 0) / 100);
-        return priceB - priceA;
+        return sortBy === "price_low" ? priceA - priceB : priceB - priceA;
       }
       
       const timeA = a.start_datetime ? new Date(a.start_datetime).getTime() : NaN;
@@ -125,8 +178,6 @@ export default function OnlineCoursesPage() {
       return safeTimeA - safeTimeB;
     });
   }, [courses, debouncedSearch, selectedCategory, sortBy]);
-
-  const categories = ["All", ...Array.from(new Set(courses.map(c => c.category).filter(Boolean)))];
 
   return (
     <div className="min-h-screen bg-neutral-50 dark:bg-neutral-950 text-neutral-900 dark:text-neutral-100 transition-colors duration-300 font-sans">
@@ -198,7 +249,7 @@ export default function OnlineCoursesPage() {
         ) : filteredAndSortedCourses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-8">
             {filteredAndSortedCourses.map((course) => (
-              <CourseCard key={course.id} course={course} globalTime={globalTime} />
+              <CourseCard key={course.id} course={course} />
             ))}
           </div>
         ) : (
@@ -211,86 +262,59 @@ export default function OnlineCoursesPage() {
 
 // --- Sub-components ---
 
-const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalTime: number }) => {
-  if (!course) return null;
+// Sub-component specifically for Countdown to prevent full card re-renders
+const CountdownTimer = React.memo(({ startDatetime }: { startDatetime: string }) => {
+  const [now, setNow] = useState(Date.now());
 
-  const currencyFormatter = new Intl.NumberFormat('en-NP', { style: 'currency', currency: 'NPR', minimumFractionDigits: 0 });
+  useEffect(() => {
+    // Only update every minute
+    const timer = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const diff = new Date(startDatetime).getTime() - now;
+
+  if (diff <= 0) {
+    return (
+      <div className="text-neutral-700 dark:text-neutral-300 font-bold text-xs uppercase tracking-wider">
+        Enrollment Open
+      </div>
+    );
+  }
+
+  const d = String(Math.floor(diff / (864e5))).padStart(2, '0');
+  const h = String(Math.floor((diff / 36e5) % 24)).padStart(2, '0');
+  const m = String(Math.floor((diff / 6e4) % 60)).padStart(2, '0');
+
+  return (
+    <div className="flex items-center gap-1">
+      <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
+        {d}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">d</span>
+      </div>
+      <span className="text-neutral-300 dark:text-neutral-600 font-bold">:</span>
+      <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
+        {h}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">h</span>
+      </div>
+      <span className="text-neutral-300 dark:text-neutral-600 font-bold">:</span>
+      <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
+        {m}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">m</span>
+      </div>
+    </div>
+  );
+});
+CountdownTimer.displayName = "CountdownTimer";
+
+
+const CourseCard = React.memo(({ course }: { course: Course }) => {
+  if (!course) return null;
 
   const offerFee = course.fee || 0;
   const discountPercent = course.discount || 0;
   const fullFee = discountPercent > 0 ? Math.round(offerFee / (1 - (discountPercent / 100))) : offerFee;
 
-  const getBikramSambatDate = (isoString: string) => {
-    if (!isoString) return 'TBA';
-    try {
-      const date = new Date(isoString);
-      return new NepaliDate(date).format('DD MMMM, YYYY');
-    } catch (e) {
-      return new Date(isoString).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-  };
-  const nepaliStartDate = getBikramSambatDate(course.start_datetime);
-
-  const getCountdown = () => {
-    if (!course.start_datetime) return null;
-    const diff = new Date(course.start_datetime).getTime() - globalTime;
-    if (diff <= 0) return { expired: true };
-    return {
-      expired: false,
-      d: String(Math.floor(diff / (864e5))).padStart(2, '0'),
-      h: String(Math.floor((diff / 36e5) % 24)).padStart(2, '0'),
-      m: String(Math.floor((diff / 6e4) % 60)).padStart(2, '0')
-    };
-  };
-  const countdown = getCountdown();
-
-  // Bullet-proof extractor for Postgres JSONB & nested relation issues
-  const outcomeBullets = useMemo(() => {
-    // 1. Locate the data payload (handles direct root OR joined table scenario)
-    let rawPayload = course.learning_outcomes;
-    
-    if (!rawPayload && course.syllabi_v2) {
-      // Handles if backend returns an array of joins or a single object join
-      const syllabusData = Array.isArray(course.syllabi_v2) ? course.syllabi_v2[0] : course.syllabi_v2;
-      if (syllabusData) rawPayload = syllabusData.learning_outcomes;
-    }
-
-    if (!rawPayload) return [];
-
-    let extractedOutcomes: any[] = [];
-
-    // 2. Safely parse if Postgres returned it as a stringified JSON block
-    let parsedData = rawPayload;
-    if (typeof rawPayload === 'string') {
-      try {
-        parsedData = JSON.parse(rawPayload);
-      } catch (e) {
-        // Fallback if it's just a raw text string
-        parsedData = [rawPayload];
-      }
-    }
-
-    // 3. Extract the array regardless of object wrapping
-    if (Array.isArray(parsedData)) {
-      extractedOutcomes = parsedData;
-    } else if (parsedData && typeof parsedData === 'object') {
-      if (Array.isArray(parsedData.learning_outcomes)) {
-        extractedOutcomes = parsedData.learning_outcomes;
-      } else if (typeof parsedData.learning_outcomes === 'string') {
-        // Catch double-stringified objects
-        try {
-          const innerParse = JSON.parse(parsedData.learning_outcomes);
-          if (Array.isArray(innerParse)) extractedOutcomes = innerParse;
-        } catch(e) {}
-      }
-    }
-
-    // 4. Clean formatting and limit to 2 for UI density
-    return extractedOutcomes
-      .filter(item => typeof item === 'string' && item.trim().length > 0)
-      .map(item => item.replace(/✔️|✅|▪️|-/g, '').trim())
-      .slice(0, 2); 
-  }, [course.learning_outcomes, course.syllabi_v2]);
+  // Memoized specifically for this card to prevent recalculation
+  const outcomeBullets = useMemo(() => extractOutcomeBullets(course), [course]);
+  const nepaliStartDate = useMemo(() => getBikramSambatDate(course.start_datetime), [course.start_datetime]);
 
   const tagData = useMemo(() => {
     const tags = [
@@ -338,11 +362,11 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
             )}
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-black text-white tracking-tight">
-                {currencyFormatter.format(offerFee).replace('NPR', 'NPR ')}
+                {formatCurrency(offerFee)}
               </span>
               {discountPercent > 0 && (
                 <span className="text-xs text-neutral-300 line-through font-semibold opacity-70">
-                  {currencyFormatter.format(fullFee)}
+                  {formatCurrency(fullFee)}
                 </span>
               )}
             </div>
@@ -398,25 +422,8 @@ const CourseCard = React.memo(({ course, globalTime }: { course: Course; globalT
           <p className="text-[9px] text-neutral-400 font-bold uppercase tracking-widest mb-1.5 flex items-center gap-1">
             <Calendar size={10} className="text-neutral-400"/> Starts: {nepaliStartDate}
           </p>
-          {countdown && !countdown.expired ? (
-            <div className="flex items-center gap-1">
-              <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
-                {countdown.d}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">d</span>
-              </div>
-              <span className="text-neutral-300 dark:text-neutral-600 font-bold">:</span>
-              <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
-                {countdown.h}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">h</span>
-              </div>
-              <span className="text-neutral-300 dark:text-neutral-600 font-bold">:</span>
-              <div className="text-neutral-800 dark:text-neutral-200 font-mono font-bold text-sm">
-                {countdown.m}<span className="text-[9px] text-neutral-400 ml-0.5 uppercase">m</span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-neutral-700 dark:text-neutral-300 font-bold text-xs uppercase tracking-wider">
-               Enrollment Open
-            </div>
-          )}
+          {/* Isolated state component for Countdown */}
+          {course.start_datetime && <CountdownTimer startDatetime={course.start_datetime} />}
         </div>
 
         <div className="mt-auto flex flex-col gap-2 relative z-20 pointer-events-auto">

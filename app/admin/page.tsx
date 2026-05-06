@@ -327,7 +327,7 @@ export default function AdminDashboard() {
           {activeTab === "Applications" && <ApplicationsManager key="app" data={applications} tutors={tutors} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Tuition Requests" && <RequestsManager key="req" data={requests} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Batch Management" && <BatchManager key="batch" data={courses} batches={batches} refresh={fetchAllData} />}
-          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} refresh={fetchAllData} onOpenChat={openChat} />}
+          {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} syllabi={syllabi} refresh={fetchAllData} onOpenChat={openChat} />}
           {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={fetchAllData} onOpenChat={openChat} />}
         </AnimatePresence>
 
@@ -448,6 +448,9 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
   const [showAllOrders, setShowAllOrders] = useState(true);
 
   const filteredData = data.filter((o: Order) => {
+    // Hide orders that have zero paid and zero pending amount
+    if (o.paid_amount === 0 && o.pending_amount === 0) return false;
+
     const s = searchQuery.toLowerCase();
     const matchesSearch = (o.full_name && o.full_name.toLowerCase().includes(s)) || 
                           (o.email && o.email.toLowerCase().includes(s)) || 
@@ -594,20 +597,33 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                       <span className="uppercase text-[10px] tracking-widest bg-slate-100 px-2 py-1 rounded text-slate-500 whitespace-nowrap">{order.order_type}</span>
                     </p>
                     
-                    {/* NEW: Explicit Breakdown Box */}
-                    <div className="flex flex-col gap-1.5 mt-1 mb-3 bg-slate-50 p-3 rounded-xl border border-slate-100 min-w-[220px]">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-500">Paid:</span>
-                        <span className="font-black text-emerald-600">Rs.{order.paid_amount} <span className="text-slate-400 font-medium">/ Rs.{order.locked_price}</span></span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-500">Pending:</span>
-                        <span className="font-black text-orange-500">Rs.{order.pending_amount} <span className="text-orange-300 font-medium">/ Rs.{order.locked_price}</span></span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs border-t border-slate-200 pt-1.5 mt-0.5">
-                        <span className="font-bold text-slate-500">Remaining:</span>
-                        <span className="font-black text-red-500">Rs.{remainingAmount} <span className="text-red-300 font-medium">/ Rs.{order.locked_price}</span></span>
-                      </div>
+                    {/* Explicit Breakdown Box - Converted to Dropdown */}
+                    <div className="mt-2 mb-2">
+                      {order.pending_amount > 0 && (
+                        <div className="mb-2 bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg border border-orange-200 text-[10px] font-black uppercase inline-flex items-center gap-1 shadow-sm">
+                          <AlertCircle size={14} /> Pending: Rs. {order.pending_amount}
+                        </div>
+                      )}
+                      <details className="group [&_summary::-webkit-details-marker]:hidden" onClick={(e) => e.stopPropagation()}>
+                        <summary className="flex items-center gap-1 cursor-pointer text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg w-fit hover:bg-indigo-100 transition-colors border border-indigo-100">
+                          Financial Details
+                          <ChevronDown size={14} className="group-open:rotate-180 transition-transform" />
+                        </summary>
+                        <div className="flex flex-col gap-1.5 mt-2 bg-slate-50 p-3 rounded-xl border border-slate-100 min-w-[220px] shadow-sm">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-500">Paid:</span>
+                            <span className="font-black text-emerald-600">Rs.{order.paid_amount} <span className="text-slate-400 font-medium">/ Rs.{order.locked_price}</span></span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-slate-500">Pending:</span>
+                            <span className="font-black text-orange-500">Rs.{order.pending_amount} <span className="text-orange-300 font-medium">/ Rs.{order.locked_price}</span></span>
+                          </div>
+                          <div className="flex justify-between items-center text-xs border-t border-slate-200 pt-1.5 mt-0.5">
+                            <span className="font-bold text-slate-500">Remaining:</span>
+                            <span className="font-black text-red-500">Rs.{remainingAmount} <span className="text-red-300 font-medium">/ Rs.{order.locked_price}</span></span>
+                          </div>
+                        </div>
+                      </details>
                     </div>
 
                     <p className="text-xs font-medium text-slate-500 truncate max-w-[250px]" title={order.order_name}>
@@ -616,7 +632,7 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                   </td>
                   <td className="p-6 align-top" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-col gap-3">
-                      {/* NEW: Always Clickable Status Dropdown */}
+                      {/* Always Clickable Status Dropdown */}
                       <div className="relative inline-block w-full max-w-[140px]">
                         <select
                           value={order.status}
@@ -1436,7 +1452,7 @@ function BatchManager({ data, batches, refresh }: { data: OnlineCourse[], batche
 }
 
 // --- SECTION: BOOKINGS ---
-function BookingsManager({ courses, enrollments, batches, refresh, onOpenChat }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], refresh: () => void, onOpenChat: (id: string) => void }) {
+function BookingsManager({ courses, enrollments, batches, syllabi, refresh, onOpenChat }: { courses: OnlineCourse[], enrollments: Enrollment[], batches: CourseBatch[], syllabi: any[], refresh: () => void, onOpenChat: (id: string) => void }) {
   const supabase = createClient();
   const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
@@ -1614,6 +1630,17 @@ function BookingsManager({ courses, enrollments, batches, refresh, onOpenChat }:
     setHiddenBookingIds(new Set());
   };
 
+  const handleCopyCSV = () => {
+    const matchingSyllabus = syllabi.find(s => s.id.toString() === selectedCourse?.id?.toString() || s.name === selectedCourse?.title);
+    const syllabusId = matchingSyllabus ? matchingSyllabus.id : (selectedCourse?.id || '');
+    const today = new Date().toISOString().split('T')[0];
+    
+    const header = "name,email,syllabus_id,issue_date\n";
+    const rows = courseEnrollments.map(e => `"${e.full_name || ''}","${e.email || ''}","${syllabusId}","${today}"`).join("\n");
+    
+    navigator.clipboard.writeText(header + rows).then(() => alert("Copied to clipboard for Bulk Certificate generation!"));
+  };
+
   // STEP 1: SHOW COURSES LIST (Square Boxes Layout)
   if (!selectedCourse) {
     return (
@@ -1746,12 +1773,6 @@ function BookingsManager({ courses, enrollments, batches, refresh, onOpenChat }:
   const totalPages = Math.ceil(courseEnrollments.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedEnrollments = courseEnrollments.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-  const handleCopyCSV = () => {
-    const header = "Name,Phone,Email\n";
-    const rows = courseEnrollments.map(e => `"${e.full_name}","${e.whatsapp_number}","${e.email}"`).join("\n");
-    navigator.clipboard.writeText(header + rows).then(() => alert("Copied to clipboard!"));
-  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">

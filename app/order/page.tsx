@@ -217,7 +217,8 @@ function CheckoutContent() {
           title: urlOrderId ? "Invoice Payment" : "CV & Contact Detail Unlock",
           orderName: fetchedTutorName || urlCourseName || `Tutor #${tutorId || 'Unknown'}`,
           price: customPrice || 1000,
-          dbOrderType: "tutoring",
+          // UPDATED: Now matches your DB constraint correctly.
+          dbOrderType: "CV and Contact",
           icon: <FileText className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
           noticeStyle: "bg-emerald-50/50 border-emerald-100 text-emerald-800",
@@ -283,7 +284,7 @@ function CheckoutContent() {
       let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
       
       let previousPaidAmount = 0;
-      let previousPendingAmount = 0; // NEW: Track pending amount
+      let previousPendingAmount = 0; // Track pending amount
       let previousScreenshots: string[] = [];
 
       // A. Check if we have an exact order_id first (From Invoice URL)
@@ -321,14 +322,15 @@ function CheckoutContent() {
           }
         }
 
-        // Check for existing pending online course order linked to this enrollment ID
+        // Check for ANY existing online course order linked to this enrollment ID (pending or verified)
         if (finalEnrollmentId) {
           const { data: existingOrder } = await supabase
             .from('orders_v2')
             .select('id, locked_price, paid_amount, pending_amount, payment_screenshots') 
             .eq('enrollment_id', finalEnrollmentId)
-            .eq('status', 'pending')
             .eq('order_type', 'Online Course')
+            .order('created_at', { ascending: false }) // Ensures we get the latest one
+            .limit(1)
             .maybeSingle();
 
           if (existingOrder) {
@@ -384,7 +386,7 @@ function CheckoutContent() {
           status: 'pending',
           full_name: safeName.trim(),            
           email: finalNormalizedEmail,          
-          whatsapp_number: safePhone.trim()     
+          whatsapp_number: safePhone.trim()      
         }]);
         
         if (dbError) throw dbError;
@@ -689,7 +691,6 @@ function CheckoutContent() {
   );
 }
 
-// THIS IS THE FIX: Wrap it in a Suspense boundary and export default it!
 // THIS IS THE FIX: Wrap it in a Suspense boundary and export default it!
 export default function OrderPage() {
   return (

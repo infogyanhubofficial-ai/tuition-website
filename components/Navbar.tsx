@@ -11,7 +11,8 @@ import {
   MonitorPlay, GraduationCap, PlusCircle, UserPlus,
   Settings, BookOpen, ChevronDown, Search, ChevronRight,
   Video, BookMarked, Bell, LayoutDashboard,
-  Sparkles, Calendar, AlertCircle, Award, ShoppingBag, LogOut
+  Sparkles, Calendar, AlertCircle, Award, ShoppingBag, LogOut,
+  MessageCircle, ShieldAlert, CheckCircle, Clock
 } from "lucide-react";
 
 // Data for the universal Search Palette
@@ -64,13 +65,10 @@ export default function Navbar() {
   const actionDropdownRef = useRef<HTMLDivElement>(null);
   const tuitionDropdownRef = useRef<HTMLDivElement>(null);
 
-  // Use useState to guarantee the Supabase client is a singleton and survives re-renders
   const [supabase] = useState(() => createClient());
 
   const { scrollYProgress } = useScroll();
-  const scaleX = useSpring(scrollYProgress, {
-    stiffness: 100, damping: 30, restDelta: 0.001
-  });
+  const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -83,173 +81,179 @@ export default function Navbar() {
     const email = currentUser.email;
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+
+      // Aggregate Data Fetching
       const [
         enrollRes, orderRes, certRes,
-        tutorRes, myReqsRes, myAppsRes, myVacanciesRes
+        tutorRes, myReqsRes, myAppsRes, myVacanciesRes,
+        messagesRes, urgentVacsRes, batchesRes
       ] = await Promise.all([
-        supabase.from('enrollments').select('*').eq('user_id', uid),
-        supabase.from('orders').select('*').ilike('email', email),
+        supabase.from('enrollments_v2').select('*').or(`user_id.eq.${uid},email.ilike.${email}`),
+        supabase.from('orders_v2').select('*').or(`user_id.eq.${uid},email.ilike.${email}`),
         supabase.from('certificates').select('*').ilike('email', email),
-        supabase.from('tutors').select('id').eq('user_id', uid).maybeSingle(),
-        supabase.from('student_requests').select('id, status, created_at, tutors(name)').eq('user_id', uid),
-        supabase.from('vacancy_applications').select('id, status, created_at, vacancies(subject)').eq('user_id', uid),
-        supabase.from('vacancies').select('id').or(`user_id.eq.${uid},email.ilike.${email}`)
+        supabase.from('tutors').select('*').eq('user_id', uid).maybeSingle(),
+        supabase.from('student_requests').select('id, status, created_at, tutors(name), student_name').eq('user_id', uid),
+        supabase.from('vacancy_applications').select('id, status, created_at, vacancies(subject, location), applicant_name').eq('user_id', uid),
+        supabase.from('vacancies').select('id, subject').or(`user_id.eq.${uid},email.ilike.${email}`),
+        supabase.from('messages').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(10),
+        supabase.from('vacancies').select('*').eq('urgent', true).eq('status', true).order('created_at', { ascending: false }).limit(3),
+        supabase.from('course_batches_v2').select('*')
       ]);
 
       const enrollments = enrollRes.data || [];
       const orders = orderRes.data || [];
-      const certs = certRes.data || [];
+      const tutor = tutorRes.data;
+      const myReqs = myReqsRes.data || [];
+      const myApps = myAppsRes.data || [];
+      const messages = messagesRes.data || [];
+      const urgentVacs = urgentVacsRes.data || [];
+      const batches = batchesRes.data || [];
 
-      let onlineCourses: any[] = [];
-      if (enrollments.length > 0) {
-        const cIds = Array.from(new Set(enrollments.map(e => e.course_id)));
-        if (cIds.length > 0) {
-          const { data: ocData } = await supabase.from('online_courses').select('id, title, start_datetime').in('id', cIds);
-          onlineCourses = ocData || [];
-        }
-      }
-
+      // Secondary fetches based on primary results
       let incomingRequests: any[] = [];
-      if (tutorRes.data) {
-        const { data } = await supabase.from('student_requests').select('id, student_name, created_at').eq('tutor_id', tutorRes.data.id);
+      if (tutor) {
+        const { data } = await supabase.from('student_requests').select('*').eq('tutor_id', tutor.id);
         incomingRequests = data || [];
       }
 
       let incomingApplications: any[] = [];
       if (myVacanciesRes.data && myVacanciesRes.data.length > 0) {
         const vIds = myVacanciesRes.data.map((v: any) => v.id);
-        const { data } = await supabase.from('vacancy_applications').select('id, applicant_name, created_at, vacancies(subject), tutors(name)').in('vacancy_id', vIds);
+        const { data } = await supabase.from('vacancy_applications').select('*, vacancies(subject), tutors(name)').in('vacancy_id', vIds);
         incomingApplications = data || [];
       }
 
       const notifs: AppNotification[] = [];
       const now = new Date();
 
-      let nextClass: { title: string, date: Date } | null = null;
-      let closestDiff = Infinity;
+      // ==========================================
+      // FINANCIAL & BILLING NOTIFICATIONS
+      // ==========================================
+      orders.forEach((o: any) => {
+        const title = o.order_name || o.service || 'Service';
+        
+        // Success Checkout
+        if (now.getTime() - new Date(o.created_at).getTime() < 86400000) {
+          notifs.push({ id: `chk-${o.id}`, text: `Successful Checkout: Your order for ${title} was received!`, time: o.created_at, type: 'success', icon: ShoppingBag, actionUrl: '/dashboard?tab=Invoices' });
+        }
+        
+        // Payment Verification Success
+        if (o.status === 'verified') {
+          notifs.push({ id: `ver-${o.id}`, text: `Your payment for ${title} has been verified. Receipt available.`, time: o.updated_at || o.created_at, type: 'success', icon: CheckCircle, actionUrl: '/dashboard?tab=Invoices' });
+        }
+        
+        // Payment Rejected
+        if (o.status === 'rejected') {
+          notifs.push({ id: `rej-${o.id}`, text: `Action Required: Your recent payment screenshot for ${title} was invalid. Please re-upload.`, time: o.updated_at || o.created_at, type: 'urgent', icon: ShieldAlert, actionUrl: '/dashboard?tab=Invoices' });
+        }
 
-      enrollments.forEach(e => {
-        const c = onlineCourses.find(oc => oc.id === e.course_id || oc.title === e.course_name);
-        if (c && c.start_datetime) {
-          const start = new Date(c.start_datetime);
-          if (start > now) {
-            const diff = start.getTime() - now.getTime();
-            if (diff < closestDiff) {
-              closestDiff = diff;
-              nextClass = { title: c.title, date: start };
-            }
+        // Pending Balance
+        if (o.remaining_amount > 0) {
+          notifs.push({ id: `bal-${o.id}`, text: `You have an outstanding balance of Rs. ${o.remaining_amount} for ${title}.`, time: o.created_at, type: 'warning', icon: AlertCircle, actionUrl: '/dashboard?tab=Invoices' });
+        }
+      });
+
+      // ==========================================
+      // SUPPORT & COMMUNICATION
+      // ==========================================
+      const latestAdminMsg = messages.find(m => m.sender_role === 'admin');
+      if (latestAdminMsg) {
+        notifs.push({ id: `msg-${latestAdminMsg.id}`, text: `GyanHub Support: "${latestAdminMsg.content}"`, time: latestAdminMsg.created_at, type: 'info', icon: MessageCircle, actionUrl: '/dashboard' });
+      }
+
+      // ==========================================
+      // ACCOUNT & SECURITY
+      // ==========================================
+      if (!currentUser.user_metadata?.avatar_url) {
+        notifs.push({ id: 'prof-nudge', text: `Complete your profile! Add a profile picture to personalize your account.`, time: now.toISOString(), type: 'info', icon: UserPlus, actionUrl: '/dashboard' });
+      }
+
+      // ==========================================
+      // GLOBAL HUB ACTIVITY
+      // ==========================================
+      // Upcoming Live Session Check
+      enrollments.forEach((e: any) => {
+        const batch = batches.find((b: any) => b.syllabus_id === e.course_id || b.id === e.batch_id);
+        if (batch && batch.start_datetime) {
+          const start = new Date(batch.start_datetime);
+          const diffMs = start.getTime() - now.getTime();
+          if (diffMs > 0 && diffMs <= 86400000) { // Within 24 hours
+             const isImminent = diffMs <= 3600000; // Within 1 hour
+             notifs.push({ id: `live-${batch.id}`, text: `Reminder: ${e.course_name} starts in ${isImminent ? 'less than 1 hour' : 'less than 24 hours'}. Get your meeting link.`, time: now.toISOString(), type: 'urgent', icon: Video, actionUrl: '/dashboard?tab=Online Courses' });
           }
         }
       });
 
-      if (nextClass) {
-        notifs.push({
-          id: 'upcoming',
-          text: `You have an upcoming online course "${(nextClass as any).title}" on ${(nextClass as any).date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}.`,
-          time: new Date().toISOString(), 
-          type: 'urgent',
-          icon: Calendar,
-          actionUrl: '/dashboard?tab=Online Courses'
+      // ==========================================
+      // STUDENT NOTIFICATIONS
+      // ==========================================
+      // New Tutor Application to Student's Vacancy
+      incomingApplications.forEach((app: any) => {
+        const tName = app.tutors?.name || app.applicant_name || 'A tutor';
+        const subj = Array.isArray(app.vacancies) ? app.vacancies[0]?.subject : app.vacancies?.subject;
+        if (app.status === 'pending') {
+          notifs.push({ id: `in-app-${app.id}`, text: `${tName} has applied to your ${subj} vacancy.`, time: app.created_at, type: 'info', icon: BriefcaseBusiness, actionUrl: '/dashboard/tuition' });
+        }
+      });
+
+      // Tutor Accepted Direct Request
+      myReqs.forEach((req: any) => {
+        if (req.status === 'accepted') {
+          const tName = Array.isArray(req.tutors) ? req.tutors[0]?.name : req.tutors?.name;
+          notifs.push({ id: `my-req-acc-${req.id}`, text: `Success! ${tName || 'The tutor'} has accepted your request. Click here to chat.`, time: req.created_at, type: 'success', icon: CheckCircle, actionUrl: '/dashboard/tuition' });
+        }
+      });
+
+      // Syllabus Resource Update (Simulated based on course structure)
+      enrollments.forEach((e: any) => {
+        if (e.status === 'active') {
+          notifs.push({ id: `syl-upd-${e.id}`, text: `New study materials have been added to your ${e.course_name} course.`, time: now.toISOString(), type: 'info', icon: BookOpen, actionUrl: '/dashboard?tab=Online Courses' });
+        }
+      });
+
+      // ==========================================
+      // TUTOR NOTIFICATIONS
+      // ==========================================
+      if (tutor) {
+        // Profile Verification Completed
+        if (tutor.verified) {
+          notifs.push({ id: `tut-ver-${tutor.id}`, text: `Your profile is verified! You will now appear in the Premium Tutors list.`, time: tutor.created_at, type: 'success', icon: Award, actionUrl: '/dashboard/tuition' });
+        }
+
+        // Profile Incompletion Nudge (Randomized)
+        const isProfileIncomplete = !tutor.bio || !tutor.education || !tutor.experience;
+        if (isProfileIncomplete && Math.random() > 0.5) {
+          notifs.push({ id: `tut-inc-${tutor.id}`, text: `Complete your profile! Tutors with complete bios and IDs get 3x more students.`, time: now.toISOString(), type: 'warning', icon: AlertCircle, actionUrl: '/dashboard/tuition' });
+        }
+
+        // New Direct Student Request
+        incomingRequests.forEach((req: any) => {
+          if (req.status === 'pending') {
+            notifs.push({ id: `in-req-${req.id}`, text: `Urgent: You have a new direct tuition request from ${req.student_name || 'a student'}!`, time: req.created_at, type: 'urgent', icon: Users, actionUrl: '/dashboard/tuition' });
+          }
+        });
+
+        // Application Status Update
+        myApps.forEach((app: any) => {
+          if (app.status !== 'pending') {
+            const subj = Array.isArray(app.vacancies) ? app.vacancies[0]?.subject : app.vacancies?.subject;
+            notifs.push({ id: `my-app-${app.id}-${app.status}`, text: `Your application for '${subj || 'the vacancy'}' was ${app.status}!`, time: app.created_at, type: app.status === 'accepted' ? 'success' : 'warning', icon: BriefcaseBusiness, actionUrl: '/dashboard/tuition' });
+          }
+        });
+
+        // New "Urgent" Vacancy Posted
+        urgentVacs.forEach((v: any) => {
+          notifs.push({ id: `urg-vac-${v.id}`, text: `Urgent Vacancy: ${v.subject} tutor needed in your area (${v.location}).`, time: v.created_at, type: 'urgent', icon: AlertCircle, actionUrl: '/vacancies' });
         });
       }
 
-      enrollments.forEach(e => {
-        if (e.remaining_amount > 0) {
-          notifs.push({
-            id: `due-${e.id}`,
-            text: `You have a remaining due of Rs. ${e.remaining_amount} for your "${e.course_name}" enrollment.`,
-            time: e.created_at,
-            type: 'warning',
-            icon: AlertCircle,
-            actionUrl: '/dashboard?tab=Online Courses'
-          });
-        }
-      });
+      // Sort (Latest First), deduplicate and set
+      const uniqueNotifs = Array.from(new Map(notifs.map(item => [item.id, item])).values());
+      uniqueNotifs.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
-      (myAppsRes.data || []).forEach((app: any) => {
-        if (app.status !== 'pending') {
-          const subj = Array.isArray(app.vacancies) ? app.vacancies[0]?.subject : app.vacancies?.subject;
-          notifs.push({
-            id: `my-app-${app.id}-${app.status}`,
-            text: `Your application to "${subj || 'vacancy'}" was ${app.status}.`,
-            time: app.created_at,
-            type: app.status === 'accepted' ? 'success' : 'warning',
-            icon: BriefcaseBusiness,
-            actionUrl: '/dashboard'
-          });
-        }
-      });
-
-      (myReqsRes.data || []).forEach((req: any) => {
-        if (req.status !== 'pending') {
-          const tName = Array.isArray(req.tutors) ? req.tutors[0]?.name : req.tutors?.name;
-          notifs.push({
-            id: `my-req-${req.id}-${req.status}`,
-            text: `${tName || 'Tutor'} ${req.status} your coaching request.`,
-            time: req.created_at,
-            type: req.status === 'accepted' ? 'success' : 'warning',
-            icon: Users,
-            actionUrl: '/dashboard?tab=My Requests'
-          });
-        }
-      });
-
-      incomingRequests.forEach((req: any) => {
-        notifs.push({
-          id: `in-req-${req.id}`,
-          text: `${req.student_name} requested you for coaching.`,
-          time: req.created_at,
-          type: 'info',
-          icon: Users,
-          actionUrl: '/dashboard?tab=Student Requests'
-        });
-      });
-
-      incomingApplications.forEach((app: any) => {
-        const tName = app.tutors?.name || app.applicant_name;
-        const subj = Array.isArray(app.vacancies) ? app.vacancies[0]?.subject : app.vacancies?.subject;
-        notifs.push({
-          id: `in-app-${app.id}`,
-          text: `${tName} applied to your vacancy: "${subj}".`,
-          time: app.created_at,
-          type: 'info',
-          icon: BriefcaseBusiness,
-          actionUrl: '/dashboard'
-        });
-      });
-
-      const timeline: AppNotification[] = [
-        ...orders.filter((o: any) => o.order_type?.toLowerCase() === 'recording').map((o: any) => ({
-          id: `ord-${o.id}`,
-          text: `You have purchased ${o.order_name} recordings.`,
-          time: o.created_at,
-          type: 'info' as const,
-          icon: ShoppingBag,
-          actionUrl: '/dashboard?tab=Recording Courses'
-        })),
-        ...enrollments.map(e => ({
-          id: `enr-${e.id}`,
-          text: `You have enrolled in ${e.course_name} online course.`,
-          time: e.created_at,
-          type: 'info' as const,
-          icon: BookOpen,
-          actionUrl: '/dashboard?tab=Online Courses'
-        })),
-        ...certs.map(c => ({
-          id: `cert-${c.id}`,
-          text: `You have earned a certificate: ${c.syllabus_name || c.name}.`,
-          time: c.issue_date,
-          type: 'success' as const,
-          icon: Award,
-          actionUrl: '/dashboard?tab=My Certificates'
-        }))
-      ];
-
-      notifs.push(...timeline);
-      notifs.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-
-      setNotifications(notifs);
-      if (notifs.length > 0) setHasUnread(true);
+      setNotifications(uniqueNotifs);
+      if (uniqueNotifs.length > 0) setHasUnread(true);
       
     } catch (err) {
       console.error("Error fetching notifications:", err);
@@ -327,6 +331,8 @@ export default function Navbar() {
     const channel = supabase.channel('navbar_realtime_updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vacancy_applications' }, () => fetchUserActivity(user))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'student_requests' }, () => fetchUserActivity(user))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders_v2' }, () => fetchUserActivity(user))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => fetchUserActivity(user))
       .subscribe();
       
     return () => { supabase.removeChannel(channel); };
@@ -434,7 +440,7 @@ export default function Navbar() {
               </motion.div>
             </Link>
 
-            {/* Desktop Nav Items (Reduced Weights, Adjusted Gaps) */}
+            {/* Desktop Nav Items */}
             <nav className="hidden lg:flex items-center justify-center gap-2 lg:gap-3 ml-2">
               
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex flex-col justify-center">
@@ -468,7 +474,7 @@ export default function Navbar() {
                   <motion.div layoutId="nav-indicator" className="absolute -bottom-1 left-3 right-3 h-[2px] bg-[#2D9CDB] rounded-full" />
                 )}
                 
-                {/* Layered Dropdown Panel (Softened shadow) */}
+                {/* Layered Dropdown Panel */}
                 <AnimatePresence>
                   {tuitionDropdownOpen && (
                     <motion.div 
@@ -495,19 +501,18 @@ export default function Navbar() {
                 </AnimatePresence>
               </motion.div>
 
-              {/* Online Course Button (Maintained as Primary Focus) */}
+              {/* Online Course Button */}
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex items-center px-1 lg:pl-2">
                 <Link href="/onlinecourse" className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#FF7A4A] to-[#FF6B35] px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_12px_rgba(255,107,53,0.2)] hover:shadow-[0_6px_16px_rgba(255,107,53,0.3)] transition-all duration-200 mt-1">
                   <MonitorPlay className="h-[16px] w-[16px]" strokeWidth={2} />
                   Online Class
-                  
                   <span className="absolute -top-3.5 -right-3 flex items-center justify-center rounded-full bg-white px-2 py-[2px] text-[9px] font-bold tracking-wide text-[#FF6B35] shadow-sm border border-[#FF6B35]/20 z-10 animate-pulse">
                     <Sparkles className="w-[10px] h-[10px] mr-[2px]" strokeWidth={2.5} /> HOT
                   </span>
                 </Link>
               </motion.div>
 
-              {/* Recordings Button (Stricter color hierarchy - softer ghost variant) */}
+              {/* Recordings Button */}
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex flex-col justify-center px-1 lg:ml-2">
                 <Link href="/recording" className="relative flex items-center gap-1.5 rounded-full bg-[#2D9CDB]/10 hover:bg-[#2D9CDB]/15 px-4 py-2 text-[13px] font-medium text-[#2D9CDB] transition-all duration-200 mt-1">
                   <Video className="h-[15px] w-[15px]" strokeWidth={2} />
@@ -534,7 +539,7 @@ export default function Navbar() {
             {/* Desktop Actions */}
             <div className="hidden lg:flex flex-shrink-0 items-center gap-4 xl:gap-5 z-20">
               
-              {/* Command Palette Search (Softened) */}
+              {/* Command Palette Search */}
               <button 
                 onClick={() => setIsSearchOpen(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200/50 hover:bg-slate-100/80 transition-all text-[13px] font-medium"
@@ -626,7 +631,6 @@ export default function Navbar() {
                                 const isWarning = n.type === 'warning';
                                 const isSuccess = n.type === 'success';
                                 
-                                // Softened backgrounds, relying more on icon colors for hierarchy
                                 const bgClass = isUrgent ? 'bg-orange-50/40 border-orange-100/50' : isWarning ? 'bg-red-50/40 border-red-100/50' : isSuccess ? 'bg-emerald-50/40 border-emerald-100/50' : 'bg-white border-transparent hover:bg-slate-50';
                                 const textClass = 'text-slate-700'; 
                                 const iconColor = isUrgent ? 'text-orange-500' : isWarning ? 'text-red-500' : isSuccess ? 'text-emerald-500' : 'text-blue-500';
