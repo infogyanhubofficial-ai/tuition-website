@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion'; // Added Variants here
 import confetti from 'canvas-confetti';
 import { 
   Star, Send, User, Mail, MessageSquare, 
@@ -11,14 +11,24 @@ import {
   Quote, ChevronDown, ChevronUp, BookOpen, GraduationCap, Clock, Lock, Sparkles
 } from 'lucide-react';
 
-const containerVariants = {
+// Explicitly typed as Variants to fix the "type: string" incompatibility
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
 };
 
-const itemVariants = {
+// Explicitly typed as Variants to ensure "spring" is recognized as a valid literal
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+  visible: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { 
+      type: "spring", 
+      stiffness: 300, 
+      damping: 24 
+    } 
+  }
 };
 
 interface ReviewFormProps {
@@ -91,7 +101,6 @@ export default function ReviewForm({ syllabusId, initialAuthUser }: ReviewFormPr
   const completedSteps = [isRatingsComplete, isFeedbackComplete, isTestimonialComplete, isRecommendComplete].filter(Boolean).length;
   const progressPercentage = (completedSteps / 4) * 100;
 
-  // --- SUBMIT LOGIC (Now safely relying on Server data) ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -103,11 +112,9 @@ export default function ReviewForm({ syllabusId, initialAuthUser }: ReviewFormPr
 
     setIsSubmitting(true);
 
-    // 1. Check if user manually typed anything
     let finalName = (showTestimonial && formData.name.trim()) ? formData.name.trim() : null;
     let finalEmail = (showTestimonial && formData.email.trim()) ? formData.email.trim().toLowerCase() : null;
 
-    // 2. If empty, safely fallback to the SECURE Server-Side prop we passed in
     if (!finalName && initialAuthUser?.name?.trim()) finalName = initialAuthUser.name.trim();
     if (!finalEmail && initialAuthUser?.email?.trim()) finalEmail = initialAuthUser.email.trim().toLowerCase();
 
