@@ -259,7 +259,7 @@ export default function GeneralDashboardPage() {
 
   const TABS = [
     { id: 'Overview', icon: BookOpen, label: 'Overview', short: 'Overview' },
-    { id: 'Online Courses', icon: Video, label: 'Live Classes', short: 'Live' },
+    { id: 'Online Courses', icon: Video, label: 'Online Classes', short: 'Live' },
     { id: 'Recording Courses', icon: PlayCircle, label: 'Recordings', short: 'Records' },
     { id: 'My Certificates', icon: Award, label: 'Certificates', short: 'Awards' },
   ];
@@ -458,9 +458,9 @@ function AccountOverviewView({ userName, orders, enrollments, certificates, onNa
               <h3 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight mb-3 text-white leading-tight">Welcome back, {userName}</h3>
               <p className="text-white/80 font-medium text-base sm:text-lg tracking-wide leading-relaxed max-w-2xl">
                 {totalCourses === 0 && certificates.length === 0 ? (
-                    "You have no trace of activity with GyanHub! Keep building your credentials. 🚀"
+                    "You have no trace of activity with GyanHub! Keep building your credentials. "
                 ) : (
-                  <>You have <span className="text-amber-400 font-semibold">{totalCourses} courses</span> and <span className="text-indigo-400 font-semibold">{certificates.length} certificates</span>! Keep building your credentials. 🚀</>
+                  <>You have <span className="text-amber-400 font-semibold">{totalCourses} courses</span> and <span className="text-indigo-400 font-semibold">{certificates.length} certificates</span>! Keep building your credentials. </>
                 )}
               </p>
             </div>
@@ -905,7 +905,7 @@ function MyCertificatesView({ certificates, formatDate, showToast }: any) {
         <h2 className="text-4xl lg:text-5xl font-extrabold tracking-tight text-slate-800">My Certificates</h2>
         {certificates?.length > 0 && (
            <div className="bg-amber-100 border border-amber-200 text-amber-800 px-4 py-2 rounded-full text-xs font-semibold flex items-center gap-2 shadow-sm">
-             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Top Learner Status
+             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> Industry Standard Certificate
            </div>
         )}
       </div>

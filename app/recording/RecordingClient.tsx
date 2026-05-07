@@ -527,7 +527,7 @@ export default function RecordingClient() {
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row gap-8 items-center relative z-10">
           <div className="flex-1 text-center md:text-left">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-300 font-medium text-xs md:text-sm mb-6 border border-blue-500/20 backdrop-blur-sm">
-              <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" /> Learn Today | Lead Tomorrow
+              <TrendingUp className="w-3.5 h-3.5 md:w-4 md:h-4" /> Professional Courses Recording
             </div>
             <h1 className="text-3xl md:text-5xl lg:text-6xl font-extrabold tracking-tight mb-4 md:mb-6 leading-[1.15]">
               Master Practical Skills. <br className="hidden md:block"/>

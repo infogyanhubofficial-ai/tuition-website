@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { supabase } from '@/lib/supabase'; // Imported Supabase client
 import { 
   Facebook, Youtube, Instagram, Linkedin, 
   Mail, ChevronUp, MessageCircle, ShieldCheck, CheckCircle2,
@@ -40,16 +41,32 @@ export default function Footer() {
   const [email, setEmail] = useState('');
   const [subscribeStatus, setSubscribeStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
 
-  const handleSubscribe = (e: React.FormEvent) => {
+  const handleSubscribe = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return;
     
     setSubscribeStatus('submitting');
-    setTimeout(() => {
+    
+    try {
+      const { error } = await supabase
+        .from('newsletter_subscribers')
+        .insert([{ email: cleanEmail }]);
+
+      // If the error is a unique constraint violation (code 23505), they are already subscribed.
+      // We gracefully treat it as a success to avoid confusing the user.
+      if (error && error.code !== '23505') {
+        throw error;
+      }
+
       setSubscribeStatus('success');
       setEmail('');
       setTimeout(() => setSubscribeStatus('idle'), 3000);
-    }, 1000);
+    } catch (err: any) {
+      console.error("Newsletter Error:", err.message);
+      alert("Failed to subscribe. Please try again.");
+      setSubscribeStatus('idle');
+    }
   };
 
   const scrollToTop = () => {

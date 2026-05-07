@@ -138,14 +138,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const renderSidebarLinks = (onMobileClose?: () => void) => {
     return (
       <div className="space-y-1.5">
-        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-4 mb-2 mt-2">Personal</p>
+        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-4 mb-2 mt-2">Online Courses & Recordings</p>
         <NavButton icon={<Home size={20} />} label="Gyan Hub" href="/dashboard" active={isHomeActive && !isInvoicesOpen && !isChatOpen} onClick={onMobileClose} colorTheme="blue" />
         
         <div className="h-px bg-slate-200/50 my-6 mx-4" />
-        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-4 mb-2">Explore Hub</p>
+        <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-4 mb-2">Explore More</p>
 
         <Link href="/onlinecourse" onClick={onMobileClose} className="group flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100/50 hover:text-slate-900 transition-all rounded-xl hover:scale-[1.01]">
-          <BookOpen size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" /> Live Courses
+          <BookOpen size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" /> Online Courses
         </Link>
         <Link href="/recording" onClick={onMobileClose} className="group flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-100/50 hover:text-slate-900 transition-all rounded-xl hover:scale-[1.01]">
           <PlayCircle size={20} className="text-slate-400 group-hover:text-blue-500 transition-colors" /> Recordings
@@ -154,7 +154,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <div className="h-px bg-slate-200/50 my-6 mx-4" />
         <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest px-4 mb-2">Support & settings</p>
         
-        <NavButton icon={<Receipt size={20} />} label="Invoices" onClick={() => { setIsInvoicesOpen(prev => !prev); setIsChatOpen(false); onMobileClose?.(); }} active={isInvoicesOpen} colorTheme="blue" />
+        <NavButton icon={<Receipt size={20} />} label="My Invoices" onClick={() => { setIsInvoicesOpen(prev => !prev); setIsChatOpen(false); onMobileClose?.(); }} active={isInvoicesOpen} colorTheme="blue" />
         <NavButton icon={<MessageCircle size={20} />} label="Support Chat" onClick={() => { setIsChatOpen(prev => !prev); setIsInvoicesOpen(false); onMobileClose?.(); }} active={isChatOpen} colorTheme="blue" />
 
         <a href="https://wa.me/9763695665" target="_blank" rel="noopener noreferrer" className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-slate-600 hover:bg-green-50 hover:text-green-700 transition-all group hover:scale-[1.01]`}>
@@ -195,13 +195,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               className="fixed inset-y-0 left-0 w-[80%] max-w-sm bg-white shadow-2xl z-[101] lg:hidden flex flex-col"
             >
               <div className="p-4 sm:p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm">
-                    {userName?.charAt(0).toUpperCase() || 'G'}
-                  </div>
-                  <span className="font-extrabold text-lg tracking-tight text-slate-900">Menu</span>
+                <div className="flex items-center gap-3 overflow-hidden">
+                  {userAvatar ? (
+                    <img src={userAvatar} className="w-8 h-8 rounded-lg object-cover border border-slate-200 shadow-sm shrink-0" alt={userName} />
+                  ) : (
+                    <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold shadow-sm shrink-0">
+                      {userName?.charAt(0).toUpperCase() || 'G'}
+                    </div>
+                  )}
+                  <span className="font-extrabold text-lg tracking-tight text-slate-900 truncate">
+                    {userName}&apos;s Menu
+                  </span>
                 </div>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors">
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full transition-colors shrink-0">
                   <X size={20} className="text-slate-600"/>
                 </button>
               </div>
@@ -231,11 +237,11 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               )}
               <div className="flex items-center gap-1.5 sm:gap-2">
                 <p className="flex items-center gap-1.5 sm:gap-2 text-[16px] sm:text-[20px] font-extrabold tracking-tight">
-                  <span className="text-slate-800 hidden sm:inline">{isLoadingUser ? 'Loading...' : userName}</span>
-                  <span className="text-slate-300 font-normal hidden sm:inline">|</span>
-                  <span className="text-blue-700 font-bold hidden sm:inline">Dashboard</span>
+                  <span className="text-slate-800">{isLoadingUser ? 'Loading...' : userName}</span>
+                  <span className="text-slate-300 font-normal">|</span>
+                  <span className="text-blue-700 font-bold">Dashboard</span>
                 </p>
-                <ChevronDown size={16} className={`text-slate-400 transition-transform hidden sm:block ${isProfileOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown size={16} className={`text-slate-400 transition-transform ${isProfileOpen ? 'rotate-180' : ''}`} />
               </div>
             </button>
 

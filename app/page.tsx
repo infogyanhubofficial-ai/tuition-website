@@ -2,13 +2,15 @@ import type { Metadata } from "next";
 import HomeClient from "./HomeClient";
 
 const siteUrl = "https://www.gyanhub.com.np";
+// Keep this for OpenGraph/Social Media previews
 const logoUrl =
   "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
 
-  title: "GyanHub - Learn Today | Lead Tomorrow",
+  // Changed: Removed the slogan pipe to prevent it from being indexed as a separate sitelink
+  title: "GyanHub | Online Courses & Verified Tutors in Nepal",
 
   description:
     "GyanHub is Nepal’s all-in-one learning platform for online courses, recorded courses, verified tutors, tuition vacancies, certificate verification, and job-ready engineering training in AutoCAD, GIS, QGIS, Revit, ETABS, SAFE, RCDC, SolidWorks, estimation, costing, billing, and property valuation.",
@@ -54,14 +56,29 @@ export const metadata: Metadata = {
   publisher: "GyanHub",
   category: "Education",
 
+  // FIXED: Updated icon paths to your local /public/images folder
+  icons: {
+    icon: [
+      { url: "/images/favicon.ico" },
+      { url: "/images/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/images/icon.png", sizes: "512x512", type: "image/png" }, // This fixes the zoomed look
+    ],
+    apple: [
+      { url: "/images/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  
+  // Added: Connects your webmanifest
+  manifest: "/images/site.webmanifest",
+
   alternates: {
     canonical: siteUrl,
   },
 
   openGraph: {
-    title: "GyanHub - Learn Today | Lead Tomorrow",
+    title: "GyanHub | Online Courses & Verified Tutors",
     description:
-      "Find verified tutors, post tuition requests, join live courses, access recorded courses, verify certificates, and learn job-ready engineering skills with GyanHub.",
+      "Find verified tutors, post tuition requests, join live courses, access recorded courses, and learn job-ready skills with GyanHub.",
     url: siteUrl,
     siteName: "GyanHub",
     images: [
@@ -78,9 +95,9 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "GyanHub - Learn Today | Lead Tomorrow",
+    title: "GyanHub | Online Courses & Verified Tutors",
     description:
-      "Nepal’s learning platform for tutors, live courses, recorded courses, engineering training, and certificate verification.",
+      "Nepal’s learning platform for tutors, live courses, recorded courses, and engineering training.",
     images: [logoUrl],
   },
 
@@ -106,10 +123,11 @@ export default function Page() {
         "@id": `${siteUrl}/#organization`,
         name: "GyanHub",
         url: siteUrl,
-        logo: logoUrl,
+        // Using the local high-res icon for Google's Knowledge Graph
+        logo: `${siteUrl}/images/icon.png`,
         slogan: "Learn Today | Lead Tomorrow",
         description:
-          "GyanHub is a Nepal-based learning platform offering online courses, recorded courses, verified tutors, tuition posting, certificate verification, and professional skill training.",
+          "GyanHub is a Nepal-based learning platform offering online courses, recorded courses, verified tutors, and professional skill training.",
         address: {
           "@type": "PostalAddress",
           addressCountry: "NP",
@@ -153,7 +171,6 @@ export default function Page() {
           "Certificate Verification",
           "Become a Tutor",
           "Engineering Skill Training",
-          "Career-Ready Course Bundles",
         ].map((name, index) => ({
           "@type": "ListItem",
           position: index + 1,

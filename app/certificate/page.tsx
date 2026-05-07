@@ -59,7 +59,8 @@ function SearchPortal() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  const [stats, setStats] = useState({ alumni: 0, activeSyllabi: 0 });
+  // FIX: Removed activeSyllabi from state
+  const [stats, setStats] = useState({ alumni: 0 });
   
   // Ref for auto-scrolling
   const resultsRef = useRef<HTMLElement>(null);
@@ -67,11 +68,9 @@ function SearchPortal() {
   // Fetch Global Stats on Mount
   useEffect(() => {
     const fetchInitialData = async () => {
-      const [certCount, syllabiCount] = await Promise.all([
-        supabase.from('certificates').select('*', { count: 'exact', head: true }),
-        supabase.from('syllabi').select('*', { count: 'exact', head: true }).eq('status', 'active')
-      ]);
-      setStats({ alumni: certCount.count || 0, activeSyllabi: syllabiCount.count || 0 });
+      // FIX: Removed the unnecessary syllabi count query
+      const { count } = await supabase.from('certificates').select('*', { count: 'exact', head: true });
+      setStats({ alumni: count || 0 });
     };
     fetchInitialData();
   }, []);
@@ -272,7 +271,8 @@ function SearchPortal() {
               </div>
               <div className="hidden md:block w-px h-16 bg-slate-800"></div>
               <div>
-                <div className="text-4xl md:text-5xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 mb-2">{stats.activeSyllabi}</div>
+                {/* FIX: Hardcoded "10+" here */}
+                <div className="text-4xl md:text-5xl font-serif font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400 mb-2">10+</div>
                 <div className="text-sm font-semibold text-slate-400 uppercase tracking-widest">Active Courses</div>
               </div>
             </div>

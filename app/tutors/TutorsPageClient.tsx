@@ -247,7 +247,7 @@ export default function TutorsPageClient() {
   const [quickViewTutor, setQuickViewTutor] = useState<Tutor | null>(null);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   
-  const [subjectSearch, setSubjectSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [location, setLocation] = useState('All');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [maxRate, setMaxRate] = useState<number>(5000);
@@ -259,7 +259,6 @@ export default function TutorsPageClient() {
     const fetchData = async () => {
       setLoading(true);
       
-      // Fixed: Reverted back to a simple select('*') to prevent foreign key errors
       const { data: tutorData } = await supabase
         .from('tutors')
         .select('*')
@@ -286,6 +285,9 @@ export default function TutorsPageClient() {
 
   const filteredTutors = useMemo(() => {
     return tutors.filter((tutor) => {
+      const nameStr = String(tutor.name || '').toLowerCase();
+      const locationStr = String(tutor.location || '').toLowerCase();
+      
       let subjectStr = '';
       if (Array.isArray(tutor.subject)) {
         subjectStr = tutor.subject.join(' ').toLowerCase();
@@ -293,16 +295,20 @@ export default function TutorsPageClient() {
         subjectStr = String(tutor.subject || '').toLowerCase();
       }
 
-      const searchStr = subjectSearch.toLowerCase().trim();
-      const matchesSubject = !searchStr || subjectStr.includes(searchStr);
-      const matchesLocation = location === 'All' || String(tutor.location || '').toLowerCase() === location.toLowerCase();
+      const searchStr = searchQuery.toLowerCase().trim();
+      const matchesSearch = !searchStr || 
+                            nameStr.includes(searchStr) || 
+                            subjectStr.includes(searchStr) || 
+                            locationStr.includes(searchStr);
+
+      const matchesExactLocation = location === 'All' || locationStr === location.toLowerCase();
       const matchesVerified = !verifiedOnly || tutor.verified === true;
       const rate = Number(tutor.hour_rate);
       const matchesRate = Number.isNaN(rate) || rate <= maxRate;
 
-      return matchesSubject && matchesLocation && matchesVerified && matchesRate;
+      return matchesSearch && matchesExactLocation && matchesVerified && matchesRate;
     });
-  }, [tutors, subjectSearch, location, verifiedOnly, maxRate]);
+  }, [tutors, searchQuery, location, verifiedOnly, maxRate]);
 
   const totalPages = Math.ceil(filteredTutors.length / ITEMS_PER_PAGE);
   const paginatedTutors = filteredTutors.slice(
@@ -311,7 +317,7 @@ export default function TutorsPageClient() {
   );
 
   return (
-    <div className="relative min-h-screen bg-[#F8FAFC] px-4 py-8 sm:px-6 lg:px-8 font-sans overflow-hidden">
+    <div className="relative min-h-screen bg-[#F8FAFC] px-4 pt-8 pb-28 sm:px-6 lg:px-8 lg:pb-8 font-sans overflow-hidden">
       
       {/* Gradient Background Accents */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
@@ -389,19 +395,20 @@ export default function TutorsPageClient() {
                 </button>
 
                 <div className="space-y-6">
-                  <div>
-                    <label htmlFor="subject-search" className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3 block">Search Subject</label>
+                  {/* Desktop Only Search Bar inside Filters */}
+                  <div className="hidden lg:block">
+                    <label htmlFor="search-query" className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3 block">Master Search</label>
                     <div className="relative group">
                       <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" />
                       <input 
-                        id="subject-search"
-                        name="subjectSearch"
+                        id="search-query"
+                        name="searchQuery"
                         type="text" 
-                        placeholder="e.g. Mathematics, React..." 
-                        aria-label="Search tutors by subject"
+                        placeholder="e.g. Advance Math, Kathmandu, Ramesh..." 
+                        aria-label="Search tutors by name, subject, or location"
                         className="w-full rounded-2xl border border-slate-200 bg-white/50 p-3.5 pl-11 text-sm font-medium text-slate-900 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
-                        value={subjectSearch}
-                        onChange={(e) => setSubjectSearch(e.target.value)}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
                   </div>
@@ -487,7 +494,7 @@ export default function TutorsPageClient() {
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">No Tutors Found</h3>
                         <p className="mt-2 text-slate-500 font-medium">Try adjusting your filters to see more results.</p>
                         <button 
-                          onClick={() => { setSubjectSearch(''); setLocation('All'); setVerifiedOnly(false); setMaxRate(5000); }}
+                          onClick={() => { setSearchQuery(''); setLocation('All'); setVerifiedOnly(false); setMaxRate(5000); }}
                           className="mt-6 rounded-xl bg-slate-100 px-6 py-3 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all active:scale-95 shadow-sm"
                         >
                           Reset Filters
@@ -498,7 +505,7 @@ export default function TutorsPageClient() {
                 </div>
 
                 {totalPages > 1 && (
-                  <div className="mt-12 flex items-center justify-between border-t border-slate-200/60 pt-6 mb-8">
+                  <div className="mt-12 flex items-center justify-between border-t border-slate-200/60 pt-6 mb-8 lg:mb-0">
                     <button
                       onClick={() => { setCurrentPage(prev => Math.max(prev - 1, 1)); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                       disabled={currentPage === 1}
@@ -523,6 +530,23 @@ export default function TutorsPageClient() {
               </div>
             )}
           </main>
+        </div>
+      </div>
+
+      {/* Mobile Sticky Bottom Search Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 border-t border-slate-200/80 bg-white/80 p-4 backdrop-blur-xl lg:hidden shadow-[0_-10px_30px_-15px_rgba(0,0,0,0.1)]">
+        <div className="relative group max-w-lg mx-auto">
+          <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-blue-500" />
+          <input 
+            id="search-query-mobile"
+            name="searchQueryMobile"
+            type="text" 
+            placeholder="Search tutors (e.g. Math, John)..." 
+            aria-label="Search tutors by name, subject, or location"
+            className="w-full rounded-2xl border border-slate-200 bg-white p-4 pl-12 text-base font-medium text-slate-900 outline-none transition-all focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 shadow-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 

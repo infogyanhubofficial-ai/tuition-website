@@ -16,15 +16,18 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = "https://www.gyanhub.com.np";
-const LOGO_URL = `${SITE_URL}/logo.png`;
-const OG_IMAGE_URL = `${SITE_URL}/logo.png`;
+// Points to your high-res square icon to fix the zoomed look in Google Search
+const LOGO_URL = `${SITE_URL}/images/icon.png`; 
+// Keep a horizontal 1200x630 image here for Facebook/Twitter cards
+const OG_IMAGE_URL = `${SITE_URL}/logo.png`; 
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
 
+  // RESTORED: Slogan is back in the main title
   title: {
     template: "%s | GyanHub",
-    default: "GyanHub - Learn Today | Lead Tomorrow",
+    default: "GyanHub - Learn Today | Lead Tomorrow", 
   },
 
   description:
@@ -40,7 +43,22 @@ export const metadata: Metadata = {
 
   authors: [{ name: "GyanHub Team" }],
 
+  // FIXED: The local, high-res icon configuration
+  icons: {
+    icon: [
+      { url: "/images/favicon.ico" },
+      { url: "/images/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/images/icon.png", sizes: "512x512", type: "image/png" }, 
+    ],
+    apple: [
+      { url: "/images/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  
+  manifest: "/images/site.webmanifest",
+
   openGraph: {
+    // RESTORED: Slogan in OpenGraph title
     title: "GyanHub - Learn Today | Lead Tomorrow",
     description:
       "Connect with the best tutors in Nepal. Join 1200+ students mastering technical skills.",
@@ -60,7 +78,7 @@ export const metadata: Metadata = {
 
   twitter: {
     card: "summary_large_image",
-    title: "GyanHub | Nepal’s Educator Network",
+    title: "GyanHub - Learn Today | Lead Tomorrow",
     description:
       "Expert-led technical training and student-tutor matching.",
     images: [OG_IMAGE_URL],
