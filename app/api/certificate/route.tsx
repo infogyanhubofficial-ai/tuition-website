@@ -6,22 +6,21 @@ export const runtime = "nodejs";
 
 // ─── Design Token System ────────────────────────────────────────────────────
 const COLORS = {
-  pageBg: "#f7fbff",
+  pageBg: "#f9fcff",
 
-  navy: "#16324d",         // Primary text
-  navySoft: "#66798c",     // Secondary text
-  navyLight: "#97a8b8",    // Tertiary / labels
+  navy: "#11263c",         // Primary text (Deepened for high contrast print feel)
+  navySoft: "#4a5d70",     // Secondary text
+  navyLight: "#869ab1",    // Tertiary / labels
 
-  courseBlue: "#255688",   // Blue → course title ONLY
-  accentOrange: "#ef8c2f", // Orange → underline accent ONLY
+  courseBlue: "#1a3b5c",   // Blue → course title ONLY 
+  accentOrange: "#d97725", // Orange → underline accent ONLY (Slightly burnt/formal)
 
-  gold: "#c7a04c",         // Gold → borders + seal ONLY
-  goldLine: "#d7bb74",     // Decorative hairlines (gold family)
+  gold: "#cda651",         // Gold → borders + seal ONLY (richer metallic tone)
+  goldLight: "#e3cc96",    // Light gold for gradients
+  goldLine: "#cda651",     // Decorative hairlines (gold family)
 
-  borderBlue: "#243e58",   // Outer frame border
+  borderBlue: "#1a3b5c",   // Outer frame border
   line: "#d5dfeb",         // Neutral separators
-
-  qrBg: "#ffffff",         // QR contrast background
 };
 
 const DEFAULTS = {
@@ -34,7 +33,6 @@ const DEFAULTS = {
   verifyBaseUrl: "https://www.gyanhub.com.np/certificate",
   logoUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BG_REMOVED.png",
-  // Stamp and director signature URLs updated to new constant, working URLs
   sealUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/STAMP.png",
   directorSignatureUrl:
@@ -178,7 +176,6 @@ function truncateText(value: string, maxLength: number) {
   return `${value.slice(0, maxLength - 1).trim()}…`;
 }
 
-// Increased max length to effectively prevent description truncation
 function cleanDescription(value?: string | null): string {
   if (!value || !value.trim()) return "";
   return truncateText(value.replace(/\s+/g, " ").trim(), 2000); 
@@ -194,6 +191,12 @@ function buildVerificationUrl(name: string, email: string) {
 function isUniqueCodeViolation(errorMessage?: string | null) {
   if (!errorMessage) return false;
   return errorMessage.toLowerCase().includes("certificates_certificate_code_key");
+}
+
+function generateHashSimulation(certCode: string): string {
+  // Generates a mock security hash purely for visual authenticity
+  const base = certCode.replace(/[^A-Z0-9]/g, '');
+  return `${base.split('').reverse().join('')}X9A8${base.substring(0, 3)}`.toUpperCase();
 }
 
 // ─── DB Helpers ──────────────────────────────────────────────────────────────
@@ -331,10 +334,9 @@ async function buildTemplateData(
   const certCode = cert.certificate_code || "";
   const verificationUrl = buildVerificationUrl(studentName, studentEmail);
 
-  // QR size increased by 30%: 160 → 208
   const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
     margin: 1,
-    width: 208,
+    width: 300,
     color: { dark: COLORS.navy, light: "#ffffff" },
   });
 
@@ -366,22 +368,24 @@ async function buildTemplateData(
 // CERTIFICATE TEMPLATE
 // ─────────────────────────────────────────────────────────────────────────────
 function CertificateTemplate(data: CertificateTemplateData) {
-  const FOOTER_H = 128;
+  const FOOTER_H = 140;
 
-  // Dynamically calculate font size so long names fit onto a single line
+  // 1. Adaptive Name Scaling (softer, allows wrapping for extreme lengths)
   const nameLength = data.studentName.length;
-  let nameFontSize = 110; // Default font size
-  if (nameLength > 16) {
-    // Proportional scaling down for strings longer than 16 characters
-    // Math.max prevents the font from getting impractically small
-    nameFontSize = Math.max(40, Math.floor(110 * (16 / nameLength)));
-  }
+  let nameFontSize = 76; // Luxury default size
+  if (nameLength > 20) nameFontSize = 64;
+  if (nameLength > 28) nameFontSize = 54;
+
+  // 2. Course Size Scaling
+  const courseLength = data.courseName.length;
+  let courseFontSize = 40; 
+  if (courseLength > 40) courseFontSize = 32;
 
   return (
     <div
       style={{
         width: "1200px",
-        height: "900px",
+        height: "960px", 
         display: "flex",
         position: "relative",
         backgroundColor: COLORS.pageBg,
@@ -390,635 +394,519 @@ function CertificateTemplate(data: CertificateTemplateData) {
         color: COLORS.navy,
       }}
     >
-      {/* Outer navy frame */}
+      {/* Background Central Logo Watermark - Opacity reduced for better readability */}
+      <img
+        src={data.logoUrl}
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: "50%",
+          width: "700px",
+          height: "700px",
+          transform: "translate(-50%, -50%)",
+          opacity: 0.01,
+          objectFit: "contain",
+          zIndex: 0,
+        }}
+      />
+
+      {/* Outer engraved border system */}
       <div
         style={{
           display: "flex",
           width: "100%",
           height: "100%",
-          border: `1px solid ${COLORS.borderBlue}`,
-          padding: "9px",
+          border: `1.5px solid ${COLORS.borderBlue}`,
+          padding: "10px",
           boxSizing: "border-box",
           position: "relative",
-          backgroundColor: COLORS.pageBg,
+          backgroundColor: "transparent",
         }}
       >
-        {/* Inner gold frame */}
         <div
           style={{
             display: "flex",
             width: "100%",
             height: "100%",
-            border: `1px solid rgba(199,160,76,0.58)`,
+            border: `1px solid rgba(26, 59, 92, 0.2)`,
+            padding: "4px",
             boxSizing: "border-box",
-            padding: "14px 44px 14px 44px",
-            flexDirection: "column",
-            position: "relative",
-            backgroundColor: COLORS.pageBg,
           }}
         >
-          {/* Background depth layers */}
-          <div
-            style={{
-              display: "flex",
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              width: "1020px",
-              height: "760px",
-              transform: "translate(-50%, -50%)",
-              borderRadius: "999px",
-              background:
-                "radial-gradient(circle, rgba(47,109,179,0.033) 0%, rgba(47,109,179,0.014) 45%, rgba(247,251,255,0) 72%)",
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              position: "absolute",
-              inset: "0",
-              opacity: 0.015,
-              backgroundImage:
-                "radial-gradient(circle, rgba(22,50,77,1) 0.35px, transparent 0.35px)",
-              backgroundSize: "4px 4px",
-            }}
-          />
-
-          {/* Gold corner accents */}
-          {(
-            [
-              { t: "10px", l: "10px", bt: true, bl: true },
-              { t: "10px", r: "10px", bt: true, br: true },
-              { b: "10px", l: "10px", bb: true, bl: true },
-              { b: "10px", r: "10px", bb: true, br: true },
-            ] as Array<Record<string, string | boolean>>
-          ).map((c, i) => {
-            const s: Record<string, string | number> = {
-              display: "flex",
-              position: "absolute",
-              width: "16px",
-              height: "16px",
-            };
-            if (c.t) s.top = c.t as string;
-            if (c.r) s.right = c.r as string;
-            if (c.b) s.bottom = c.b as string;
-            if (c.l) s.left = c.l as string;
-            if (c.bt) s.borderTop = `1.5px solid rgba(199,160,76,0.86)`;
-            if (c.bb) s.borderBottom = `1.5px solid rgba(199,160,76,0.86)`;
-            if (c.bl) s.borderLeft = `1.5px solid rgba(199,160,76,0.86)`;
-            if (c.br) s.borderRight = `1.5px solid rgba(199,160,76,0.86)`;
-            return <div key={i} style={s} />;
-          })}
-
-          {/* ══════════════════════════════════════════
-              ZONE 1 — HEADER
-          ══════════════════════════════════════════ */}
+          {/* Inner premium gold frame - Gold border thickness increased to 2.5px */}
           <div
             style={{
               display: "flex",
               width: "100%",
+              height: "100%",
+              border: `2.5px solid ${COLORS.gold}`,
+              boxSizing: "border-box",
+              padding: "48px 64px 48px 64px", 
               flexDirection: "column",
-              alignItems: "center",
               position: "relative",
-              zIndex: 1,
-              flexShrink: 0,
+              backgroundColor: "transparent",
             }}
           >
+            {/* Abstract Geometric Guilloché Pattern */}
             <div
               style={{
                 display: "flex",
-                position: "relative",
+                position: "absolute",
+                inset: "0",
+                opacity: 0.03,
+                backgroundImage: "radial-gradient(circle at center, rgba(17,38,60,0.8) 0.5px, transparent 1px)",
+                backgroundSize: "14px 14px",
+                zIndex: 0,
+              }}
+            />
+
+            {/* Micro inner border ring */}
+            <div
+              style={{
+                display: "flex",
+                position: "absolute",
+                inset: "6px",
+                border: `1px solid rgba(205, 166, 81, 0.4)`,
+                zIndex: 0,
+              }}
+            />
+
+            {/* Holographic Strip Simulation (Security Feature) */}
+            <div
+              style={{
+                display: "flex",
+                position: "absolute",
+                left: "24px",
+                top: "10%",
+                bottom: "10%",
+                width: "4px",
+                background: `linear-gradient(to bottom, transparent, rgba(205, 166, 81, 0.3), rgba(17, 38, 60, 0.1), rgba(205, 166, 81, 0.3), transparent)`,
+                zIndex: 1,
+              }}
+            />
+
+            {/* Premium Gold Corner Accents - Border thickness increased to 2.5px */}
+            {(
+              [
+                { t: "12px", l: "12px", dot: { top: "16px", left: "16px" }, type: "tl" },
+                { t: "12px", r: "12px", dot: { top: "16px", right: "16px" }, type: "tr" },
+                { b: "12px", l: "12px", dot: { bottom: "16px", left: "16px" }, type: "bl" },
+                { b: "12px", r: "12px", dot: { bottom: "16px", right: "16px" }, type: "br" },
+              ] as Array<Record<string, any>>
+            ).map((c, i) => {
+              const s: Record<string, string | number> = {
+                display: "flex", position: "absolute", width: "32px", height: "32px", zIndex: 1
+              };
+              if (c.t) s.top = c.t; if (c.r) s.right = c.r; if (c.b) s.bottom = c.b; if (c.l) s.left = c.l;
+              
+              const isTop = c.type.includes('t'); const isBottom = c.type.includes('b');
+              const isLeft = c.type.includes('l'); const isRight = c.type.includes('r');
+
+              if (isTop) s.borderTop = `2.5px solid ${COLORS.gold}`;
+              if (isBottom) s.borderBottom = `2.5px solid ${COLORS.gold}`;
+              if (isLeft) s.borderLeft = `2.5px solid ${COLORS.gold}`;
+              if (isRight) s.borderRight = `2.5px solid ${COLORS.gold}`;
+
+              return (
+                <div key={i} style={s}>
+                  <div style={{
+                    display: "flex", position: 'absolute', width: '5px', height: '5px',
+                    backgroundColor: COLORS.gold, ...c.dot
+                  }} />
+                </div>
+              );
+            })}
+
+            {/* ══════════════════════════════════════════
+                ZONE 1 — HEADER
+            ══════════════════════════════════════════ */}
+            <div
+              style={{
+                display: "flex",
+                width: "100%",
+                flexDirection: "column",
                 alignItems: "center",
-                justifyContent: "center",
-                width: "1040px",
-                height: "180px",
+                position: "relative",
+                zIndex: 2,
+                flexShrink: 0,
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  position: "absolute",
-                  width: "1000px",
-                  height: "160px",
-                  borderRadius: "999px",
-                  background:
-                    "radial-gradient(ellipse, rgba(47,109,179,0.10) 0%, rgba(47,109,179,0.04) 50%, rgba(247,251,255,0) 75%)",
-                }}
-              />
               <img
                 src={data.logoUrl}
                 alt="Issuer Logo"
-                width={880}
-                height={176}
-                style={{ objectFit: "contain", position: "relative" }}
+                width={550}
+                height={110}
+                style={{ objectFit: "contain" }}
               />
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: "8px",
+                  fontSize: "12px",
+                  letterSpacing: "4px",
+                  textTransform: "uppercase",
+                  color: COLORS.navySoft,
+                  fontWeight: 600,
+                  fontFamily: "sans-serif" 
+                }}
+              >
+                {data.issuerSubtitle}
+              </div>
             </div>
 
+            {/* ══════════════════════════════════════════
+                ZONE 2 — BODY 
+            ══════════════════════════════════════════ */}
             <div
               style={{
                 display: "flex",
-                marginTop: "4px",
-                fontSize: "11px",
-                letterSpacing: "3.6px",
-                textTransform: "uppercase",
-                color: COLORS.navySoft,
-                fontWeight: 700,
-              }}
-            >
-              {data.issuerSubtitle}
-            </div>
-          </div>
-
-          {/* ══════════════════════════════════════════
-              ZONE 2 — BODY
-          ══════════════════════════════════════════ */}
-          <div
-            style={{
-              display: "flex",
-              flexGrow: 1,
-              width: "100%",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              textAlign: "center",
-              position: "relative",
-              zIndex: 1,
-              minHeight: 0,
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                display: "flex",
-                fontSize: "28px",
-                textTransform: "uppercase",
-                letterSpacing: "2.8px",
-                color: COLORS.navy,
-                fontWeight: 400,
-                lineHeight: 1.0,
-                opacity: 0.80,
-              }}
-            >
-              Certificate of Achievement
-            </div>
-
-            {/* Gold dividers */}
-            <div
-              style={{
-                display: "flex",
-                width: "80px",
-                height: "1.5px",
-                backgroundColor: COLORS.gold,
-                marginTop: "13px",
-              }}
-            />
-            <div
-              style={{
-                display: "flex",
-                width: "240px",
-                height: "1px",
-                backgroundColor: COLORS.goldLine,
-                marginTop: "6px",
-                opacity: 0.48,
-              }}
-            />
-
-            <div
-              style={{
-                display: "flex",
-                marginTop: "16px",
-                fontSize: "15px",
-                color: COLORS.navySoft,
-                lineHeight: 1.4,
-              }}
-            >
-              This is to certify that
-            </div>
-
-            {/* Student Name */}
-            <div
-              style={{
-                display: "flex",
-                position: "relative",
+                flexGrow: 1,
+                width: "100%",
+                flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                marginTop: "14px",
-                width: "100%",
+                textAlign: "center",
+                position: "relative",
+                zIndex: 2,
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  position: "absolute",
-                  width: "820px",
-                  height: "150px",
-                  borderRadius: "999px",
-                  background:
-                    "radial-gradient(ellipse, rgba(31,151,178,0.055) 0%, rgba(31,151,178,0.02) 45%, rgba(247,251,255,0) 70%)",
+                  fontSize: "26px",
+                  textTransform: "uppercase",
+                  letterSpacing: "3px",
+                  color: COLORS.navy,
+                  fontWeight: 400,
+                  lineHeight: 1.0,
+                  opacity: 0.9,
+                }}
+              >
+                Certificate of Achievement
+              </div>
+
+              {/* Elegant formal dividers */}
+              <div
+                style={{
+                  display: "flex", width: "80px", height: "2px",
+                  backgroundColor: COLORS.gold, marginTop: "16px",
                 }}
               />
               <div
                 style={{
+                  display: "flex", width: "240px", height: "1px",
+                  backgroundColor: COLORS.goldLine, marginTop: "6px", opacity: 0.5,
+                }}
+              />
+
+              <div
+                style={{
+                  display: "flex", marginTop: "24px", fontSize: "15px",
+                  color: COLORS.navySoft, letterSpacing: "1px",
+                }}
+              >
+                This is to certify that
+              </div>
+
+              {/* Strict Typography Hierarchy: Premium Student Name */}
+              <div
+                style={{
                   display: "flex",
-                  padding: "0 28px",
+                  marginTop: "20px",
+                  padding: "0 24px",
                   fontSize: `${nameFontSize}px`,
-                  whiteSpace: "nowrap", // Crucial for single-line enforcement
-                  lineHeight: 0.96,
+                  lineHeight: 1.1,
                   color: COLORS.navy,
-                  fontWeight: 800,
+                  fontWeight: 800, // Slightly bolder for premium weight
+                  fontStyle: "normal",
                   textAlign: "center",
-                  maxWidth: "1060px",
-                  letterSpacing: "-2.5px",
-                  fontFamily: "Georgia, 'Times New Roman', serif",
-                  position: "relative",
+                  maxWidth: "1000px",
+                  flexWrap: "wrap", 
+                  justifyContent: "center",
+                  letterSpacing: "0px",
+                  fontFamily: "'Cormorant Garamond', 'Times New Roman', Georgia, serif",
                 }}
               >
                 {data.studentName}
               </div>
-            </div>
 
-            {/* Separator below name */}
-            <div
-              style={{
-                display: "flex",
-                width: "280px",
-                height: "1px",
-                backgroundColor: COLORS.line,
-                marginTop: "16px",
-              }}
-            />
-
-            <div
-              style={{
-                display: "flex",
-                marginTop: "13px",
-                fontSize: "15px",
-                color: COLORS.navySoft,
-              }}
-            >
-              has successfully completed
-            </div>
-
-            {/* Course title */}
-            <div
-              style={{
-                display: "flex",
-                marginTop: "12px",
-                padding: "0 70px",
-                fontSize: "42px",
-                color: COLORS.courseBlue,
-                fontWeight: 800,
-                textAlign: "center",
-                maxWidth: "960px",
-                lineHeight: 1.13,
-                letterSpacing: "0.4px",
-              }}
-            >
-              {data.courseName}
-            </div>
-
-            {/* Orange accent underline */}
-            <div
-              style={{
-                display: "flex",
-                width: "180px",
-                height: "2.5px",
-                backgroundColor: COLORS.accentOrange,
-                marginTop: "10px",
-                borderRadius: "2px",
-              }}
-            />
-
-            <div
-              style={{
-                display: "flex",
-                marginTop: "12px",
-                maxWidth: "820px", // widened slightly to allow more text
-                textAlign: "center",
-                fontSize: "13.5px",
-                color: COLORS.navySoft,
-                lineHeight: 1.62,
-              }}
-            >
-              {data.courseDescription}
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                marginTop: "11px",
-                fontSize: "10.5px",
-                textTransform: "uppercase",
-                letterSpacing: "2px",
-                color: COLORS.navy,
-                fontWeight: 700,
-              }}
-            >
-              {data.courseDuration ? `Duration: ${data.courseDuration}` : ""}
-            </div>
-
-            {/* Body bottom divider */}
-            <div
-              style={{
-                display: "flex",
-                width: "300px",
-                height: "1px",
-                backgroundColor: COLORS.goldLine,
-                marginTop: "14px",
-                opacity: 0.46,
-              }}
-            />
-          </div>
-
-          {/* Hairline divider above footer */}
-          <div
-            style={{
-              display: "flex",
-              width: "calc(100% - 24px)",
-              marginLeft: "12px",
-              height: "1px",
-              backgroundColor: COLORS.line,
-              opacity: 0.50,
-              flexShrink: 0,
-            }}
-          />
-
-          {/* ══════════════════════════════════════════
-              ZONE 3 — FOOTER
-              Three equal columns (33.3% / 33.4% / 33.3%).
-              Left = Instructor | Centre = Seal + date | Right = Director.
-          ══════════════════════════════════════════ */}
-          <div
-            style={{
-              display: "flex",
-              width: "100%",
-              alignItems: "flex-end",
-              justifyContent: "space-between",
-              position: "relative",
-              zIndex: 1,
-              flexShrink: 0,
-              height: `${FOOTER_H}px`,
-              minHeight: `${FOOTER_H}px`,
-              paddingTop: "6px",
-            }}
-          >
-            {/* ── Left: Instructor Signature ── */}
-            <div
-              style={{
-                display: "flex",
-                width: "33.3%",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                height: "100%",
-              }}
-            >
-              <img
-                src={data.instructorSignatureUrl}
-                alt="Instructor Signature"
-                width={184}
-                height={56}
-                style={{ objectFit: "contain" }}
-              />
+              {/* Separator below name */}
               <div
                 style={{
-                  display: "flex",
-                  width: "196px",
-                  borderTop: `2px solid ${COLORS.navy}`,
-                  marginTop: "5px",
+                  display: "flex", width: "320px", height: "1px",
+                  backgroundColor: "rgba(26, 59, 92, 0.15)", marginTop: "20px",
                 }}
               />
-              <div
-                style={{
-                  display: "flex",
-                  marginTop: "5px",
-                  fontSize: "14.5px",
-                  color: COLORS.navy,
-                  fontWeight: 700,
-                  textAlign: "center",
-                }}
-              >
-                {data.instructorName}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  marginTop: "3px",
-                  fontSize: "9px",
-                  color: COLORS.navySoft,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.4px",
-                  textAlign: "center",
-                  fontWeight: 700,
-                }}
-              >
-                • {data.instructorTitle} •
-              </div>
-            </div>
 
-            {/* ── Centre: Seal + issue date ── */}
-            <div
-              style={{
-                display: "flex",
-                width: "33.4%",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                height: "100%",
-              }}
-            >
+              <div
+                style={{
+                  display: "flex", marginTop: "20px", fontSize: "15px",
+                  color: COLORS.navySoft, letterSpacing: "1px",
+                }}
+              >
+                has successfully completed
+              </div>
+
+              {/* Course Title Container */}
               <div
                 style={{
                   display: "flex",
-                  width: "118px",
-                  height: "118px",
+                  flexDirection: "column",
                   alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: "999px",
-                  background:
-                    "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(231,217,172,0.45) 72%, rgba(199,160,76,0.22) 100%)",
-                  boxShadow:
-                    "0 16px 36px rgba(0,0,0,0.17), 0 4px 10px rgba(199,160,76,0.28), inset 0 2px 8px rgba(199,160,76,0.62), inset 0 -4px 12px rgba(0,0,0,0.14)",
-                  border: "1.5px solid rgba(199,160,76,0.52)",
-                  marginBottom: "-6px",
+                  marginTop: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    fontSize: `${courseFontSize}px`,
+                    color: COLORS.courseBlue,
+                    fontWeight: 600,
+                    textAlign: "center",
+                    maxWidth: "900px",
+                    lineHeight: 1.2,
+                    letterSpacing: "0.5px",
+                    fontFamily: "'Cormorant Garamond', 'Times New Roman', Georgia, serif",
+                  }}
+                >
+                  {data.courseName}
+                </div>
+
+                {/* Formal Underline Accent */}
+                <div style={{ display: "flex", width: "180px", height: "2px", backgroundColor: COLORS.accentOrange, marginTop: "14px" }} />
+              </div>
+
+              {/* Course Description - Increased line-height for editorial elegance */}
+              <div
+                style={{
+                  display: "flex",
+                  marginTop: "20px",
+                  maxWidth: "700px", 
+                  textAlign: "center",
+                  fontSize: "14px",
+                  color: COLORS.navySoft,
+                  lineHeight: 1.8,
+                }}
+              >
+                {data.courseDescription}
+              </div>
+
+              <div
+                style={{
+                  display: "flex", marginTop: "18px", fontSize: "11px",
+                  textTransform: "uppercase", letterSpacing: "2.5px",
+                  color: COLORS.navy, fontWeight: 600,
+                }}
+              >
+                {data.courseDuration ? `Duration: ${data.courseDuration}` : ""}
+              </div>
+            </div>
+
+            {/* ══════════════════════════════════════════
+                ZONE 3 — FOOTER (Institutional Style)
+            ══════════════════════════════════════════ */}
+            <div
+              style={{
+                display: "flex",
+                width: "100%",
+                alignItems: "flex-end",
+                justifyContent: "space-between",
+                position: "relative",
+                zIndex: 2,
+                flexShrink: 0,
+                height: `${FOOTER_H}px`,
+                minHeight: `${FOOTER_H}px`,
+                paddingBottom: "16px",
+              }}
+            >
+              {/* ── Left: Instructor Signature (Flat, Engraved style) ── */}
+              <div
+                style={{
+                  display: "flex", width: "33.3%", flexDirection: "column",
+                  alignItems: "center", justifyContent: "flex-end", height: "100%",
                 }}
               >
                 <img
-                  src={data.sealUrl}
-                  alt="Official Seal"
-                  width={96}
-                  height={96}
-                  style={{ objectFit: "contain" }}
+                  src={data.instructorSignatureUrl}
+                  alt="Instructor Signature"
+                  width={160} height={50}
+                  style={{ objectFit: "contain", opacity: 0.85 }}
                 />
+                <div style={{ display: "flex", width: "200px", borderTop: `1px solid ${COLORS.navySoft}`, marginTop: "8px" }} />
+                <div
+                  style={{
+                    display: "flex", marginTop: "8px", fontSize: "14px",
+                    color: COLORS.navy, fontWeight: 600, letterSpacing: "0.5px",
+                  }}
+                >
+                  {data.instructorName}
+                </div>
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", marginTop: "4px", fontSize: "9px",
+                    color: COLORS.navyLight, textTransform: "uppercase",
+                    letterSpacing: "1.5px", fontWeight: 600,
+                  }}
+                >
+                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginRight: 6 }}></div>
+                  {data.instructorTitle}
+                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginLeft: 6 }}></div>
+                </div>
               </div>
 
+              {/* ── Centre: Official Embossed Seal + Date ── */}
               <div
                 style={{
-                  display: "flex",
-                  marginTop: "10px",
-                  fontSize: "9px",
-                  color: COLORS.navyLight,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.2px",
+                  display: "flex", width: "33.4%", flexDirection: "column",
+                  alignItems: "center", justifyContent: "flex-end", height: "100%",
                 }}
               >
-                Issued {data.formattedDate}
+                {/* Improved Foil Stamp Effect */}
+                <div
+                  style={{
+                    display: "flex", width: "120px", height: "120px",
+                    alignItems: "center", justifyContent: "center",
+                    borderRadius: "999px",
+                    background: `radial-gradient(circle, #ffffff 0%, ${COLORS.pageBg} 60%, ${COLORS.goldLight} 100%)`,
+                    border: `2.5px solid ${COLORS.gold}`,
+                    boxShadow: "inset 0 2px 8px rgba(205,166,81,0.4), 0 2px 4px rgba(0,0,0,0.05)",
+                    position: "relative",
+                  }}
+                >
+                  {/* Micro-text simulated rings */}
+                  <div style={{ display: "flex", position: "absolute", inset: "4px", border: `1px dashed ${COLORS.gold}`, borderRadius: "999px", opacity: 0.5 }} />
+                  <div style={{ display: "flex", position: "absolute", inset: "7px", border: `1px solid rgba(26,59,92,0.1)`, borderRadius: "999px" }} />
+                  <img
+                    src={data.sealUrl}
+                    alt="Official Seal"
+                    width={92} height={92} 
+                    style={{ objectFit: "contain", zIndex: 2 }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: "flex", marginTop: "16px", fontSize: "9px",
+                    color: COLORS.navySoft, textTransform: "uppercase",
+                    letterSpacing: "2px", fontWeight: 600,
+                  }}
+                >
+                  {`Issued • ${data.formattedDate}`}
+                </div>
+              </div>
+
+              {/* ── Right: Director Signature (Flat, Engraved style) ── */}
+              <div
+                style={{
+                  display: "flex", width: "33.3%", flexDirection: "column",
+                  alignItems: "center", justifyContent: "flex-end", height: "100%",
+                }}
+              >
+                <img
+                  src={data.directorSignatureUrl}
+                  alt="Director Signature"
+                  width={160} height={50}
+                  style={{ objectFit: "contain", opacity: 0.85 }}
+                />
+                <div style={{ display: "flex", width: "200px", borderTop: `1px solid ${COLORS.navySoft}`, marginTop: "8px" }} />
+                <div
+                  style={{
+                    display: "flex", marginTop: "8px", fontSize: "14px",
+                    color: COLORS.navy, fontWeight: 600, letterSpacing: "0.5px",
+                  }}
+                >
+                  {data.directorName}
+                </div>
+                <div
+                  style={{
+                    display: "flex", alignItems: "center", marginTop: "4px", fontSize: "9px",
+                    color: COLORS.navyLight, textTransform: "uppercase",
+                    letterSpacing: "1.5px", fontWeight: 600,
+                  }}
+                >
+                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginRight: 6 }}></div>
+                  {data.directorTitle}
+                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginLeft: 6 }}></div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Absolute Micro-text Authenticity Footer - Slightly enhanced legibility */}
+            <div style={{
+              display: "flex", position: "absolute", bottom: "16px", left: "64px", right: "64px",
+              justifyContent: "space-between", alignItems: "center", zIndex: 2,
+            }}>
+              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                {`HASH: ${generateHashSimulation(data.certCode)}`}
+              </div>
+              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "2px", textTransform: "uppercase" }}>
+                GYANHUB PVT LTD // AUTHENTIC DOCUMENT
+              </div>
+              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+                VER: GH-2026-X1
               </div>
             </div>
 
-            {/* ── Right: Director Signature ── */}
-            <div
-              style={{
-                display: "flex",
-                width: "33.3%",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                height: "100%",
-              }}
-            >
+          </div>
+
+          {/* ══════════════════════════════════════════
+              TOP-LEFT: Verified QR Area 
+          ══════════════════════════════════════════ */}
+          <div
+            style={{
+              display: "flex", position: "absolute", left: "48px", top: "48px",
+              flexDirection: "column", alignItems: "center", zIndex: 3,
+            }}
+          >
+            <div style={{ display: "flex", padding: "6px", backgroundColor: "#fff", border: `1px solid rgba(26,59,92,0.15)` }}>
               <img
-                src={data.directorSignatureUrl}
-                alt="Director Signature"
-                width={184}
-                height={56}
+                src={data.qrCodeDataUri}
+                alt="Verification QR"
+                width={104} height={104} 
                 style={{ objectFit: "contain" }}
               />
-              <div
-                style={{
-                  display: "flex",
-                  width: "196px",
-                  borderTop: `2px solid ${COLORS.navy}`,
-                  marginTop: "5px",
-                }}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  marginTop: "5px",
-                  fontSize: "14.5px",
-                  color: COLORS.navy,
-                  fontWeight: 700,
-                  textAlign: "center",
-                }}
-              >
-                {data.directorName}
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  marginTop: "3px",
-                  fontSize: "9px",
-                  color: COLORS.navySoft,
-                  textTransform: "uppercase",
-                  letterSpacing: "1.4px",
-                  textAlign: "center",
-                  fontWeight: 700,
-                }}
-              >
-                • {data.directorTitle} •
-              </div>
+            </div>
+            <div
+              style={{
+                display: "flex", marginTop: "8px", fontSize: "7px",
+                letterSpacing: "1px", color: COLORS.navySoft,
+                fontWeight: 600, textTransform: "uppercase",
+              }}
+            >
+              Scan to Verify
             </div>
           </div>
 
           {/* ══════════════════════════════════════════
-              TOP-LEFT: QR Code badge
+              TOP-RIGHT: Engraved Credential Badge 
           ══════════════════════════════════════════ */}
           <div
             style={{
-              display: "flex",
-              position: "absolute",
-              left: "20px",
-              top: "20px",
-              padding: "8px 8px 5px 8px",
-              border: `1px solid rgba(213,223,235,0.52)`,
-              backgroundColor: COLORS.qrBg,
-              borderRadius: "7px",
-              flexDirection: "column",
-              alignItems: "center",
-              zIndex: 2,
-              boxShadow: "0 2px 10px rgba(22,50,77,0.06)",
-            }}
-          >
-            <img
-              src={data.qrCodeDataUri}
-              alt="Verification QR"
-              width={91}
-              height={91}
-              style={{ objectFit: "contain" }}
-            />
-            <div
-              style={{
-                display: "flex",
-                marginTop: "4px",
-                fontSize: "7px",
-                letterSpacing: "0.6px",
-                color: COLORS.navySoft,
-                fontWeight: 700,
-                textTransform: "uppercase",
-              }}
-            >
-              Verify online
-            </div>
-            <div
-              style={{
-                display: "flex",
-                marginTop: "1px",
-                fontSize: "5.5px",
-                letterSpacing: "0.3px",
-                color: COLORS.navyLight,
-                fontWeight: 600,
-                textTransform: "uppercase",
-              }}
-            >
-              By GyanHub Pvt. Ltd
-            </div>
-          </div>
-
-          {/* ══════════════════════════════════════════
-              TOP-RIGHT: Credential ID badge
-          ══════════════════════════════════════════ */}
-          <div
-            style={{
-              display: "flex",
-              position: "absolute",
-              right: "20px",
-              top: "20px",
-              padding: "10px 15px",
-              border: `1px solid rgba(213,223,235,0.55)`,
-              backgroundColor: "rgba(248,251,255,0.96)",
-              borderRadius: "7px",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              zIndex: 2,
-              minWidth: "165px",
-              boxShadow: "0 2px 10px rgba(22,50,77,0.06)",
+              display: "flex", position: "absolute", right: "48px", top: "48px",
+              flexDirection: "column", alignItems: "flex-end", zIndex: 3,
+              height: "116px", // Anchors exactly to the height of the QR Box bounds
+              justifyContent: "flex-end", // Aligns content exactly on the lower baseline
             }}
           >
             <div
               style={{
-                display: "flex",
-                fontSize: "8px",
-                textTransform: "uppercase",
-                letterSpacing: "1.5px",
-                color: COLORS.navyLight,
-                fontWeight: 700,
+                display: "flex", fontSize: "8px", textTransform: "uppercase",
+                letterSpacing: "2px", color: COLORS.navySoft, fontWeight: 600,
               }}
             >
               {DEFAULTS.credentialLabel}
             </div>
             <div
               style={{
-                display: "flex",
-                marginTop: "6px",
-                fontSize: "16px",
-                color: COLORS.navy,
-                fontWeight: 800,
-                letterSpacing: "0.3px",
+                display: "flex", marginTop: "4px", fontSize: "16px",
+                color: COLORS.navy, fontWeight: 600, letterSpacing: "1px",
+                fontFamily: "monospace" 
               }}
             >
               {data.certCode}
             </div>
+            {/* Subtle gold underline to anchor the floating text */}
+            <div style={{ display: "flex", width: "40px", height: "1.5px", backgroundColor: COLORS.gold, marginTop: "4px", opacity: 0.8 }} />
           </div>
 
         </div>
@@ -1031,7 +919,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
 async function renderCertificatePng(data: CertificateTemplateData) {
   const image = new ImageResponse(CertificateTemplate(data), {
     width: 1200,
-    height: 900,
+    height: 960, 
   });
   const arrayBuffer = await image.arrayBuffer();
   return new Uint8Array(arrayBuffer);
@@ -1086,10 +974,9 @@ export async function GET(req: Request) {
     const certCode = searchParams.get("id") || "";
     const verificationUrl = buildVerificationUrl(studentName, studentEmail);
 
-    // QR size increased by 30%: 160 → 208
     const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
       margin: 1,
-      width: 208,
+      width: 300,
       color: { dark: COLORS.navy, light: "#ffffff" },
     });
 
@@ -1120,7 +1007,7 @@ export async function GET(req: Request) {
 
     return new ImageResponse(CertificateTemplate(data), {
       width: 1200,
-      height: 900,
+      height: 960, 
     });
   } catch (error) {
     console.error("GET /api/certificate error:", error);

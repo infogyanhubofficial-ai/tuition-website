@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -1630,6 +1631,12 @@ function BookingsManager({ courses, enrollments, batches, syllabi, refresh, onOp
     setHiddenBookingIds(new Set());
   };
 
+  const handleCopyContactsCSV = () => {
+    const header = "name,email,phone\n";
+    const rows = courseEnrollments.map(e => `"${e.full_name || ''}","${e.email || ''}","${e.whatsapp_number || ''}"`).join("\n");
+    navigator.clipboard.writeText(header + rows).then(() => alert("Contact details copied to clipboard!"));
+  };
+
   const handleCopyCSV = () => {
     const matchingSyllabus = syllabi.find(s => s.id.toString() === selectedCourse?.id?.toString() || s.name === selectedCourse?.title);
     const syllabusId = matchingSyllabus ? matchingSyllabus.id : (selectedCourse?.id || '');
@@ -1762,7 +1769,6 @@ function BookingsManager({ courses, enrollments, batches, syllabi, refresh, onOp
   });
 
   // Calculate Aggregates
-  const totalVolume = courseEnrollments.reduce((sum, e) => sum + (e.locked_price || 0), 0);
   const predictedVolume = courseEnrollments.reduce((sum, e) => sum + (e.confirmed ? (e.locked_price || 0) : 0), 0);
   const collectedVolume = courseEnrollments.reduce((sum, e) => sum + (e.paid_amount || 0), 0);
   const remainingVolume = courseEnrollments.reduce((sum, e) => {
@@ -1825,9 +1831,6 @@ function BookingsManager({ courses, enrollments, batches, syllabi, refresh, onOp
           <span className="text-sm font-black text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm whitespace-nowrap">
             Showing {courseEnrollments.length} Booking(s)
           </span>
-          <span className="text-sm font-bold text-slate-700 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm whitespace-nowrap">
-            Total Vol: <span className="text-slate-900 font-black">Rs. {totalVolume}</span>
-          </span>
           <span className="text-sm font-bold text-blue-800 bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 shadow-sm whitespace-nowrap">
             Predicted Vol: <span className="font-black">Rs. {predictedVolume}</span>
           </span>
@@ -1838,9 +1841,14 @@ function BookingsManager({ courses, enrollments, batches, syllabi, refresh, onOp
             Remaining: <span className="font-black">Rs. {remainingVolume}</span>
           </span>
         </div>
-        <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap shrink-0">
-          <Copy size={14} /> Copy CSV List
-        </button>
+        <div className="flex gap-2">
+          <button onClick={handleCopyContactsCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap shrink-0">
+            <Copy size={14} /> Contact Details
+          </button>
+          <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors shadow-sm whitespace-nowrap shrink-0">
+            <Copy size={14} /> Copy CSV List
+          </button>
+        </div>
       </div>
 
       {/* EXCEL SHEET STYLED TABLE */}

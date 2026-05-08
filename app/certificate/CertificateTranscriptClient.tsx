@@ -220,7 +220,7 @@ export default function CertificateTranscriptClient({ name, email }: { name: str
                 <span className="text-white/30 hidden md:inline">•</span>
                 <span className="bg-white/10 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 print:px-2 print:py-0.5">
                   <ShieldCheck className="w-4 h-4 text-[#1FA2A6] print:w-3 print:h-3" /> 
-                  10+ Active Courses
+                  {certs.length} Verified Certificate{certs.length > 1 ? 's' : ''}
                 </span>
                 <span className="bg-white/10 px-3 py-1 rounded-full border border-white/20 flex items-center gap-1.5 print:px-2 print:py-0.5">
                   <Award className="w-4 h-4 text-[#E86A2C] print:w-3 print:h-3" /> Top Skill: {certs[0].syllabus_name}
