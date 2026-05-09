@@ -15,10 +15,20 @@ import { SkeletonLoader } from "@/components/dashboard/shared";
 
 // --- BUNDLE DEFINITIONS ---
 const BUNDLES: Record<string, string[]> = {
+  "architectural design": [
+    "AutoCAD Basic to Advanced Course",
+    "Autodesk Revit",
+    "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop"
+  ],
   "architectural design bundle": [
     "AutoCAD Basic to Advanced Course",
     "Autodesk Revit",
     "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop"
+  ],
+  "civil engineering": [
+    "Structural Design and Analysis",
+    "Estimation, Costing & Contract Billing",
+    "Property Valuation"
   ],
   "civil engineering bundle": [
     "Structural Design and Analysis",
@@ -26,6 +36,15 @@ const BUNDLES: Record<string, string[]> = {
     "Property Valuation"
   ],
   "complete engineering package": [
+    "AutoCAD Basic to Advanced Course",
+    "Autodesk Revit",
+    "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop",
+    "Structural Design and Analysis",
+    "Estimation, Costing & Contract Billing",
+    "Property Valuation",
+    "ArcGIS and Mapping"
+  ],
+  "complete engineering package bundle": [
     "AutoCAD Basic to Advanced Course",
     "Autodesk Revit",
     "Architectural Visualization: AutoCAD, SketchUp, Enscape & Photoshop",
@@ -88,8 +107,16 @@ export default function GeneralDashboardPage() {
   const expandedRecordingOrders = useMemo(() => {
     const recOrders = orders.filter(o => o.order_type === 'recording');
     return recOrders.flatMap(o => {
-      const key = o.order_name.toLowerCase().replace(' (featured)', '').trim();
-      const courses = BUNDLES[key] || BUNDLES[o.order_name.toLowerCase().trim()];
+      let rawName = o.order_name.toLowerCase().trim();
+      let key = rawName.replace(' (featured)', '').trim();
+      
+      let courses = BUNDLES[key] || BUNDLES[rawName];
+      
+      // Fallback: If it still wasn't found and has 'bundle' at the end, try checking without 'bundle'
+      if (!courses && key.endsWith(' bundle')) {
+         courses = BUNDLES[key.replace(' bundle', '').trim()];
+      }
+
       if (courses) {
         return courses.map((courseName, idx) => ({
           ...o, id: `${o.id}-${idx}`, order_name: courseName, original_bundle: o.order_name
@@ -146,7 +173,7 @@ export default function GeneralDashboardPage() {
               id: o.id, full_name: o.full_name || 'You', email: o.email || email,
               order_type: o.order_type?.toLowerCase() || 'other', order_name: o.order_name,
               price: o.paid_amount || 0, pending_amount: Number(o.pending_amount) || 0,
-              remaining_amount: Number(o.remaining_amount) || 0, // Literal value added here
+              remaining_amount: Number(o.remaining_amount) || 0,
               screenshot_url: o.payment_screenshots?.[0] || '', status: o.status || 'pending', 
               created_at: o.created_at, enrollment_id: o.enrollment_id, locked_price: o.locked_price
             }));
@@ -187,22 +214,17 @@ export default function GeneralDashboardPage() {
             const courseStorefront = coursesV2?.find(c => c.syllabus_id === targetSyllabusId || c.id === targetSyllabusId);
             const courseName = syllabus?.name || courseStorefront?.title || 'Unknown Course';
 
-            // 🔥 CORE FIX: Strict Literal Reading From Database
-            // Only look for an order that is strictly linked to this specific enrollment.
             const relatedOrders = fetchedOrders?.filter(o => 
               o.enrollment_id === env2.id && o.status !== 'rejected'
             ) || [];
             
-            // Get the most recent order row for this enrollment to ensure we have the latest screenshot/payment data
             const primaryOrder = relatedOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
 
             let literal_paid_amount = 0;
-            // Default to the course fee only if they have absolutely no order row yet
             let literal_remaining_amount = Number(courseStorefront?.fee) || 0; 
             let lockedPrice = literal_remaining_amount;
 
             if (primaryOrder) {
-              // Read LITERAL database columns directly. No fallback math.
               literal_paid_amount = Number(primaryOrder.paid_amount);
               literal_remaining_amount = Number(primaryOrder.remaining_amount);
               lockedPrice = Number(primaryOrder.locked_price);
@@ -216,9 +238,9 @@ export default function GeneralDashboardPage() {
               email: env2.email,
               course_name: courseName,
               status: env2.is_confirmed ? 'confirmed' : 'pending',
-              paid_amount: literal_paid_amount,            // Exact DB 'paid_amount'
-              remaining_amount: literal_remaining_amount, // Exact DB 'remaining_amount'
-              locked_price: lockedPrice,                  // Exact DB 'locked_price'
+              paid_amount: literal_paid_amount,
+              remaining_amount: literal_remaining_amount,
+              locked_price: lockedPrice,
               starting_date: batch?.start_datetime || new Date().toISOString(),
               batch_no: batch?.batch_no || 1,
               created_at: env2.created_at,
@@ -399,7 +421,6 @@ function AccountOverviewView({ userName, orders, enrollments, certificates, onNa
   const timelineContainer = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
   const timelineItem = { hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } };
 
-  // Filter out any enrollments that have a pending order/payment 
   const visiblePendingPayments = pendingCoursePayments?.filter((enroll: any) => {
     const hasPendingOrder = pendingVerificationOrders?.some((o: any) =>
       o.enrollment_id === enroll.id ||
@@ -415,7 +436,6 @@ function AccountOverviewView({ userName, orders, enrollments, certificates, onNa
           {visiblePendingPayments.map((enroll: any) => {
             const isFutureClass = enroll.starting_date ? new Date(enroll.starting_date).getTime() > new Date().getTime() : false;
             
-            // Strictly base seat booking on literal locked_price
             const tenPercentAmt = Math.round((Number(enroll.locked_price) || 0) * 0.1);
             const isSeatBooking = isFutureClass && (Number(enroll.paid_amount) === 0);
             const amountToPay = isSeatBooking ? tenPercentAmt : enroll.remaining_amount;
@@ -451,7 +471,7 @@ function AccountOverviewView({ userName, orders, enrollments, certificates, onNa
         
         <div className="relative z-10 text-white">
           <h2 className="text-[10px] sm:text-xs uppercase tracking-widest font-bold text-amber-400 mb-3 flex items-center gap-2">
-            <Sparkles size={14} /> My Learning Hub
+            <Sparkles size={14} /> My Learning Hub - Learn Today
           </h2>
           <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6">
             <div>
@@ -605,7 +625,6 @@ function CourseCard({ course, type, matched, batch, router, pendingVerificationO
   let bannerText = `Remaining Due: Rs. ${course.remaining_amount}`;
   let bannerSubtext = "Pay now to avoid access interruptions.";
 
-  // This checks if the specific course has an unverified payment order pending
   const isUnverifiedPayment = pendingVerificationOrders.some((o: any) => 
     (o.enrollment_id === course.id) ||
     (o.order_name?.toLowerCase() === course.course_name?.toLowerCase() && o.order_type?.toLowerCase() !== 'recording')
@@ -744,7 +763,6 @@ function CourseCard({ course, type, matched, batch, router, pendingVerificationO
           <>
             <div className={`absolute top-0 left-0 w-full h-1.5 bg-orange-400 z-50`}></div>
             
-            {/* The inline red banner should NOT show if there's an unverified payment order pending */}
             {(!isFullyPaid && !isUnverifiedPayment) && (
               <div className="absolute top-1.5 left-0 right-0 bg-red-50 border-b border-red-100 px-4 py-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 z-50 shadow-sm">
                 <div className="flex flex-col">
