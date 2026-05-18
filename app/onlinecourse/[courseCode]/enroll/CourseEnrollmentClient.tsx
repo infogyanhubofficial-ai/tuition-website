@@ -14,9 +14,6 @@ import {
   Calendar,
   AlertCircle,
   Loader2,
-  AlignLeft,
-  Mail,
-  User,
   CreditCard,
   Clock,
   Check,
@@ -24,9 +21,7 @@ import {
   Shield,
   Award,
   Sparkles,
-  Phone,
   Lock,
-  Info,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -200,6 +195,15 @@ export default function CourseEnrollmentClient() {
     };
   }, [course]);
 
+  // Check if the course has already started based on the current date
+  const hasCourseStarted = useMemo(() => {
+    if (!course?.start_datetime) return false;
+    return new Date(course.start_datetime) < new Date();
+  }, [course?.start_datetime]);
+
+  // Determine the final amount to ask for based on course start date
+  const amountToPay = hasCourseStarted ? pricing.lockedPrice : pricing.depositAmount;
+
   const handleWhatsappChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 10);
     let formatted = raw;
@@ -354,7 +358,7 @@ export default function CourseEnrollmentClient() {
 
         if (orderError) throw orderError;
         
-        // Save order ID to pass to the payment page if they choose "Pay Deposit Now"
+        // Save order ID to pass to the payment page
         if (newOrder?.id) {
           setCreatedOrderId(newOrder.id);
         }
@@ -379,10 +383,9 @@ export default function CourseEnrollmentClient() {
       order_type: 'Course',
       order_name: course?.title || '',
       course_name: course?.title || '',
-      price: String(pricing.depositAmount ?? 0),
+      price: String(amountToPay ?? 0), // Use dynamic amount to pay here
     });
 
-    // If an order ID was generated, pass it along so the payment page doesn't create a duplicate
     if (createdOrderId) {
       queryParams.append('order_id', createdOrderId);
     }
@@ -455,20 +458,24 @@ export default function CourseEnrollmentClient() {
                 </div>
                 <h2 className="text-3xl font-extrabold text-slate-900 leading-tight">Seat Reserved!</h2>
                 <p className="text-slate-600 mt-2 font-medium">
-                  Your spot is held. Complete the deposit to fully confirm.
+                  {hasCourseStarted 
+                    ? "The orientation session for this course has been completed successfully.Complete the full payment to confirm your admission and get immediate access to the official WhatsApp group and class links. "
+                    : "Your seat is temporarily held. Complete the 10% down payment to fully reserve your discounted seat."}
                 </p>
               </div>
 
               <div className="p-8 space-y-6">
                 <div className="flex justify-between items-center p-5 bg-orange-50 rounded-2xl border border-orange-100">
-                  <span className="text-slate-700 font-semibold text-sm">Deposit Required</span>
+                  <span className="text-slate-700 font-semibold text-sm">
+                    {hasCourseStarted ? 'Full Payment Required' : 'Deposit Required'}
+                  </span>
                   <span className="text-2xl font-black text-orange-600">
-                    Rs. {pricing.depositAmount.toLocaleString()}
+                    Rs. {amountToPay.toLocaleString()}
                   </span>
                 </div>
 
                 <p className="text-sm text-slate-500 font-medium text-center">
-                  You can track your course status later in <span className="font-semibold text-slate-700">My Courses</span>.
+                  You can track your course status later in <span className="font-semibold text-slate-700">Dashboard</span>.
                 </p>
 
                 <div className="flex flex-col gap-3 pt-2">
@@ -476,7 +483,7 @@ export default function CourseEnrollmentClient() {
                     onClick={handleProceedToPayment}
                     className="w-full flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-colors shadow-md"
                   >
-                    <CreditCard className="w-5 h-5" /> Pay Deposit Now
+                    <CreditCard className="w-5 h-5" /> {hasCourseStarted ? 'Pay Full Amount Now' : 'Pay Deposit Now'}
                   </button>
                   <button
                     onClick={() => router.push('/dashboard')}
