@@ -350,7 +350,7 @@ export default function TutorsPageClient() {
 
             {!hasProfile && (
               <Link 
-                href="/post-tutor"
+                href="/become-a-tutor"
                 className="group flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-500/30 active:scale-95"
               >
                 <Plus className="h-5 w-5 transition-transform duration-300 group-hover:rotate-90" />

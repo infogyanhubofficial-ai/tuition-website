@@ -41,7 +41,6 @@ export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter(); 
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   
   const [user, setUser] = useState<any>(null);
   const [isTutor, setIsTutor] = useState(false);
@@ -69,12 +68,6 @@ export default function Navbar() {
 
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, { stiffness: 100, damping: 30, restDelta: 0.001 });
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const fetchUserActivity = useCallback(async (currentUser: any) => {
     const uid = currentUser.id;
@@ -407,34 +400,26 @@ export default function Navbar() {
 
   return (
     <>
-      <div className="h-[76px] lg:h-[94px] w-full flex-shrink-0" aria-hidden="true" />
-
-      {/* Progress Bar */}
+      {/* Progress Bar (Kept fixed so it remains visible at the top edge of the screen) */}
       <motion.div 
         className="fixed top-0 left-0 right-0 h-[3px] bg-[#2D9CDB] origin-left z-[70]" 
         style={{ scaleX }} 
       />
 
-      <div className={`fixed top-0 left-0 right-0 z-50 flex justify-center transition-all duration-300 ${scrolled ? 'pt-1 md:pt-2 px-3 md:px-6' : 'pt-2 md:pt-4 px-3 md:px-8'}`}>
+      <div className="relative w-full z-50 flex justify-center pt-2 md:pt-4 px-3 md:px-8">
         
         {/* Softened Gradient Border Wrapper */}
         <header 
-          className={`w-full transition-all duration-300 ease-in-out rounded-full p-[1px] bg-gradient-to-r from-[#2D9CDB]/20 via-transparent to-[#FF6B35]/15 ${
-            scrolled ? "max-w-[78rem] shadow-[0_4px_20px_rgb(0,0,0,0.04)]" : "max-w-[90rem]"
-          }`}
+          className="w-full transition-all duration-300 ease-in-out rounded-full p-[1px] bg-gradient-to-r from-[#2D9CDB]/20 via-transparent to-[#FF6B35]/15 max-w-[90rem]"
         >
-          <div className={`w-full h-full flex items-center justify-between gap-2 xl:gap-6 bg-white/95 backdrop-blur-xl rounded-full ${
-            scrolled ? "py-1.5 md:py-2 px-3 md:px-6" : "py-2 md:py-3.5 px-4 md:px-8"
-          }`}>
+          <div className="w-full h-full flex items-center justify-between gap-2 xl:gap-6 bg-white/95 backdrop-blur-xl rounded-full py-2 md:py-3.5 px-4 md:px-8">
             
             {/* Logo */}
             <Link href="/" className="flex-shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB] z-20 rounded-lg">
               <motion.div 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                className={`relative transition-all duration-300 ${
-                  scrolled ? 'w-[125px] h-[36px] lg:w-[140px] lg:h-[40px]' : 'w-[135px] h-[40px] lg:w-[160px] lg:h-[46px]'
-                }`}
+                className="relative transition-all duration-300 w-[135px] h-[40px] lg:w-[160px] lg:h-[46px]"
               >
                 <Image src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/GyanHub_logo_website-removebg-preview__1_-removebg-preview.webp" alt="GyanHub Logo" fill className="object-contain" priority />
               </motion.div>
