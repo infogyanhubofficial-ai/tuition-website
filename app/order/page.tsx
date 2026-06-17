@@ -217,7 +217,6 @@ function CheckoutContent() {
           title: urlOrderId ? "Invoice Payment" : "CV & Contact Detail Unlock",
           orderName: fetchedTutorName || urlCourseName || `Tutor #${tutorId || 'Unknown'}`,
           price: customPrice || 1000,
-          // UPDATED: Now matches your DB constraint correctly.
           dbOrderType: "CV and Contact",
           icon: <FileText className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
@@ -420,7 +419,8 @@ function CheckoutContent() {
         <span className="hidden sm:inline">Immediate Support</span>
       </a>
 
-      <header className="bg-white border-b border-slate-200 px-4 py-3 md:px-8 flex items-center justify-between sticky top-0 z-40">
+      {/* ADDED: id="local-checkout-header" to protect it from the global hiding CSS */}
+      <header id="local-checkout-header" className="bg-white border-b border-slate-200 px-4 py-3 md:px-8 flex items-center justify-between sticky top-0 z-40">
         <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
           <span className="font-medium text-sm">Back</span>
@@ -695,6 +695,14 @@ function CheckoutContent() {
 export default function OrderPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-500">Loading secure checkout...</div>}>
+      {/* ADDED: Global style injection to hide standard navbars/footers without breaking the local header */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          nav, footer, header:not(#local-checkout-header) {
+            display: none !important;
+          }
+        `
+      }} />
       <CheckoutContent />
     </Suspense>
   );

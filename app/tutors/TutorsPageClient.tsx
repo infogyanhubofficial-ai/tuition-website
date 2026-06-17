@@ -285,6 +285,9 @@ export default function TutorsPageClient() {
 
   const filteredTutors = useMemo(() => {
     return tutors.filter((tutor) => {
+      // [FIX] Filter out tutors who haven't marked themselves as available
+      if (!tutor.availability) return false;
+
       const nameStr = String(tutor.name || '').toLowerCase();
       const locationStr = String(tutor.location || '').toLowerCase();
       
