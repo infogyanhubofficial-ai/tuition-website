@@ -538,7 +538,7 @@ export default function AccountDashboard() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                       <XAxis dataKey="name" axisLine={false} tickLine={false} />
                       <YAxis axisLine={false} tickLine={false} tickFormatter={(val) => `${val/1000}k`} />
-                      <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                      <RechartsTooltip formatter={(value: any) => formatCurrency(Number(value || 0))} />
                       <Legend />
                       <Line type="monotone" dataKey="Revenue" stroke="#10b981" strokeWidth={3} dot={{r: 4}} />
                       <Line type="monotone" dataKey="Expenses" stroke="#f43f5e" strokeWidth={3} dot={{r: 4}} />
@@ -579,7 +579,7 @@ export default function AccountDashboard() {
                           <Cell fill="#f43f5e" />
                           <Cell fill="#f59e0b" />
                         </Pie>
-                        <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
+                        <RechartsTooltip formatter={(value: any) => formatCurrency(Number(value || 0))} />
                         <Legend verticalAlign="bottom" height={36}/>
                       </PieChart>
                     </ResponsiveContainer>
