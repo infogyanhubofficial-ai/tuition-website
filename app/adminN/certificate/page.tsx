@@ -1,5 +1,5 @@
 "use client";
-
+import { Certificate, Syllabus } from "./types";
 import React, { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,23 +10,6 @@ import RegistryView from "@/components/certificate/RegistryView";
 import BulkUploadView from "@/components/certificate/BulkUploadView";
 
 // --- TYPES ---
-export interface Certificate {
-  id: string;
-  name: string;
-  email: string;
-  syllabus_name: string;
-  syllabus_id: number | null;
-  issue_date: string;
-  certificate_image: string;
-  certificate_code: string;
-  created_at: string;
-  user_id?: string;
-}
-
-export interface Syllabus {
-  id: number;
-  name: string;
-}
 
 export default function CertificateMasterDashboard() {
   const supabase = createClient();

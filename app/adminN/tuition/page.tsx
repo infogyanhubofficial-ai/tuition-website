@@ -84,20 +84,30 @@ const fmt = (n: number) =>
 
 // ─── ANIMATIONS ───────────────────────────────────────────────────────────────
 
+// ✅ What you need to change it to:
 const fadeUp = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.18 } }
+  initial: { opacity: 0, y: 20 },
+  animate: { 
+    opacity: 1, 
+    y: 0, 
+    transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] as [number, number, number, number] } 
+  },
+  // ...
 };
 
 const stagger = {
   animate: { transition: { staggerChildren: 0.06 } }
 };
 
+// ✅ What you need to change it to:
 const slideIn = {
   initial: { x: "100%", opacity: 0 },
-  animate: { x: 0, opacity: 1, transition: { type: "spring", damping: 28, stiffness: 220 } },
-  exit: { x: "100%", opacity: 0, transition: { duration: 0.22 } }
+  animate: { 
+    x: 0, 
+    opacity: 1, 
+    transition: { type: "spring" as const, damping: 25, stiffness: 200 } 
+  },
+  // ...
 };
 
 // ─── SHARED PRIMITIVES ────────────────────────────────────────────────────────

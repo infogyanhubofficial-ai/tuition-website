@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Search, Edit2, Trash2, X, Upload, ExternalLink, Loader2 } from "lucide-react";
-import { Certificate, Syllabus } from "@/app/admin/certificate/page";
+import { Certificate, Syllabus } from "@/app/adminN/certificate/types";
 import { toast } from "react-hot-toast";
 
 interface RegistryViewProps {
