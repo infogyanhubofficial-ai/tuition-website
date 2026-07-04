@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { 
   ArrowLeft, Lock, ShieldCheck, CheckCircle2, Info, User, Mail, 
   Phone, Loader2, UploadCloud, FileCheck, Receipt, GraduationCap, 
-  FileText, Sparkles, PlayCircle, MessageCircle, Tag
+  FileText, Sparkles, PlayCircle, MessageCircle, Tag, Users
 } from "lucide-react";
 
 // --- TYPES ---
-type OrderMode = "cv_phone" | "badge" | "course" | "recording" | "unknown";
+type OrderMode = "cv_phone" | "badge" | "course" | "physical_course" | "recording" | "unknown";
 
 // --- IMAGE COMPRESSION UTILITY ---
 const compressImage = (file: File): Promise<File> => {
@@ -18,7 +20,7 @@ const compressImage = (file: File): Promise<File> => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
-      const img = new Image();
+      const img = new window.Image();
       img.src = event.target?.result as string;
       img.onload = () => {
         const canvas = document.createElement('canvas');
@@ -48,13 +50,18 @@ const compressImage = (file: File): Promise<File> => {
 
         canvas.toBlob(
           (blob) => {
-            if (!blob) return reject(new Error('Canvas is empty'));
+            if (!blob) {
+              reject(new Error("Canvas is empty"));
+              return;
+            }
+
             const newFileName = file.name.replace(/\.[^/.]+$/, ".webp");
-            const compressedFile = new File([blob], newFileName, {
-              type: 'image/webp',
-              lastModified: Date.now(),
-            });
-            resolve(compressedFile);
+            resolve(
+              new File([blob], newFileName, {
+                type: "image/webp",
+                lastModified: Date.now(),
+              })
+            );
           },
           'image/webp',
           0.5 
@@ -66,9 +73,18 @@ const compressImage = (file: File): Promise<File> => {
   });
 };
 
+const normalizeOrderType = (orderType: string) => {
+  switch (orderType) {
+    case "Offline Course":
+      return "Physical Class";
+    default:
+      return orderType;
+  }
+};
+
 function CheckoutContent() {
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    window.scrollTo(0, 0);
   }, []);
 
   const searchParams = useSearchParams();
@@ -92,17 +108,43 @@ function CheckoutContent() {
   const urlOrderId = searchParams.get("order_id") || searchParams.get("orderId") || null; 
   const urlLockedPrice = searchParams.get("locked_price") || null;
 
-  // FIELD LOCKING STATE: If data came from URL (like Invoice page), lock it down.
-  const isNameLocked = Boolean(urlName);
-  const isEmailLocked = Boolean(urlEmail);
-  const isPhoneLocked = Boolean(urlPhone);
+  // FIELD LOCKING STATE: Lock it down if data came from URL OR if it gets pulled from Authenticated User profile
+  const [isNameLocked, setIsNameLocked] = useState<boolean>(Boolean(urlName));
+  const [isEmailLocked, setIsEmailLocked] = useState<boolean>(Boolean(urlEmail));
+  const [isPhoneLocked, setIsPhoneLocked] = useState<boolean>(Boolean(urlPhone));
 
   // 2. DETERMINE ORDER MODE
-  let currentMode: OrderMode = "unknown";
-  if (urlType === "recording") currentMode = "recording";
-  else if (orderTypeParam.includes("course") || requestType === "course" || orderTypeParam === "online course") currentMode = "course";
-  else if (orderTypeParam.includes("verif") || orderTypeParam.includes("batch") || orderTypeParam.includes("badge")) currentMode = "badge";
-  else if (requestType === "cv" || requestType === "phone" || orderTypeParam === "tutoring") currentMode = "cv_phone"; 
+  const currentMode = useMemo<OrderMode>(() => {
+    if (urlType === "recording") return "recording";
+    if (
+      orderTypeParam === "offline course" ||
+      orderTypeParam === "physical class"
+    )
+      return "physical_course";
+
+    if (
+      orderTypeParam.includes("course") ||
+      requestType === "course" ||
+      orderTypeParam === "online course"
+    )
+      return "course";
+
+    if (
+      orderTypeParam.includes("verif") ||
+      orderTypeParam.includes("batch") ||
+      orderTypeParam.includes("badge")
+    )
+      return "badge";
+
+    if (
+      requestType === "cv" ||
+      requestType === "phone" ||
+      orderTypeParam === "tutoring"
+    )
+      return "cv_phone";
+
+    return "unknown";
+  }, [urlType, orderTypeParam, requestType]);
 
   // 3. BULLETPROOF FORM STATE
   const [fullName, setFullName] = useState<string>(urlName || "");
@@ -130,8 +172,20 @@ function CheckoutContent() {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
           setCurrentUserId(user.id);
-          if (!urlName) setFullName(user.user_metadata?.full_name || '');
-          if (!urlEmail) setEmail(user.email || '');
+          
+          // Apply User Profile Data and Lock Field 
+          if (!urlName && user.user_metadata?.full_name) {
+            setFullName(user.user_metadata.full_name);
+            setIsNameLocked(true);
+          }
+          if (!urlEmail && user.email) {
+            setEmail(user.email);
+            setIsEmailLocked(true);
+          }
+          if (!urlPhone && user.phone) {
+            setContactNumber(user.phone);
+            setIsPhoneLocked(true);
+          }
         }
 
         if (tutorId && !urlTutorName && currentMode === 'cv_phone') {
@@ -172,18 +226,18 @@ function CheckoutContent() {
       }
     };
     initializeCheckout();
-  }, [tutorId, urlTutorName, urlName, urlEmail, urlCourseName, currentMode, urlOrderId, supabase]);
+  }, [tutorId, urlTutorName, urlName, urlEmail, urlPhone, urlCourseName, currentMode, urlOrderId, supabase]);
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
   const getOrderConfig = () => {
-    const customPrice = parseInt(urlPrice);
+    const customPrice = Number(urlPrice) || 0;
 
     switch (currentMode) {
       case "recording":
         return {
           title: urlOrderId ? "Invoice Payment" : "Recording Video Access",
           orderName: urlCourseName || "Selected Course",
-          price: customPrice || 0,
+          price: customPrice,
           dbOrderType: "recording",
           icon: <PlayCircle className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: `You are making a payment for "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
@@ -194,12 +248,23 @@ function CheckoutContent() {
         return {
           title: urlOrderId ? "Invoice Payment" : "Online Course Enrollment",
           orderName: urlCourseName || "Selected Course",
-          price: customPrice || 0, 
+          price: customPrice, 
           dbOrderType: "Online Course",
           icon: <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />,
           notice: `You are processing a payment for "${urlCourseName || 'this course'}". We will verify your deposit within 24 hours.`,
           noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
           noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
+        };
+      case "physical_course":
+        return {
+          title: urlOrderId ? "Invoice Payment" : "Offline Course Seat Reservation",
+          orderName: urlCourseName || "Selected Offline Course",
+          price: customPrice, 
+          dbOrderType: "Offline Course",
+          icon: <Users className="w-5 h-5 text-orange-600 shrink-0" />,
+          notice: `You are processing a payment to reserve your seat for "${urlCourseName || 'this class'}". We will verify your deposit and confirm your seat shortly.`,
+          noticeStyle: "bg-orange-50/50 border-orange-100 text-orange-800",
+          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-orange-600" />
         };
       case "badge":
         return {
@@ -227,7 +292,7 @@ function CheckoutContent() {
         return {
           title: urlOrderId ? "Invoice Payment" : "General Service",
           orderName: urlCourseName || "Selected Service",
-          price: customPrice || 0,
+          price: customPrice,
           dbOrderType: orderTypeParam || "other",
           icon: <Receipt className="w-5 h-5 text-slate-600 shrink-0" />,
           notice: "You are making a secure payment. Please ensure your details match your invoice.",
@@ -238,6 +303,7 @@ function CheckoutContent() {
   };
 
   const config = getOrderConfig();
+  const dbOrderType = normalizeOrderType(config.dbOrderType);
   const amountInWords = config.price === 1000 ? "One Thousand Rupees" : config.price === 500 ? "Five Hundred Rupees" : `${config.price.toLocaleString()} Rupees`;
 
   // 8. BULLETPROOF VALIDATION CHECKS
@@ -280,7 +346,7 @@ function CheckoutContent() {
       // 2. Decide if we are UPDATING an existing order or INSERTING a new one
       let targetOrderId = urlOrderId;
       let finalEnrollmentId = urlEnrollmentId;
-      let finalLockedPrice = fetchedLockedPrice ?? (urlLockedPrice ? parseInt(urlLockedPrice) : paidAmount);
+      let finalLockedPrice: number | null = fetchedLockedPrice ?? (urlLockedPrice ? Number(urlLockedPrice) : paidAmount);
       
       let previousPaidAmount = 0;
       let previousPendingAmount = 0; // Track pending amount
@@ -304,7 +370,7 @@ function CheckoutContent() {
         }
       } 
       // B. ONLINE COURSE PRE-CHECK: Prevent Duplicate Insertions
-      else if (config.dbOrderType === "Online Course") {
+      else if (dbOrderType === "Online Course") {
         
         // Resolve Enrollment ID if missing
         if (!finalEnrollmentId) {
@@ -347,6 +413,8 @@ function CheckoutContent() {
       }
 
       // Ensure locked price is never lower than what the user paid + pending total
+      finalLockedPrice = finalLockedPrice ?? previousPaidAmount + previousPendingAmount + paidAmount;
+
       if (finalLockedPrice < (previousPaidAmount + previousPendingAmount + paidAmount)) {
         finalLockedPrice = previousPaidAmount + previousPendingAmount + paidAmount;
       }
@@ -376,7 +444,7 @@ function CheckoutContent() {
         const { error: dbError } = await supabase.from('orders_v2').insert([{
           user_id: currentUserId || null,
           enrollment_id: finalEnrollmentId || null,
-          order_type: config.dbOrderType,        
+          order_type: dbOrderType,        
           order_name: config.orderName,
           locked_price: finalLockedPrice,
           paid_amount: 0, 
@@ -421,7 +489,7 @@ function CheckoutContent() {
 
       {/* ADDED: id="local-checkout-header" to protect it from the global hiding CSS */}
       <header id="local-checkout-header" className="bg-white border-b border-slate-200 px-4 py-3 md:px-8 flex items-center justify-between sticky top-0 z-40">
-        <button onClick={() => window.history.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 transition-colors group">
           <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
           <span className="font-medium text-sm">Back</span>
         </button>
@@ -442,9 +510,9 @@ function CheckoutContent() {
                 <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                   <User className="w-5 h-5 text-blue-600" /> Contact Information
                 </h2>
-                {(isNameLocked || isEmailLocked) && (
+                {(isNameLocked || isEmailLocked || isPhoneLocked) && (
                   <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
-                    <Lock className="w-3 h-3" /> Invoice Locked
+                    <Lock className="w-3 h-3" /> Details Locked
                   </span>
                 )}
               </div>
@@ -517,9 +585,11 @@ function CheckoutContent() {
 
               <div className="border border-emerald-100 bg-emerald-50/30 rounded-xl p-5 relative overflow-hidden flex flex-col items-center justify-center text-center">
                 <p className="text-sm font-medium text-slate-600 mb-3">Scan QR to pay securely via Fonepay</p>
-                <img 
+                <Image 
                   src="https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/Bank%20QR.jpg" 
                   alt="Fonepay Accepted Here" 
+                  width={240}
+                  height={240}
                   className="w-full max-w-[240px] h-auto object-contain mix-blend-multiply opacity-90"
                 />
               </div>
@@ -630,7 +700,7 @@ function CheckoutContent() {
                       <input id="agreeRefund" type="checkbox" checked={agreeRefund} onChange={(e) => setAgreeRefund(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
                     <span className="text-sm text-slate-600 leading-snug group-hover:text-slate-800 transition-colors font-medium">
-                      I have read and agree to the <a href="/refund" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">Refund & Return Policy</a>.
+                      I have read and agree to the <Link href="/refund" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">Refund & Return Policy</Link>.
                     </span>
                   </label>
                   <label htmlFor="agreePrivacy" className="flex items-start gap-2.5 cursor-pointer group">
@@ -638,16 +708,34 @@ function CheckoutContent() {
                       <input id="agreePrivacy" type="checkbox" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} className="peer w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer" />
                     </div>
                     <span className="text-sm text-slate-600 leading-snug group-hover:text-slate-800 transition-colors font-medium">
-                      I have read and agree to the <a href="/privacy-policy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">User's data policy</a>.
+                      I have read and agree to the <Link href="/privacy-policy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold" target="_blank">User's data policy</Link>.
                     </span>
                   </label>
                 </div>
 
                 <button 
-                  disabled={isUploading || isFetchingData}
+                  disabled={
+                    isUploading || 
+                    isFetchingData || 
+                    !isNameValid || 
+                    !isEmailValid || 
+                    !isPhoneValid || 
+                    !agreeRefund || 
+                    !agreePrivacy || 
+                    !screenshot
+                  }
                   onClick={handleSubmit}
                   className={`w-full py-3.5 rounded-xl font-semibold text-base transition-all flex justify-center items-center gap-2 ${
-                    (isUploading || isFetchingData)
+                    (
+                      isUploading || 
+                      isFetchingData || 
+                      !isNameValid || 
+                      !isEmailValid || 
+                      !isPhoneValid || 
+                      !agreeRefund || 
+                      !agreePrivacy || 
+                      !screenshot
+                    )
                       ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                       : "bg-blue-600 text-white hover:bg-blue-700 shadow-sm hover:shadow-md" 
                   }`}

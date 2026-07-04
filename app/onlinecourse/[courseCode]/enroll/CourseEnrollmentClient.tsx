@@ -327,7 +327,7 @@ export default function CourseEnrollmentClient() {
       name: form.full_name,
       email: form.email,
       phone: form.whatsapp.replace(/\D/g, ''),
-      order_type: 'Course',
+      order_type: 'Online Course', // FIX: Specifically pass 'Online Course' here instead of 'Course'
       order_name: course?.title || '',
       course_name: course?.title || '',
       price: String(amountToPay ?? 0),

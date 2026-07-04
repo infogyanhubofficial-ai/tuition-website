@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { supabase } from '@/lib/supabase'; // Imported Supabase client
+import { supabase } from '@/lib/supabase';
 import { 
   Facebook, Youtube, Instagram, Linkedin, 
   Mail, ChevronUp, MessageCircle, ShieldCheck, CheckCircle2,
-  ArrowRight, Lock
+  ArrowRight, Lock, MapPin, BookOpen, PlayCircle
 } from "lucide-react";
 
 // --- DATA ARRAYS ---
@@ -20,15 +20,15 @@ const SOCIAL_LINKS = [
 
 const COMPANY_LINKS = [
   { label: "About GyanHub", href: "/about" },
-  { label: "GyanHub Stories", href: "#", isLocked: true },
+  { label: "GyanHub Stories", href: "/stories" }, // Updated route and unlocked
   { label: "User's Data Policy", href: "/privacy-policy" },
 ];
 
-const QUICK_LINKS = [
-  { label: "Popular Courses", href: "/onlinecourse" },
-  { label: "Find a Tutor", href: "/tutors" },
-  { label: "Latest Vacancies", href: "/vacancies" },
-  { label: "Recording Courses", href: "https://www.gyanhub.com.np/recording" },
+// Updated links and added contextual icons (Removed BE Civil Exam Prep)
+const OUR_PROGRAMS = [
+  { label: "Popular Courses", href: "/onlinecourse", icon: BookOpen },
+  { label: "Physical Classes", href: "/offline-class", icon: MapPin },
+  { label: "Recording Courses", href: "/recording", icon: PlayCircle },
 ];
 
 const ADMIN_LINKS = [
@@ -53,8 +53,7 @@ export default function Footer() {
         .from('newsletter_subscribers')
         .insert([{ email: cleanEmail }]);
 
-      // If the error is a unique constraint violation (code 23505), they are already subscribed.
-      // We gracefully treat it as a success to avoid confusing the user.
+      // Gracefully handle unique constraint violation if already subscribed
       if (error && error.code !== '23505') {
         throw error;
       }
@@ -81,8 +80,8 @@ export default function Footer() {
         {/* Top Grid Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-8 lg:gap-10 mb-12 md:mb-20">
           
-          {/* --- Brand & Socials Column --- */}
-          <div className="space-y-5 lg:col-span-2 pr-4 lg:pr-12">
+          {/* --- Brand, Socials & Location Column --- */}
+          <div className="space-y-6 lg:col-span-2 pr-4 lg:pr-12">
             
             <Link href="/" className="inline-flex items-center gap-2 text-3xl font-black tracking-tight transition-transform hover:scale-105 outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-lg">
               <div className="drop-shadow-[0_0_15px_rgba(59,130,246,0.3)]">
@@ -98,6 +97,22 @@ export default function Footer() {
             <p className="text-[15px] leading-relaxed text-slate-400">
               Dive into educational stories, level up your skills, and connect with a community that never stops growing.
             </p>
+            
+            {/* Added Physical Location Information */}
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-orange-500" />
+                Physical Classes
+              </h4>
+              <a 
+                href="https://www.google.com/maps/place/Gyan+Hub+Pvt.+Ltd/@27.6920528,85.3336796,17z/data=!3m1!4b1!4m6!3m5!1s0x39eb1990925a6f83:0xaec6838aa0bdb23d!8m2!3d27.6920528!4d85.3362545!16s%2Fg%2F11nqx_l7r9?entry=ttu&g_ep=EgoyMDI2MDYyOS4wIKXMDSoASAFQAw%3D%3D" 
+                target="_blank" 
+                rel="noreferrer"
+                className="text-[14px] text-slate-400 hover:text-blue-400 transition-colors block"
+              >
+                Near Eyeplex Mall, New Baneshwor, Kathmandu
+              </a>
+            </div>
             
             <div className="flex flex-wrap gap-3 pt-2">
               {SOCIAL_LINKS.map((social) => {
@@ -136,7 +151,8 @@ export default function Footer() {
             <ul className="space-y-3 text-[14px] text-slate-400">
               {COMPANY_LINKS.map(link => (
                 <li key={link.label}>
-                  {link.isLocked ? (
+                  {/* Kept logic in case you lock other links in the future */}
+                  {(link as any).isLocked ? (
                     <button 
                       onClick={(e) => { e.preventDefault(); alert("This feature will be available soon!"); }}
                       className="group relative inline-flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-help"
@@ -156,18 +172,22 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* --- Quick Links Column --- */}
+          {/* --- Our Programs Column (Previously Quick Links) --- */}
           <div>
-            <h3 className="text-[13px] font-semibold uppercase tracking-[0.15em] text-slate-200 mb-5">Quick Links</h3>
+            <h3 className="text-[13px] font-semibold uppercase tracking-[0.15em] text-slate-200 mb-5">Our Programs</h3>
             <ul className="space-y-3 text-[14px] text-slate-400">
-              {QUICK_LINKS.map(link => (
-                <li key={link.label}>
-                  <Link href={link.href} className="group relative inline-flex items-center hover:text-white transition-colors">
-                    {link.label}
-                    <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
-                  </Link>
-                </li>
-              ))}
+              {OUR_PROGRAMS.map(link => {
+                const Icon = link.icon;
+                return (
+                  <li key={link.label}>
+                    <Link href={link.href} className="group relative inline-flex items-center gap-2 hover:text-white transition-colors">
+                      {Icon && <Icon className="h-3.5 w-3.5 text-slate-500 group-hover:text-blue-400 transition-colors" />}
+                      {link.label}
+                      <span className="absolute -bottom-1 left-0 w-0 h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -246,7 +266,6 @@ export default function Footer() {
             </Link>
           </p>
           
-          {/* Modified Payment Badge to fit dark theme */}
           <div className="group flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-xl border border-white/5 transition-all duration-300">
             <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 group-hover:text-slate-300 transition-colors">We Accept</span>
             <div className="h-3 w-[1px] bg-slate-700"></div>
