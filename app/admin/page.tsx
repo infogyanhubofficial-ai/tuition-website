@@ -30,7 +30,7 @@ interface CourseBatch {
 interface PhysicalCourse {
   id: string; title: string; course_code: string | null; course_image_url: string | null;
   instructor_image_url: string | null; category: "Professional Training" | "University Subjects";
-  learning_outcomes: string[] | null; instructor_name: string | null; location: string | null;
+  learning_outcomes?: string[] | string | null; instructor_name: string | null; location: string | null;
   start_date: string | null; timing: string | null; duration_weeks: number | null;
   price: number; discount_price: number | null; max_seats: number | null; enrolled_count: number | null;
   is_active: boolean; tutor_bio: string | null; batch_no: number | null;
@@ -1165,7 +1165,7 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
     return c.title?.toLowerCase().includes(s) || (c.course_code || '').toLowerCase().includes(s) || c.category?.toLowerCase().includes(s);
   });
 
-  const rawOutcomes = editing.learning_outcomes;
+  const rawOutcomes = editing?.learning_outcomes as string | string[] | null | undefined;
   const outcomesArray = Array.isArray(rawOutcomes)
     ? rawOutcomes
     : typeof rawOutcomes === 'string'
@@ -1465,8 +1465,8 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     return true;
   });
 
-  if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter(e => e.confirmed);
-  if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter(e => !e.confirmed);
+  if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter((e: any) => e.confirmed);
+  if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter((e: any) => !e.confirmed);
 
   const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.locked_price || 0), 0);
   const collectedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.paid_amount || 0), 0);
@@ -1775,11 +1775,11 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
     );
   }
 
-  if (selectedCourse && selectedBatch === null) {
+if (selectedCourse && selectedBatch === null) {
     const availableBatches = Array.from(new Set([
       ...data.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no).map(l => l.batch_no as number),
       selectedCourse.batch_no
-    ])).filter(Boolean).sort((a, b) => b - a);
+    ])).filter((b): b is number => b !== null && b !== undefined).sort((a, b) => b - a);
 
     const unassignedCount = data.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && !l.batch_no).length;
 

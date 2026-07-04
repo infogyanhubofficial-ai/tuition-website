@@ -416,7 +416,7 @@ function DashboardContent() {
       <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 h-[70px] sm:h-20 flex items-center px-4 sm:px-6 shadow-sm">
         <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
           <div className="relative">
-            <button onClick={() => PlayCircle && setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-slate-100 transition-all">
+            <button onClick={() => setIsProfileOpen(!isProfileOpen)} className="flex items-center gap-2 sm:gap-3 p-1.5 rounded-2xl hover:bg-slate-100 transition-all">
               {isLoadingUser ? <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-200 animate-pulse" /> : userAvatar ? (
                 <img src={userAvatar} className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl object-cover border border-slate-200" alt={userName} />
               ) : (
