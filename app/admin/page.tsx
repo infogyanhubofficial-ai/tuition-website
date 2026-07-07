@@ -696,17 +696,50 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
   };
 
   const handleVerifyPayment = async (order: Order) => {
-    if (order.pending_amount <= 0) return;
-    if (!confirm(`Verify Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
-    const newPaid = order.paid_amount + order.pending_amount;
-    const { error } = await supabase.from('orders_v2').update({ paid_amount: newPaid, pending_amount: 0, status: 'verified', updated_at: new Date().toISOString() }).eq('id', order.id);
-    
-    if (!error && order.enrollment_id) {
-      await confirmRelatedEntities(order.enrollment_id);
+  if (order.pending_amount <= 0) return;
+  if (!confirm(`Verify Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
+
+  const newPaid = order.paid_amount + order.pending_amount;
+
+  // 1. Update the order status and amounts
+  const { error: orderError } = await supabase
+    .from('orders_v2')
+    .update({ 
+      paid_amount: newPaid, 
+      pending_amount: 0, 
+      status: 'verified', 
+      updated_at: new Date().toISOString() 
+    })
+    .eq('id', order.id);
+
+  if (orderError) {
+    alert("Verification failed: " + orderError.message);
+    return;
+  }
+
+  // 2. Branch based on order type
+  if (order.enrollment_id) {
+    if (order.order_type === "Online Course") {
+      await supabase
+        .from("enrollments_v2")
+        .update({ is_confirmed: true })
+        .eq("id", order.enrollment_id);
+    } 
+    else if (order.order_type === "Physical Class") {
+      await supabase
+        .from("physical_leads")
+        .update({
+          is_confirmed: true,
+          status: "deposit_paid", // Updating to appropriate status
+        })
+        .eq("id", order.enrollment_id);
     }
-    
-    if (error) alert("Verification failed: " + error.message); else { refresh(); setSelectedOrder(null); }
-  };
+  }
+
+  // 3. Refresh UI
+  refresh();
+  setSelectedOrder(null);
+};
 
   const handleRejectPayment = async (order: Order) => {
     if (order.pending_amount <= 0) return;
@@ -1403,6 +1436,12 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     refresh();
   };
 
+  const handleCopyCSV = () => {
+    const header = "name,email,syllabus_id,contact_number\n";
+    const rows = courseEnrollments.map((e: any) => `"${e.full_name || ''}","${e.email || ''}","${e.course_id || ''}","${e.whatsapp_number || ''}"`).join("\n");
+    navigator.clipboard.writeText(header + rows).then(() => alert("Enrollment list copied to clipboard!"));
+  };
+
   if (!selectedCourse) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5 mt-2 w-full">
@@ -1468,7 +1507,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter((e: any) => e.confirmed);
   if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter((e: any) => !e.confirmed);
 
-  const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.locked_price || 0), 0);
+  const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.confirmed ? (e.locked_price || 0) : 0), 0);
   const collectedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.paid_amount || 0), 0);
   const pendingVolume = courseEnrollments.reduce((sum: number, e: any) => sum + ((e.locked_price || 0) - (e.paid_amount || 0)), 0);
 
@@ -1498,11 +1537,16 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 p-4 bg-[#FAF8F3] rounded-2xl border border-[#E6E0D2]">
-        <span className="text-sm font-bold text-[#4A4638] bg-white px-3 py-1.5 rounded-lg border border-[#E6E0D2] shadow-sm whitespace-nowrap">Showing {courseEnrollments.length} Booking(s)</span>
-        <span className="text-sm font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded-lg border border-[#0E7C7B]/20 shadow-sm whitespace-nowrap">Predicted: <span className="font-black">Rs. {predictedVolume}</span></span>
-        <span className="text-sm font-bold text-[#1E8F6F] bg-[#DCEEE6] px-3 py-1.5 rounded-lg border border-[#C3E3D5] shadow-sm whitespace-nowrap">Collected: <span className="font-black">Rs. {collectedVolume}</span></span>
-        <span className="text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Pending: <span className="font-black">Rs. {pendingVolume}</span></span>
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#FAF8F3] p-4 rounded-2xl border border-[#E6E0D2] mb-4 gap-4">
+        <div className="flex flex-wrap items-center gap-3">
+            <span className="text-sm font-bold text-[#4A4638] bg-white px-3 py-1.5 rounded-lg border border-[#E6E0D2] shadow-sm whitespace-nowrap">Showing {courseEnrollments.length} Booking(s)</span>
+            <span className="text-sm font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded-lg border border-[#0E7C7B]/20 shadow-sm whitespace-nowrap">Predicted: <span className="font-black">Rs. {predictedVolume}</span></span>
+            <span className="text-sm font-bold text-[#1E8F6F] bg-[#DCEEE6] px-3 py-1.5 rounded-lg border border-[#C3E3D5] shadow-sm whitespace-nowrap">Collected: <span className="font-black">Rs. {collectedVolume}</span></span>
+            <span className="text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Pending: <span className="font-black">Rs. {pendingVolume}</span></span>
+        </div>
+        <div className="flex gap-2">
+            <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Copy CSV List</button>
+        </div>
       </div>
 
       <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
@@ -1810,7 +1854,7 @@ if (selectedCourse && selectedBatch === null) {
     );
   }
 
-  const predictedVolume = filteredLeads.reduce((sum, l) => sum + (l.discount_price ?? l.course_price ?? 0), 0);
+  const predictedVolume = filteredLeads.reduce((sum, l) => sum + (l.is_confirmed ? (l.discount_price ?? l.course_price ?? 0) : 0), 0);
   const collectedVolume = filteredLeads.reduce((sum, l) => sum + (l.booking_amount || 0), 0);
   const pendingVolume = filteredLeads.reduce((sum, l) => sum + ((l.discount_price ?? l.course_price ?? 0) - (l.booking_amount || 0)), 0);
 

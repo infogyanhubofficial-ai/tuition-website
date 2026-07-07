@@ -16,37 +16,6 @@
  * team can follow up on and move through status: new → contacted →
  * interested → follow_up → booked → deposit_paid → enrolled.
  *
- * REDESIGN NOTES (v2)
- * --------------------
- * Information hierarchy now follows what a prospective student actually
- * asks, in order: What is this? → When/where/how long? → What will I
- * learn? → Who teaches it? → What does it cost? → Any doubts? → Decide.
- *
- * Concretely:
- *   Hero (course + price + the facts that decide "is this for me")
- *   → Class Details (the full logistics grid)
- *   → What You'll Learn (outcomes as a direct checklist, not accordions)
- *   → Instructor (full tutor_bio, not a trimmed generic paragraph)
- *   → Pricing (one clear, well-emphasized price block)
- *   → FAQ
- *   → Final CTA
- *
- * The generic "companies our learners work at" trust strip, the abstract
- * "problems you're facing" section, and the separate certificate showcase
- * were dropped — none of them are backed by course data, and they were
- * pushing the real, database-backed facts (price, dates, seats, outcomes,
- * bio) further down the page. A certificate mention now lives as one line
- * inside Pricing instead of an entire section.
- *
- * The blueprint identity is kept but quieted: one course-code mono badge
- * instead of corner registration marks + dashed dimension lines + DWG
- * labels stacked on every section. The decoration no longer competes with
- * the data for attention.
- *
- * The hero cover image uses object-contain inside a padded frame instead
- * of object-cover, so the full uploaded image is always visible rather
- * than being cropped to fill a fixed aspect ratio.
- *
  * INSTANT BOOKING OFFER
  * ----------------------
  * A separate, time-pressure-flavoured upsell from the plain lead form:
@@ -85,20 +54,13 @@ import {
   ShieldCheck,
   FileWarning,
   X,
+  Flame,
 } from "lucide-react";
-
-// ---------------------------------------------------------------------------
-// Supabase (browser client, inlined)
-// ---------------------------------------------------------------------------
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL as string,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 );
-
-// ---------------------------------------------------------------------------
-// Types (mirrors public.physicalcourses exactly)
-// ---------------------------------------------------------------------------
 
 type CourseCategory = "Professional Training" | "University Subjects";
 type CourseStatus = "upcoming" | "ongoing" | "completed" | "cancelled";
@@ -119,7 +81,7 @@ interface PhysicalCourse {
   instructor_name: string | null;
   tutor_bio: string | null;
   location: string | null;
-  start_date: string | null; // date
+  start_date: string | null;
   timing: string | null;
   duration_weeks: number | null;
   price: number;
@@ -131,10 +93,6 @@ interface PhysicalCourse {
   created_at: string;
   updated_at: string;
 }
-
-// ---------------------------------------------------------------------------
-// Helpers (inlined, per-route — no shared /lib imports)
-// ---------------------------------------------------------------------------
 
 function formatNPR(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return "—";
@@ -195,7 +153,6 @@ function initials(name: string | null): string {
   return parts.slice(0, 2).map((p) => p[0]?.toUpperCase()).join("");
 }
 
-// Icon rotation for the outcomes checklist, cycling deterministically
 const OUTCOME_ICONS = [Compass, Ruler, PenTool, Layers, Globe, Building2, ShieldCheck, GraduationCap];
 
 const WHATSAPP_NUMBER = "9779763695665";
@@ -208,10 +165,6 @@ const FAQ_ITEMS = [
   { q: "Is there a refund policy?", a: "If you're unable to continue within the first two sessions for a genuine reason, reach out to our support team to discuss options." },
   { q: "Will I receive a certificate after completion?", a: "Yes, an industry-recognized certificate with QR verification and instructor signature is issued on successful completion." },
 ];
-
-// ---------------------------------------------------------------------------
-// Small inline hooks
-// ---------------------------------------------------------------------------
 
 function useCountUp(target: number, durationMs = 900, start = true) {
   const [value, setValue] = useState(0);
@@ -230,10 +183,6 @@ function useCountUp(target: number, durationMs = 900, start = true) {
   }, [target, durationMs, start]);
   return value;
 }
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
 
 function SeatsBar({ course, animate }: { course: PhysicalCourse; animate: boolean }) {
   const max = course.max_seats ?? 30;
@@ -309,39 +258,86 @@ function ReserveSeatForm({ course, courseCode }: { course: PhysicalCourse; cours
       return;
     }
 
+    const fullName = form.fullName.trim();
+    const phone = form.phone.trim();
+
     setSubmitting(true);
 
-    // Fetch start_date to ensure we record the latest accurate details
-    const { data: currentCourse } = await supabase
-      .from("physicalcourses")
-      .select("start_date")
-      .eq("id", course.id)
-      .single();
+    try {
+      const { data: currentCourse } = await supabase
+        .from("physicalcourses")
+        .select("start_date")
+        .eq("id", course.id)
+        .single();
 
-    const { error } = await supabase.from("physical_leads").insert({
-      course_id: course.id,
-      course_code: course.course_code ?? courseCode,
-      start_date: currentCourse?.start_date ?? course.start_date ?? null,
-      course_title: course.title,
-      category: course.category,
-      full_name: form.fullName.trim(),
-      phone: form.phone.trim(),
-      email: form.email.trim() || null,
-      current_education: form.currentEducation.trim() || null,
-      institution_name: form.institutionName.trim() || null,
-      office_location: course.location || "New Baneshwor",
-      course_price: course.price,
-      discount_price: course.discount_price ?? null,
-      remarks: form.remarks.trim() || null,
-      source: "Website",
-    });
-    setSubmitting(false);
+      const startDate = currentCourse?.start_date ?? course.start_date ?? null;
 
-    if (error) {
+      const { data: existingLead, error: lookupError } = await supabase
+        .from("physical_leads")
+        .select("id, remarks")
+        .eq("course_id", course.id)
+        .eq("phone", phone)
+        .maybeSingle();
+
+      if (lookupError) {
+        console.error("[ReserveSeatForm] Lookup error:", lookupError.message);
+      }
+
+      if (existingLead) {
+        const mergedRemarks = form.remarks.trim()
+          ? existingLead.remarks
+            ? `${existingLead.remarks} | ${form.remarks.trim()}`
+            : form.remarks.trim()
+          : existingLead.remarks;
+
+        const { error: updateError } = await supabase
+          .from("physical_leads")
+          .update({
+            updated_at: new Date().toISOString(),
+            remarks: mergedRemarks,
+          })
+          .eq("id", existingLead.id);
+
+        if (updateError) {
+          console.error("[ReserveSeatForm] Update error:", updateError.message);
+          setErrorMsg("Something went wrong updating your details. Please try again, or message us on WhatsApp instead.");
+          setSubmitting(false);
+          return;
+        }
+      } else {
+        const { error: insertError } = await supabase.from("physical_leads").insert({
+          course_id: course.id,
+          course_code: course.course_code ?? courseCode,
+          start_date: startDate,
+          course_title: course.title,
+          category: course.category,
+          full_name: fullName,
+          phone,
+          email: form.email.trim() || null,
+          current_education: form.currentEducation.trim() || null,
+          institution_name: form.institutionName.trim() || null,
+          office_location: course.location || "New Baneshwor",
+          course_price: course.price,
+          discount_price: course.discount_price ?? null,
+          remarks: form.remarks.trim() || null,
+          source: "Website",
+        });
+
+        if (insertError) {
+          console.error("[ReserveSeatForm] Insert error:", insertError.message);
+          setErrorMsg("Something went wrong submitting your details. Please try again, or message us on WhatsApp instead.");
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      setSubmitting(false);
+      setSubmitted(true);
+    } catch (err) {
+      console.error("[ReserveSeatForm] Unexpected error:", err);
       setErrorMsg("Something went wrong submitting your details. Please try again, or message us on WhatsApp instead.");
-      return;
+      setSubmitting(false);
     }
-    setSubmitted(true);
   }
 
   if (submitted) {
@@ -454,10 +450,6 @@ function ReserveSeatForm({ course, courseCode }: { course: PhysicalCourse; cours
     </form>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Instant Booking Offer — floating upsell card + capture modal
-// ---------------------------------------------------------------------------
 
 function InstantBookingOfferCard({
   course,
@@ -682,10 +674,6 @@ function InstantBookingModal({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
-
 export default function OfflineCourseDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -735,10 +723,6 @@ export default function OfflineCourseDetailPage() {
   const seatsLeft = course ? seatsRemaining(course) : 0;
   const statusLabel = course ? resolveStatusLabel(course.status) : null;
 
-  // -------------------------------------------------------------------------
-  // Loading / not-found states
-  // -------------------------------------------------------------------------
-
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F5F8FF] flex items-center justify-center">
@@ -780,7 +764,6 @@ export default function OfflineCourseDetailPage() {
 
   const heroImage = course.course_image_url || null;
 
-  // Full logistics grid — everything not already surfaced in the hero strip.
   const classDetails = [
     { icon: MapPin, label: "Location", value: course.location || "New Baneshwor, Kathmandu" },
     { icon: Clock, label: "Timing", value: course.timing || "To be announced" },
@@ -790,23 +773,17 @@ export default function OfflineCourseDetailPage() {
     { icon: Award, label: "Certificate", value: "Included on completion" },
   ];
 
-  // Instant Booking Offer — always derived live from course price fields.
-  // Website Price = discount_price ?? price
-  // Instant Booking Price = Website Price × 0.80 (never off the original price)
-  // Booking Amount (today's deposit) = Instant Booking Price × 0.10
   const websitePrice = course.discount_price ?? course.price;
   const instantBookingPrice = Math.round(websitePrice * 0.8);
   const bookingAmount = Math.round(instantBookingPrice * 0.1);
 
   async function handleInstantBookingSubmit(details: { name: string; email: string; phone: string }) {
-    // Fetch start_date to ensure we record the latest accurate details
     const { data: currentCourse } = await supabase
       .from("physicalcourses")
       .select("start_date")
       .eq("id", course!.id)
       .single();
 
-    // Check if a lead already exists for this user in this course
     const { data: existingLead } = await supabase
       .from("physical_leads")
       .select("id, remarks")
@@ -815,7 +792,6 @@ export default function OfflineCourseDetailPage() {
       .maybeSingle();
 
     if (existingLead) {
-      // 1a. Update existing lead to set the locked instant price
       const updatedRemarks = existingLead.remarks 
         ? `${existingLead.remarks} | Upgraded to Instant Booking` 
         : "Upgraded to Instant Booking";
@@ -830,7 +806,6 @@ export default function OfflineCourseDetailPage() {
 
       if (error) console.error("Error updating physical lead record:", error);
     } else {
-      // 1b. Create a new lead record setting just the locked price
       const { error } = await supabase.from("physical_leads").insert({
         course_id: course!.id,
         course_code: course!.course_code ?? courseCode,
@@ -842,7 +817,7 @@ export default function OfflineCourseDetailPage() {
         email: details.email || null,
         office_location: course!.location || "New Baneshwor",
         course_price: course!.price,
-        discount_price: instantBookingPrice, // Report locked price here
+        discount_price: instantBookingPrice,
         source: "Website",
         status: "new",
         remarks: "Initiated Instant Booking (Order Type: Offline Course)",
@@ -851,10 +826,9 @@ export default function OfflineCourseDetailPage() {
       if (error) console.error("Error creating physical lead record:", error);
     }
 
-    // 2. Redirect to Order page
     const params = new URLSearchParams({
       type: "course",
-      order_type: "Offline Course", // Pass Order type
+      order_type: "Offline Course",
       courseName: course!.title,
       price: String(bookingAmount),
       locked_price: String(instantBookingPrice),
@@ -891,8 +865,24 @@ export default function OfflineCourseDetailPage() {
             .gh-instant-cta-pulse {
               animation: ghInstantCtaPulse 2.4s ease-in-out infinite;
             }
+            @keyframes ghFlamePulse {
+              0%, 100% { transform: scale(1) rotate(0deg); }
+              50% { transform: scale(1.15) rotate(-4deg); }
+            }
+            @keyframes ghBarGlow {
+              0%, 100% { box-shadow: 0 6px 20px -6px rgba(255,122,24,0.35); }
+              50% { box-shadow: 0 8px 28px -4px rgba(255,122,24,0.55); }
+            }
+            .gh-flame-pulse {
+              display: inline-block;
+              animation: ghFlamePulse 1.6s ease-in-out infinite;
+            }
+            .gh-bar-glow {
+              animation: ghBarGlow 2.6s ease-in-out infinite;
+            }
             @media (prefers-reduced-motion: reduce) {
-              .gh-instant-card-enter, .gh-instant-shadow-pulse, .gh-instant-cta-pulse {
+              .gh-instant-card-enter, .gh-instant-shadow-pulse, .gh-instant-cta-pulse,
+              .gh-flame-pulse, .gh-bar-glow {
                 animation: none !important;
               }
             }
@@ -901,28 +891,36 @@ export default function OfflineCourseDetailPage() {
       />
       <main className="grid lg:grid-cols-[1fr_360px] gap-0 max-w-[1400px] mx-auto">
         
-        {/* ============================== MOBILE EXPANDABLE TOP BAR ============================== */}
-        <div className="lg:hidden sticky top-0 z-[60] col-span-full bg-white shadow-[0_4px_20px_-8px_rgba(11,27,58,0.15)] flex flex-col max-h-[85vh]">
-          <div className="flex items-center justify-between px-4 py-3 bg-[#FFF5EB] border-b border-[#FF7A18]/20">
-            <button
-              onClick={() => setOfferExpanded(!offerExpanded)}
-              className="flex-1 flex items-center justify-start gap-2 text-left"
-            >
-              <span className="text-sm font-bold text-[#FF7A18]">🔥 Instant Booking Offer</span>
-            </button>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setOfferExpanded(!offerExpanded)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-[#FF7A18] bg-[#FF7A18]/10 px-2.5 py-1.5 rounded-full transition-colors hover:bg-[#FF7A18]/20"
-              >
-                <span>{formatNPR(instantBookingPrice)}</span>
-                <span className="w-1 h-1 rounded-full bg-[#FF7A18]/40" />
-                <span>Save 20%</span>
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${offerExpanded ? "rotate-180" : ""}`} />
-              </button>
+        <div className="lg:hidden sticky top-0 z-[60] col-span-full flex flex-col max-h-[85vh]">
+          <button
+            onClick={() => setOfferExpanded(!offerExpanded)}
+            className="gh-bar-glow w-full flex items-center justify-between gap-3 px-4 py-3.5 bg-gradient-to-r from-[#FF7A18] to-[#FF9A4D] border-b-2 border-[#e86c0f]/40 text-left"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="gh-flame-pulse text-xl leading-none shrink-0">🔥</span>
+              <div className="min-w-0">
+                <div className="text-[13px] font-extrabold text-white uppercase tracking-wide leading-tight">
+                  Instant Booking Offer
+                </div>
+                <div className="text-[11px] font-medium text-white/85 leading-tight">
+                  Extra 20% off — reserve now
+                </div>
+              </div>
             </div>
-          </div>
-          
+
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-col items-end leading-tight">
+                <span className="text-base font-extrabold text-white">{formatNPR(instantBookingPrice)}</span>
+                <span className="text-[10px] font-semibold text-white/80">Save 20%</span>
+              </div>
+              <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <ChevronDown
+                  className={`w-4 h-4 text-white transition-transform ${offerExpanded ? "rotate-180" : ""}`}
+                />
+              </div>
+            </div>
+          </button>
+
           {offerExpanded && (
             <div className="overflow-y-auto p-4 bg-[#F5F8FF]">
               <InstantBookingOfferCard
@@ -942,7 +940,6 @@ export default function OfflineCourseDetailPage() {
         </div>
 
         <div className="min-w-0">
-          {/* ============================== HERO ============================== */}
           <section className="px-6 lg:px-12 pt-10 lg:pt-14 pb-10">
             <div className="grid lg:grid-cols-[1.05fr_0.95fr] gap-10 items-start">
               <div>
@@ -975,12 +972,10 @@ export default function OfflineCourseDetailPage() {
                     "Hands-on practical training with real projects, industry tools, recordings, and a certificate on completion."}
                 </p>
 
-                {/* Price — front and center, immediately under the description */}
                 <div className="mt-6">
                   <PriceBlock course={course} size="lg" />
                 </div>
 
-                {/* The facts that decide "is this for me" */}
                 <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg">
                   {[
                     { icon: Calendar, label: "Starts", value: formatDateShort(course.start_date) },
@@ -1013,8 +1008,6 @@ export default function OfflineCourseDetailPage() {
                 </div>
               </div>
 
-              {/* Right: course image — object-contain so the whole picture
-                  is always visible instead of being cropped to fill the box */}
               <div className="relative rounded-2xl overflow-hidden border border-[#0B1B3A]/10 shadow-xl bg-[#0B1B3A]/[0.04] aspect-[4/3] p-3">
                 {heroImage ? (
                   <div className="relative w-full h-full rounded-xl overflow-hidden bg-white">
@@ -1039,7 +1032,6 @@ export default function OfflineCourseDetailPage() {
             </div>
           </section>
 
-          {/* ============================== CLASS DETAILS ============================== */}
           <section className="px-6 lg:px-12 py-12 bg-white border-y border-[#0B1B3A]/8">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-6">Class Details</h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1057,7 +1049,6 @@ export default function OfflineCourseDetailPage() {
             </div>
           </section>
 
-          {/* ============================== WHAT YOU'LL LEARN ============================== */}
           {outcomes.length > 0 && (
             <section id="learn" className="px-6 lg:px-12 py-14 scroll-mt-20">
               <h2 className="font-display text-xl sm:text-2xl font-bold mb-6">What You&apos;ll Learn</h2>
@@ -1080,7 +1071,6 @@ export default function OfflineCourseDetailPage() {
             </section>
           )}
 
-          {/* ============================== INSTRUCTOR ============================== */}
           {course.instructor_name && (
             <section className="px-6 lg:px-12 py-14 bg-white border-y border-[#0B1B3A]/8">
               <h2 className="font-display text-xl sm:text-2xl font-bold mb-6">Meet Your Instructor</h2>
@@ -1112,7 +1102,6 @@ export default function OfflineCourseDetailPage() {
             </section>
           )}
 
-          {/* ============================== PRICING ============================== */}
           <section className="px-6 lg:px-12 py-14">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-6">Course Fee</h2>
             <div className="max-w-md rounded-2xl border border-[#0B1B3A]/10 p-7 shadow-sm bg-white">
@@ -1141,7 +1130,6 @@ export default function OfflineCourseDetailPage() {
             </div>
           </section>
 
-          {/* ============================== RESERVE YOUR SEAT ============================== */}
           <section id="reserve-seat" className="px-6 lg:px-12 py-14 bg-white border-y border-[#0B1B3A]/8 scroll-mt-20">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-2">Reserve Your Seat</h2>
             <p className="text-sm text-[#0B1B3A]/55 mb-6 max-w-md">
@@ -1150,7 +1138,6 @@ export default function OfflineCourseDetailPage() {
             <ReserveSeatForm course={course} courseCode={courseCode} />
           </section>
 
-          {/* ============================== FAQ ============================== */}
           <section className="px-6 lg:px-12 py-14">
             <h2 className="font-display text-xl sm:text-2xl font-bold mb-6">Frequently Asked Questions</h2>
             <div className="max-w-2xl space-y-3">
@@ -1176,7 +1163,6 @@ export default function OfflineCourseDetailPage() {
             </div>
           </section>
 
-          {/* ============================== FINAL CTA ============================== */}
           <section className="px-6 lg:px-12 py-16 bg-[#0B1B3A] text-white text-center">
             <h2 className="font-display text-2xl sm:text-3xl font-bold mb-3">
               Only {seatsLeft} seats left
@@ -1203,7 +1189,6 @@ export default function OfflineCourseDetailPage() {
           </section>
         </div>
 
-        {/* ============================== DESKTOP STICKY SIDEBAR ============================== */}
         <aside className="hidden lg:block border-l border-[#0B1B3A]/8 bg-white">
           <div className="sticky top-6 p-6 space-y-4">
             <InstantBookingOfferCard
@@ -1258,7 +1243,6 @@ export default function OfflineCourseDetailPage() {
         </aside>
       </main>
 
-      {/* ============================== MOBILE STICKY BOTTOM BAR ============================== */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-[#0B1B3A]/10 px-4 py-3 shadow-[0_-4px_20px_-8px_rgba(11,27,58,0.15)]">
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
