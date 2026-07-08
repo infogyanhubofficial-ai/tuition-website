@@ -6,20 +6,9 @@
  * Customer Handler Dashboard — public.crm_leads
  * Fully self-contained route file: types, Supabase client, helpers,
  * and all sub-components are inlined. No /lib imports, per convention.
- *
- * Schema assumptions (adjust if your columns differ):
- * crm_leads(id, name, phone_number, course_id, lead_status, payment_status,
- * call_notes jsonb, last_contacted_at timestamptz, follow_up_date date,
- * learning_mode, priority, updated_at timestamptz)
- * NOTE: `follow_up_date` is a plain nullable `date` column. Add it via
- * `alter table crm_leads add column follow_up_date date;` if it doesn't
- * exist yet.
- * syllabi_v2(id, name)
- * FK: crm_leads.course_id -> syllabi_v2.id
- * trigger_update_crm_updated_at keeps updated_at fresh on every row UPDATE.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -30,16 +19,31 @@ import {
   ChevronRight,
   Search,
   SlidersHorizontal,
-  ArrowUpDown,
   ArrowUp,
   ArrowDown,
   MessageSquarePlus,
+  MessageCircle,
+  BookOpen,
+  GraduationCap,
+  Tag,
   X,
   Check,
   Loader2,
   RefreshCcw,
   AlertTriangle,
   Inbox,
+  Flame,
+  Clock,
+  CalendarClock,
+  PhoneCall,
+  Users,
+  CheckCircle2,
+  Command,
+  Globe,
+  MapPin,
+  History,
+  Star,
+  Sparkles,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -57,6 +61,7 @@ const supabase = createClient(
 
 type LeadStatus =
   | "new"
+  | "old"
   | "contacted"
   | "follow_up"
   | "interested"
@@ -77,6 +82,8 @@ interface CallNote {
 interface SyllabusRef {
   id: number;
   name: string;
+  description?: string | null;
+  online_tutors?: { name: string } | null;
 }
 
 interface CrmLead {
@@ -92,11 +99,26 @@ interface CrmLead {
   last_contacted_at: string | null;
   follow_up_date: string | null;
   updated_at: string | null;
+  interested_course_ids: number[] | null;
   // joined
   syllabi_v2: SyllabusRef | null;
 }
 
 type SortDir = "asc" | "desc";
+
+type QuickFilter = "contactedToday" | "followupsToday" | "overdue" | "enrolledToday" | null;
+
+type CourseMatchKind = "primary" | "interested" | "both" | null;
+
+interface DashboardStats {
+  totalLeads: number;
+  contactedToday: number;
+  followupsToday: number;
+  overdue: number;
+  enrolledToday: number;
+  highPriority: number;
+  paid: number;
+}
 
 // ---------------------------------------------------------------------------
 // Constants / display maps
@@ -106,6 +128,7 @@ const PAGE_SIZE = 50;
 
 const LEAD_STATUS_OPTIONS: { value: LeadStatus; label: string }[] = [
   { value: "new", label: "New" },
+  { value: "old", label: "Old" },
   { value: "contacted", label: "Contacted" },
   { value: "follow_up", label: "Follow-up" },
   { value: "interested", label: "Interested" },
@@ -136,11 +159,7 @@ const PRIORITY_RAIL: Record<Priority, string> = {
   low: "#9AA5B5",
 };
 
-const PRIORITY_BADGE: Record<Priority, string> = {
-  high: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200",
-  normal: "bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200",
-  low: "bg-slate-50 text-slate-500 ring-1 ring-inset ring-slate-200",
-};
+const OVERDUE_RAIL = "#E11D48";
 
 const PRIORITY_SELECT_TONE: Record<Priority, string> = {
   high: "border-rose-300 text-rose-700",
@@ -160,14 +179,28 @@ const PAYMENT_DOT: Record<PaymentStatus, string> = {
   unpaid: "bg-rose-500",
 };
 
-const STATUS_SELECT_TONE: Record<LeadStatus, string> = {
-  new: "border-slate-300 text-slate-700",
-  contacted: "border-sky-300 text-sky-700",
-  follow_up: "border-amber-300 text-amber-700",
-  interested: "border-indigo-300 text-indigo-700",
-  not_interested: "border-slate-300 text-slate-400",
-  enrolled: "border-emerald-300 text-emerald-700",
+// Status chips: dot color, chip tone, and label — replaces the plain <select>.
+const STATUS_CHIP: Record<LeadStatus, { dot: string; tone: string; label: string }> = {
+  new: { dot: "bg-slate-400", tone: "bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200", label: "New" },
+  old: { dot: "bg-slate-300", tone: "bg-slate-50 text-slate-400 ring-1 ring-inset ring-slate-200", label: "Old" },
+  contacted: { dot: "bg-sky-500", tone: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200", label: "Contacted" },
+  follow_up: { dot: "bg-amber-500", tone: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200", label: "Follow-up" },
+  interested: { dot: "bg-indigo-500", tone: "bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-200", label: "Interested" },
+  not_interested: { dot: "bg-rose-400", tone: "bg-rose-50 text-rose-500 ring-1 ring-inset ring-rose-200", label: "Not interested" },
+  enrolled: { dot: "bg-emerald-500", tone: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200", label: "Enrolled" },
 };
+
+// Avatar palette — deterministic color per lead, derived from initials.
+const AVATAR_PALETTE: { bg: string; text: string }[] = [
+  { bg: "bg-[#1E3A6E]/[0.08]", text: "text-[#1E3A6E]" },
+  { bg: "bg-emerald-50", text: "text-emerald-700" },
+  { bg: "bg-amber-50", text: "text-amber-700" },
+  { bg: "bg-rose-50", text: "text-rose-600" },
+  { bg: "bg-violet-50", text: "text-violet-700" },
+  { bg: "bg-sky-50", text: "text-sky-700" },
+  { bg: "bg-[#F2711C]/[0.10]", text: "text-[#F2711C]" },
+  { bg: "bg-teal-50", text: "text-teal-700" },
+];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -212,7 +245,18 @@ function formatPhone(raw: string | null | undefined): string {
   return raw;
 }
 
-/** Converts an ISO date/timestamp into the yyyy-mm-dd value an <input type="date"> expects. */
+function toWhatsAppNumber(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const digits = raw.replace(/[^\d]/g, "");
+  return digits.length > 0 ? digits : null;
+}
+
+function buildWhatsAppUrl(raw: string | null | undefined): string | null {
+  const digits = toWhatsAppNumber(raw);
+  if (!digits) return null;
+  return "https://wa.me/" + digits;
+}
+
 function toDateInputValue(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -221,6 +265,16 @@ function toDateInputValue(iso: string | null | undefined): string {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
+}
+
+function todayInputValue(): string {
+  return toDateInputValue(new Date().toISOString());
+}
+
+function startOfTodayIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
 }
 
 function formatFollowUp(iso: string | null | undefined): { label: string; overdue: boolean } {
@@ -246,7 +300,35 @@ function initials(name: string | null | undefined): string {
     .join("");
 }
 
-/** Builds a compact page-number list with ellipses, e.g. 1 … 4 5 [6] 7 8 … 42 */
+function avatarTone(seed: string): { bg: string; text: string } {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+  return AVATAR_PALETTE[hash % AVATAR_PALETTE.length];
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  d.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function groupNotesByDay(notes: CallNote[]): { label: string; notes: CallNote[] }[] {
+  const sorted = [...notes].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const groups: { label: string; notes: CallNote[] }[] = [];
+  for (const n of sorted) {
+    const label = dayLabel(n.created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.notes.push(n);
+    else groups.push({ label, notes: [n] });
+  }
+  return groups;
+}
+
 function getPageNumbers(current: number, total: number): (number | "ellipsis")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const pages = new Set<number>([1, 2, total - 1, total, current - 1, current, current + 1]);
@@ -262,17 +344,99 @@ function getPageNumbers(current: number, total: number): (number | "ellipsis")[]
 }
 
 // ---------------------------------------------------------------------------
-// Multi-select popover (course filter)
+// Animated KPI number
+// ---------------------------------------------------------------------------
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [display, setDisplay] = useState(value);
+  const prevRef = useRef(value);
+
+  useEffect(() => {
+    const start = prevRef.current;
+    const end = value;
+    if (start === end) return;
+    const startTime = performance.now();
+    const duration = 500;
+    let raf = 0;
+
+    function tick(now: number) {
+      const t = Math.min(1, (now - startTime) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(start + (end - start) * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+    prevRef.current = end;
+    return () => cancelAnimationFrame(raf);
+  }, [value]);
+
+  return <>{display.toLocaleString()}</>;
+}
+
+// ---------------------------------------------------------------------------
+// KPI card
+// ---------------------------------------------------------------------------
+
+function KpiCard({
+  label,
+  value,
+  icon,
+  accent,
+  onClick,
+  active,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  accent: string;
+  onClick?: () => void;
+  active?: boolean;
+}) {
+  const Tag = onClick ? "button" : "div";
+  return (
+    <Tag
+      onClick={onClick}
+      title={onClick ? `View ${label.toLowerCase()}` : undefined}
+      className={cn(
+        "group flex items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-all duration-200 ease-out",
+        onClick && "cursor-pointer hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/[0.07] hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.5)]",
+        active ? "border-white/30 bg-white/[0.09] shadow-[0_8px_20px_-8px_rgba(0,0,0,0.5)]" : "border-white/10 bg-white/[0.04]"
+      )}
+    >
+      <span
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-transform duration-200 ease-out group-hover:scale-110"
+        style={{
+          background: `linear-gradient(135deg, ${accent}33, ${accent}14)`,
+          color: accent,
+          boxShadow: active ? `0 0 0 1px ${accent}55 inset` : undefined,
+        }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="font-mono text-[17px] font-semibold leading-none text-white">
+          <AnimatedNumber value={value} />
+        </p>
+        <p className="mt-1 truncate text-[10.5px] uppercase tracking-wide text-slate-300">{label}</p>
+      </div>
+    </Tag>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Multi-select popover (courses)
 // ---------------------------------------------------------------------------
 
 function CourseMultiSelect({
   courses,
   selected,
   onChange,
+  triggerLabel = "Course",
 }: {
   courses: SyllabusRef[];
   selected: number[];
   onChange: (ids: number[]) => void;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -300,7 +464,7 @@ function CourseMultiSelect({
             : "border-slate-300 text-slate-600 hover:border-slate-400"
         )}
       >
-        Course
+        {triggerLabel}
         {selected.length > 0 && (
           <span className="rounded bg-[#1E3A6E] px-1.5 py-0.5 text-[11px] font-semibold text-white">
             {selected.length}
@@ -395,21 +559,101 @@ function PillSelect<T extends string>({
 }
 
 // ---------------------------------------------------------------------------
-// Call notes drawer (per-row expandable JSONB interface)
+// Status chip dropdown — replaces the plain <select> for lead_status
 // ---------------------------------------------------------------------------
 
-function CallNotesDrawer({
+function StatusChipSelect({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: LeadStatus;
+  onChange: (v: LeadStatus) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const chip = STATUS_CHIP[value];
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        className={cn(
+          "flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-[12.5px] font-medium transition-opacity disabled:opacity-50",
+          chip.tone
+        )}
+      >
+        <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", chip.dot)} />
+        <span className="truncate">{chip.label}</span>
+        <ChevronDown size={12} className="ml-auto shrink-0 opacity-60" />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.12 }}
+            className="absolute left-0 z-30 mt-1.5 w-44 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg"
+          >
+            {LEAD_STATUS_OPTIONS.map((o) => {
+              const c = STATUS_CHIP[o.value];
+              return (
+                <button
+                  key={o.value}
+                  onClick={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[12.5px] font-medium hover:bg-slate-50",
+                    o.value === value ? "text-slate-900" : "text-slate-600"
+                  )}
+                >
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", c.dot)} />
+                  {o.label}
+                  {o.value === value && <Check size={12} className="ml-auto text-slate-400" />}
+                </button>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Right-side lead drawer: course info, interested courses, call timeline
+// ---------------------------------------------------------------------------
+
+function LeadDrawer({
   lead,
+  courses,
+  onClose,
   onAddNote,
+  onUpdateInterestedCourses,
 }: {
   lead: CrmLead;
+  courses: SyllabusRef[];
+  onClose: () => void;
   onAddNote: (leadId: number, note: string) => Promise<void>;
+  onUpdateInterestedCourses: (leadId: number, ids: number[]) => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
-  const notes = [...(lead.call_notes ?? [])].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const groups = groupNotesByDay(lead.call_notes ?? []);
+  const tone = avatarTone(String(lead.id));
 
   const submit = async () => {
     if (!draft.trim()) return;
@@ -420,61 +664,134 @@ function CallNotesDrawer({
   };
 
   return (
-    <motion.tr
-      initial={{ opacity: 0, height: 0 }}
-      animate={{ opacity: 1, height: "auto" }}
-      exit={{ opacity: 0, height: 0 }}
-      transition={{ duration: 0.16 }}
-    >
-      <td colSpan={8} className="border-b border-slate-100 bg-slate-50/70 p-0">
-        <div className="grid grid-cols-[1fr_320px] gap-6 px-6 py-5">
-          <div>
-            <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-slate-400">
-              Call log · {notes.length} {notes.length === 1 ? "entry" : "entries"}
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[1px]"
+      />
+      <motion.aside
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", stiffness: 340, damping: 34 }}
+        className="fixed right-0 top-0 z-50 flex h-screen w-full max-w-[440px] flex-col border-l border-slate-200 bg-white shadow-2xl"
+      >
+        {/* Drawer header */}
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-[#12203D] px-5 py-4">
+          <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-mono text-[13px] font-semibold", tone.bg, tone.text)}>
+            {initials(lead.name)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-mono text-[15px] font-semibold text-white">{formatPhone(lead.phone_number)}</p>
+            <p className="truncate text-[12.5px] text-slate-300">{lead.name ?? "Unnamed lead"}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
+          {/* Course information */}
+          <div className="rounded-md border border-slate-200 bg-white px-4 py-3.5">
+            <p className="mb-2.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-slate-400">
+              <BookOpen size={12} />
+              Course information
             </p>
-            {notes.length === 0 ? (
-              <p className="text-[13px] text-slate-400">No Notes</p>
+            <div className="space-y-2.5">
+              <div>
+                <p className="text-[10.5px] uppercase tracking-wide text-slate-400">Course</p>
+                <p className="mt-0.5 text-[13px] font-medium text-slate-700">
+                  {lead.syllabi_v2?.name ?? "Not assigned"}
+                </p>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <GraduationCap size={13} className="text-slate-400" />
+                <p className="text-[13px] font-medium text-slate-700">
+                  {lead.syllabi_v2?.online_tutors?.name ?? "No tutor assigned"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10.5px] uppercase tracking-wide text-slate-400">Description</p>
+                <p className="mt-0.5 whitespace-pre-line text-[12.5px] leading-snug text-slate-600">
+                  {lead.syllabi_v2?.description ?? "No description available."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Interested courses editor */}
+          <div className="rounded-md border border-slate-200 bg-white px-4 py-3.5">
+            <p className="mb-2.5 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-slate-400">
+              <Tag size={12} />
+              Interested courses
+            </p>
+            <CourseMultiSelect
+              courses={courses}
+              selected={lead.interested_course_ids ?? []}
+              onChange={(ids) => onUpdateInterestedCourses(lead.id, ids)}
+              triggerLabel="Edit interests"
+            />
+          </div>
+
+          {/* Timeline */}
+          <div className="rounded-md border border-slate-200 bg-white px-4 py-3.5">
+            <p className="mb-3 flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider text-slate-400">
+              <History size={12} />
+              Timeline · {(lead.call_notes ?? []).length} {(lead.call_notes ?? []).length === 1 ? "entry" : "entries"}
+            </p>
+            {groups.length === 0 ? (
+              <p className="text-[13px] text-slate-400">No notes yet.</p>
             ) : (
-              <div className="max-h-44 space-y-2 overflow-y-auto pr-2">
-                {notes.map((n) => (
-                  <div
-                    key={n.id}
-                    className="relative rounded-md border border-slate-200 bg-white px-3 py-2 pl-4"
-                  >
-                    <span className="absolute left-0 top-0 h-full w-[3px] rounded-l-md bg-[#1E3A6E]/20" />
-                    <p className="text-[13px] leading-snug text-slate-700">{n.note}</p>
-                    <p className="mt-1 font-mono text-[11px] text-slate-400">
-                      {formatTimestamp(n.created_at)}
-                      {n.created_by ? ` · ${n.created_by}` : ""}
-                    </p>
+              <div className="space-y-4">
+                {groups.map((g) => (
+                  <div key={g.label}>
+                    <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{g.label}</p>
+                    <div className="space-y-1.5">
+                      {g.notes.map((n) => (
+                        <div key={n.id} className="relative rounded-md border border-slate-200 bg-white px-3 py-2 pl-4">
+                          <span className="absolute left-0 top-0 h-full w-[3px] rounded-l-md bg-[#1E3A6E]/20" />
+                          <p className="text-[13px] leading-snug text-slate-700">{n.note}</p>
+                          <p className="mt-1 font-mono text-[11px] text-slate-400">
+                            {formatTimestamp(n.created_at)}
+                            {n.created_by ? ` · ${n.created_by}` : ""}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
-          <div>
-            <p className="mb-2.5 font-mono text-[11px] uppercase tracking-wider text-slate-400">
-              Add entry
-            </p>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              placeholder="What happened on the call…"
-              rows={3}
-              className="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#1E3A6E]"
-            />
-            <button
-              onClick={submit}
-              disabled={!draft.trim() || saving}
-              className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-[#12203D] text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {saving ? <Loader2 size={13} className="animate-spin" /> : <MessageSquarePlus size={13} />}
-              Log note
-            </button>
-          </div>
         </div>
-      </td>
-    </motion.tr>
+
+        {/* Add note — pinned at the bottom of the drawer */}
+        <div className="border-t border-slate-200 bg-slate-50/70 px-5 py-4">
+          <p className="mb-2 font-mono text-[11px] uppercase tracking-wider text-slate-400">Add entry</p>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="What happened on the call…"
+            rows={2}
+            className="w-full resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-[13px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#1E3A6E]"
+          />
+          <button
+            onClick={submit}
+            disabled={!draft.trim() || saving}
+            className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-md bg-[#12203D] text-[13px] font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <MessageSquarePlus size={13} />}
+            Log note
+          </button>
+        </div>
+      </motion.aside>
+    </>
   );
 }
 
@@ -488,20 +805,34 @@ export default function CrmLeadsDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [stats, setStats] = useState<DashboardStats>({
+    totalLeads: 0,
+    contactedToday: 0,
+    followupsToday: 0,
+    overdue: 0,
+    enrolledToday: 0,
+    highPriority: 0,
+    paid: 0,
+  });
+
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState<number[]>([]);
   const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "all">("all");
   const [modeFilter, setModeFilter] = useState<LearningMode | "all">("all");
   const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
 
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+  const [drawerLeadId, setDrawerLeadId] = useState<number | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
   const [callDrafts, setCallDrafts] = useState<Record<number, string>>({});
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const markPending = (id: number, on: boolean) =>
     setPendingIds((prev) => {
@@ -526,7 +857,7 @@ export default function CrmLeadsDashboard() {
   const fetchCourses = useCallback(async () => {
     const { data, error } = await supabase
       .from("syllabi_v2")
-      .select("id, name")
+      .select("id, name, description, online_tutors(name)")
       .order("name", { ascending: true });
     if (!error && data) setCourses(data as unknown as SyllabusRef[]);
   }, []);
@@ -540,14 +871,27 @@ export default function CrmLeadsDashboard() {
 
     let query = supabase
       .from("crm_leads")
-      .select("*, syllabi_v2(id, name)", { count: "exact" })
+      .select("*, syllabi_v2(id, name, description, online_tutors(name))", { count: "exact" })
       .order("last_contacted_at", { ascending: sortDir === "asc", nullsFirst: sortDir === "asc" })
       .range(from, to);
 
-    if (courseFilter.length > 0) query = query.in("course_id", courseFilter);
+    if (courseFilter.length > 0) {
+      const idList = courseFilter.join(",");
+      query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`);
+    }
     if (paymentFilter !== "all") query = query.eq("payment_status", paymentFilter);
     if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
     if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
+    if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
+
+    // Quick filter — set by clicking a KPI card. Drills the table down to
+    // exactly the leads behind that number, still respecting every other filter.
+    const startToday = startOfTodayIso();
+    const todayStr = todayInputValue();
+    if (quickFilter === "contactedToday") query = query.gte("last_contacted_at", startToday);
+    if (quickFilter === "followupsToday") query = query.eq("follow_up_date", todayStr);
+    if (quickFilter === "overdue") query = query.lt("follow_up_date", todayStr);
+    if (quickFilter === "enrolledToday") query = query.eq("lead_status", "enrolled").gte("updated_at", startToday);
 
     const { data, error, count } = await query;
 
@@ -560,7 +904,59 @@ export default function CrmLeadsDashboard() {
       setTotalCount(count ?? 0);
     }
     setLoading(false);
-  }, [sortDir, courseFilter, paymentFilter, modeFilter, priorityFilter, page]);
+  }, [sortDir, courseFilter, paymentFilter, modeFilter, priorityFilter, statusFilter, quickFilter, page]);
+
+  // Starts a fresh count query with the SAME filters currently applied to the
+  // table (course / payment / mode / priority / status). Every KPI is built
+  // on top of this, so stats always reflect the entire matching result set —
+  // across every page — not just the 50 rows currently rendered.
+  const buildFilteredCountQuery = useCallback(() => {
+    let query = supabase.from("crm_leads").select("id", { count: "exact", head: true });
+    if (courseFilter.length > 0) {
+      const idList = courseFilter.join(",");
+      query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`);
+    }
+    if (paymentFilter !== "all") query = query.eq("payment_status", paymentFilter);
+    if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
+    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
+    if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
+    return query;
+  }, [courseFilter, paymentFilter, modeFilter, priorityFilter, statusFilter]);
+
+  // KPI header + footer stats — respect whichever filters are active and are
+  // always computed against the full filtered set via count queries, so a
+  // number like "132 contacted today" is correct even when those leads are
+  // spread across page 2, 3, etc.
+  const fetchStats = useCallback(async () => {
+    const startToday = startOfTodayIso();
+    const todayStr = todayInputValue();
+
+    const [totalRes, contactedRes, followupsRes, overdueRes, enrolledRes, highPriorityRes, paidRes] =
+      await Promise.all([
+        buildFilteredCountQuery(),
+        buildFilteredCountQuery().gte("last_contacted_at", startToday),
+        buildFilteredCountQuery().eq("follow_up_date", todayStr),
+        buildFilteredCountQuery().lt("follow_up_date", todayStr),
+        buildFilteredCountQuery().eq("lead_status", "enrolled").gte("updated_at", startToday),
+        buildFilteredCountQuery().eq("priority", "high"),
+        buildFilteredCountQuery().eq("payment_status", "paid"),
+      ]);
+
+    setStats({
+      totalLeads: totalRes.count ?? 0,
+      contactedToday: contactedRes.count ?? 0,
+      followupsToday: followupsRes.count ?? 0,
+      overdue: overdueRes.count ?? 0,
+      enrolledToday: enrolledRes.count ?? 0,
+      highPriority: highPriorityRes.count ?? 0,
+      paid: paidRes.count ?? 0,
+    });
+  }, [buildFilteredCountQuery]);
+
+  const refreshAll = useCallback(() => {
+    fetchLeads();
+    fetchStats();
+  }, [fetchLeads, fetchStats]);
 
   useEffect(() => {
     fetchCourses();
@@ -570,8 +966,34 @@ export default function CrmLeadsDashboard() {
     fetchLeads();
   }, [fetchLeads]);
 
+  // Re-run whenever fetchStats' identity changes — i.e. whenever any filter
+  // changes — so the KPI header and footer always match the active filters.
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Global Ctrl+K / Cmd+K shortcut to focus search.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // Reset to page 1 whenever a filter/sort changes (not on page changes themselves).
-  const filterSignature = JSON.stringify([sortDir, courseFilter, paymentFilter, modeFilter, priorityFilter]);
+  const filterSignature = JSON.stringify([
+    sortDir,
+    courseFilter,
+    paymentFilter,
+    modeFilter,
+    priorityFilter,
+    statusFilter,
+    quickFilter,
+  ]);
   const prevFilterSignature = useRef(filterSignature);
   useEffect(() => {
     if (prevFilterSignature.current !== filterSignature) {
@@ -588,9 +1010,16 @@ export default function CrmLeadsDashboard() {
 
   const goToPage = (p: number) => {
     if (p < 1 || p > totalPages || p === page) return;
-    setExpandedRow(null);
     setPage(p);
   };
+
+  // ---- Course lookup map (id -> SyllabusRef), used for interested-course names ----
+
+  const courseMap = useMemo(() => {
+    const m = new Map<number, SyllabusRef>();
+    courses.forEach((c) => m.set(c.id, c));
+    return m;
+  }, [courses]);
 
   // ---- Mutations (optimistic) ----
 
@@ -598,7 +1027,6 @@ export default function CrmLeadsDashboard() {
     const prev = leads;
     setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, lead_status } : l)));
     markPending(id, true);
-    // updated_at refreshes automatically via trigger_update_crm_updated_at
     const { error } = await supabase.from("crm_leads").update({ lead_status }).eq("id", id);
     markPending(id, false);
     if (error) {
@@ -606,6 +1034,7 @@ export default function CrmLeadsDashboard() {
       return;
     }
     flash(id);
+    fetchStats();
   };
 
   const updateLeadPriority = async (id: number, priority: Priority) => {
@@ -621,13 +1050,42 @@ export default function CrmLeadsDashboard() {
     flash(id);
   };
 
+  const updateLearningMode = async (id: number, learning_mode: LearningMode) => {
+    const prev = leads;
+    setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, learning_mode } : l)));
+    markPending(id, true);
+    const { error } = await supabase.from("crm_leads").update({ learning_mode }).eq("id", id);
+    markPending(id, false);
+    if (error) {
+      setLeads(prev);
+      return;
+    }
+    flash(id);
+  };
+
   const updateFollowUpDate = async (id: number, dateValue: string) => {
-    // dateValue is "" (cleared) or "yyyy-mm-dd" from the date input.
     const follow_up_date = dateValue === "" ? null : dateValue;
     const prev = leads;
     setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, follow_up_date } : l)));
     markPending(id, true);
     const { error } = await supabase.from("crm_leads").update({ follow_up_date }).eq("id", id);
+    markPending(id, false);
+    if (error) {
+      setLeads(prev);
+      return;
+    }
+    flash(id);
+    fetchStats();
+  };
+
+  const updateInterestedCourses = async (id: number, ids: number[]) => {
+    const prev = leads;
+    setLeads((cur) => cur.map((l) => (l.id === id ? { ...l, interested_course_ids: ids } : l)));
+    markPending(id, true);
+    const { error } = await supabase
+      .from("crm_leads")
+      .update({ interested_course_ids: ids })
+      .eq("id", id);
     markPending(id, false);
     if (error) {
       setLeads(prev);
@@ -670,8 +1128,7 @@ export default function CrmLeadsDashboard() {
     };
     const nextNotes = [...(lead.call_notes ?? []), newNote];
     const now = new Date().toISOString();
-    // Only auto-advance status out of "new" — never overwrite follow_up,
-    // interested, enrolled, or not_interested.
+
     const shouldMarkContacted = (lead.lead_status ?? "new") === "new";
     const nextStatus: LeadStatus = shouldMarkContacted ? "contacted" : lead.lead_status ?? "new";
 
@@ -699,18 +1156,27 @@ export default function CrmLeadsDashboard() {
       return;
     }
     flash(id);
+    fetchStats();
   };
 
   // ---- Derived: client-side search over name/phone (current page) ----
 
   const visibleLeads = useMemo(() => {
-    if (!search.trim()) return leads;
+    const indexed = leads.map((lead, index) => ({ lead, index }));
+    if (!search.trim()) return indexed;
     const q = search.trim().toLowerCase();
 
-    return leads.filter((l) => {
+    return indexed.filter(({ lead: l }) => {
       const safeName = (l.name ?? "").toLowerCase();
       const safePhone = (l.phone_number ?? "").replace(/\D/g, "");
-      return safeName.includes(q) || safePhone.includes(q.replace(/\D/g, ""));
+      const safeTutor = (l.syllabi_v2?.online_tutors?.name ?? "").toLowerCase();
+      const safeCourse = (l.syllabi_v2?.name ?? "").toLowerCase();
+      return (
+        safeName.includes(q) ||
+        safePhone.includes(q.replace(/\D/g, "")) ||
+        safeTutor.includes(q) ||
+        safeCourse.includes(q)
+      );
     });
   }, [leads, search]);
 
@@ -718,32 +1184,36 @@ export default function CrmLeadsDashboard() {
     (courseFilter.length > 0 ? 1 : 0) +
     (paymentFilter !== "all" ? 1 : 0) +
     (modeFilter !== "all" ? 1 : 0) +
-    (priorityFilter !== "all" ? 1 : 0);
+    (priorityFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0);
 
   const clearFilters = () => {
     setCourseFilter([]);
     setPaymentFilter("all");
     setModeFilter("all");
     setPriorityFilter("all");
+    setStatusFilter("all");
+    setQuickFilter(null);
   };
+
+  const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, null>, string> = {
+    contactedToday: "Contacted today",
+    followupsToday: "Follow-ups today",
+    overdue: "Overdue",
+    enrolledToday: "Enrolled today",
+  };
+
+  const toggleQuickFilter = (qf: Exclude<QuickFilter, null>) =>
+    setQuickFilter((cur) => (cur === qf ? null : qf));
 
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
   const pageNumbers = getPageNumbers(page, totalPages);
 
+  const drawerLead = drawerLeadId != null ? leads.find((l) => l.id === drawerLeadId) ?? null : null;
+
   return (
-    <div className="fixed inset-0 z-[999] flex h-screen w-screen flex-col overflow-y-auto bg-[#F7F8FA] font-[Inter,ui-sans-serif,system-ui]">
-      {/*
-        This route is a standalone workspace: it hides the GLOBAL site
-        navbar/footer (the ones injected by your root layout) so this page
-        can occupy the full viewport. It does NOT touch the blue
-        `.crm-shell-header` below — that's this page's own header and stays.
-        The fixed/inset-0 wrapper covers the app shell visually; the
-        selectors below hide it structurally too. If your Navbar/Footer
-        components render under different tags/ids/classes than the common
-        ones guessed here, add a stable marker to them (e.g.
-        `data-site-chrome` or `id="site-navbar"`) and reference that instead.
-      */}
+    <div className="crm-scroll-shell fixed inset-0 z-[999] flex h-screen w-screen flex-col overflow-hidden bg-[#F7F8FA] font-[Inter,ui-sans-serif,system-ui]">
       <style jsx global>{`
         body {
           overflow: hidden;
@@ -758,14 +1228,32 @@ export default function CrmLeadsDashboard() {
         .site-footer {
           display: none !important;
         }
+        .crm-scroll-shell {
+          -webkit-font-smoothing: antialiased;
+          text-rendering: optimizeLegibility;
+        }
+        .crm-scroll-shell ::-webkit-scrollbar {
+          width: 9px;
+          height: 9px;
+        }
+        .crm-scroll-shell ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .crm-scroll-shell ::-webkit-scrollbar-thumb {
+          background-color: rgba(30, 58, 110, 0.22);
+          border-radius: 9999px;
+          border: 2px solid transparent;
+          background-clip: content-box;
+        }
+        .crm-scroll-shell ::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(30, 58, 110, 0.4);
+          background-clip: content-box;
+        }
       `}</style>
 
-      {/* Header (this page's own — never hidden by the rule above) */}
-      <header className="crm-shell-header relative overflow-hidden border-b border-slate-200 bg-[#12203D]">
-        <svg
-          className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.06]"
-          aria-hidden
-        >
+      {/* Header / KPI command center */}
+      <header className="crm-shell-header relative shrink-0 overflow-hidden border-b border-slate-200 bg-[#12203D]">
+        <svg className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.06]" aria-hidden>
           <defs>
             <pattern id="bp-grid" width="28" height="28" patternUnits="userSpaceOnUse">
               <path d="M28 0H0V28" fill="none" stroke="white" strokeWidth="0.75" />
@@ -773,25 +1261,70 @@ export default function CrmLeadsDashboard() {
           </defs>
           <rect width="100%" height="100%" fill="url(#bp-grid)" />
         </svg>
-        <div className="relative mx-auto flex max-w-[1400px] items-center justify-between px-6 py-5">
+        <div
+          className="pointer-events-none absolute -left-10 -top-24 h-56 w-56 rounded-full opacity-20 blur-3xl"
+          style={{ background: "radial-gradient(circle, #F2711C, transparent 70%)" }}
+        />
+        <div
+          className="pointer-events-none absolute -right-16 -bottom-24 h-64 w-64 rounded-full opacity-20 blur-3xl"
+          style={{ background: "radial-gradient(circle, #38BDF8, transparent 70%)" }}
+        />
+        <div className="relative mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-6 py-5">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#F2711C]">
-              GyanHub · Operations
+            <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.14em] text-[#F2711C]">
+              <Sparkles size={11} />
+              GyanHub · Lead Handler
             </p>
-            <h1 className="mt-1 font-[Space_Grotesk,ui-sans-serif] text-[22px] font-semibold text-white">
-              Lead Handler Dashboard
+            <h1 className="mt-1 bg-gradient-to-r from-white to-slate-300 bg-clip-text font-[Space_Grotesk,ui-sans-serif] text-[22px] font-semibold text-transparent">
+              Priya Mam Dashboard
             </h1>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="font-mono text-[20px] font-semibold text-white">{totalCount.toLocaleString()}</p>
-              <p className="text-[11px] text-slate-300">
-                {activeFilterCount > 0 ? "matching filters" : "total leads"}
-              </p>
-            </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <KpiCard
+              label={activeFilterCount > 0 ? "Matching filters" : "Total leads"}
+              value={stats.totalLeads}
+              icon={<Users size={15} />}
+              accent="#93C5FD"
+              onClick={quickFilter ? () => setQuickFilter(null) : undefined}
+              active={!quickFilter}
+            />
+            <KpiCard
+              label="Contacted today"
+              value={stats.contactedToday}
+              icon={<PhoneCall size={15} />}
+              accent="#38BDF8"
+              onClick={() => toggleQuickFilter("contactedToday")}
+              active={quickFilter === "contactedToday"}
+            />
+            <KpiCard
+              label="Follow-ups today"
+              value={stats.followupsToday}
+              icon={<CalendarClock size={15} />}
+              accent="#FBBF24"
+              onClick={() => toggleQuickFilter("followupsToday")}
+              active={quickFilter === "followupsToday"}
+            />
+            <KpiCard
+              label="Overdue"
+              value={stats.overdue}
+              icon={<AlertTriangle size={15} />}
+              accent="#FB7185"
+              onClick={() => toggleQuickFilter("overdue")}
+              active={quickFilter === "overdue"}
+            />
+            <KpiCard
+              label="Enrolled today"
+              value={stats.enrolledToday}
+              icon={<CheckCircle2 size={15} />}
+              accent="#34D399"
+              onClick={() => toggleQuickFilter("enrolledToday")}
+              active={quickFilter === "enrolledToday"}
+            />
+
             <button
-              onClick={fetchLeads}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-white/15 text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={refreshAll}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-white/15 text-white/80 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/10 hover:text-white active:translate-y-0"
               title="Refresh"
             >
               <RefreshCcw size={15} className={loading ? "animate-spin" : ""} />
@@ -800,51 +1333,73 @@ export default function CrmLeadsDashboard() {
         </div>
       </header>
 
+
+      {/* Scrollable middle region — everything between the fixed header and footer */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {/* Filter bar */}
       <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-[1400px] flex-wrap items-center gap-2.5 px-6 py-3">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center gap-2.5 px-6 py-3">
           <div className="flex items-center gap-1.5 pr-1 text-slate-400">
             <SlidersHorizontal size={14} />
           </div>
 
           <CourseMultiSelect courses={courses} selected={courseFilter} onChange={setCourseFilter} />
+          <PillSelect label="Status" value={statusFilter} options={LEAD_STATUS_OPTIONS} onChange={setStatusFilter} />
           <PillSelect label="Payment" value={paymentFilter} options={PAYMENT_OPTIONS} onChange={setPaymentFilter} />
           <PillSelect label="Mode" value={modeFilter} options={MODE_OPTIONS} onChange={setModeFilter} />
           <PillSelect label="Priority" value={priorityFilter} options={PRIORITY_OPTIONS} onChange={setPriorityFilter} />
 
           <button
             onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            className="flex h-9 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-[13px] font-medium text-slate-600 hover:border-slate-400"
+            className="flex h-9 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-[13px] font-medium text-slate-600 transition-all duration-150 hover:border-[#1E3A6E]/40 hover:bg-[#1E3A6E]/[0.03] hover:text-[#1E3A6E]"
           >
             {sortDir === "desc" ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
             Last contacted
           </button>
 
+          {quickFilter && (
+            <span className="flex h-9 items-center gap-1.5 rounded-md bg-[#1E3A6E]/[0.06] px-3 text-[13px] font-medium text-[#1E3A6E] ring-1 ring-inset ring-[#1E3A6E]/20">
+              <Sparkles size={13} />
+              {QUICK_FILTER_LABELS[quickFilter]}
+              <button
+                onClick={() => setQuickFilter(null)}
+                className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-[#1E3A6E]/10"
+                title="Clear quick filter"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+
           {activeFilterCount > 0 && (
             <button
               onClick={clearFilters}
-              className="flex h-9 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-slate-400 hover:text-slate-600"
+              className="flex h-9 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-slate-400 transition-colors hover:text-slate-600"
             >
               <X size={13} />
               Clear ({activeFilterCount})
             </button>
           )}
 
-          <div className="relative ml-auto w-64">
+          <div className="relative ml-auto w-72">
             <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
+              ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search name or phone…"
-              className="h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-3 text-[13px] outline-none placeholder:text-slate-400 focus:border-[#1E3A6E]"
+              placeholder="Search name, phone, course, tutor…"
+              className="h-9 w-full rounded-md border border-slate-300 bg-white pl-8 pr-16 text-[13px] outline-none transition-colors placeholder:text-slate-400 focus:border-[#1E3A6E] focus:ring-2 focus:ring-[#1E3A6E]/10"
             />
+            <span className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10.5px] font-medium text-slate-400">
+              <Command size={10} />K
+            </span>
           </div>
         </div>
       </div>
 
       {/* Table */}
-      <main className="mx-auto w-full max-w-[1400px] px-6 py-6">
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <main className="mx-auto w-full max-w-[1500px] px-6 py-6">
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.15)]">
           {error && (
             <div className="flex items-center gap-2 border-b border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700">
               <AlertTriangle size={15} />
@@ -853,32 +1408,35 @@ export default function CrmLeadsDashboard() {
           )}
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1250px] border-collapse text-left">
+            <table className="w-full min-w-[1500px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="w-[220px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="w-[50px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    S.N.
+                  </th>
+                  <th className="w-[210px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Lead
                   </th>
-                  <th className="w-[200px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="w-[300px] px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Call outcome
+                  </th>
+                  <th className="w-[210px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Course
                   </th>
                   <th className="w-[110px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Priority
                   </th>
+                  <th className="w-[150px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Status
+                  </th>
                   <th className="w-[110px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Payment
                   </th>
                   <th className="w-[150px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Last contacted
-                  </th>
-                  <th className="w-[150px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Follow-up
                   </th>
-                  <th className="w-[170px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Status
-                  </th>
-                  <th className="w-[240px] px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                    Call log
+                  <th className="w-[140px] px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    Activity
                   </th>
                 </tr>
               </thead>
@@ -886,7 +1444,7 @@ export default function CrmLeadsDashboard() {
                 {loading &&
                   Array.from({ length: 6 }).map((_, i) => (
                     <tr key={i} className="border-b border-slate-100">
-                      {Array.from({ length: 8 }).map((__, j) => (
+                      {Array.from({ length: 9 }).map((__, j) => (
                         <td key={j} className="px-4 py-3.5">
                           <div className="h-3.5 w-full max-w-[140px] animate-pulse rounded bg-slate-100" />
                         </td>
@@ -896,7 +1454,7 @@ export default function CrmLeadsDashboard() {
 
                 {!loading && visibleLeads.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-16 text-center">
+                    <td colSpan={9} className="px-4 py-16 text-center">
                       <Inbox size={26} className="mx-auto mb-2 text-slate-300" />
                       <p className="text-[14px] font-medium text-slate-500">No leads match these filters</p>
                       <p className="mt-0.5 text-[13px] text-slate-400">Try clearing a filter or adjusting your search.</p>
@@ -905,152 +1463,288 @@ export default function CrmLeadsDashboard() {
                 )}
 
                 {!loading &&
-                  visibleLeads.map((lead) => {
+                  visibleLeads.map(({ lead, index }) => {
                     const isPending = pendingIds.has(lead.id);
                     const isFlashed = flashIds.has(lead.id);
-                    const isExpanded = expandedRow === lead.id;
 
                     const safePriority = lead.priority ?? "normal";
                     const safePayment = lead.payment_status ?? "unpaid";
                     const safeStatus = lead.lead_status ?? "new";
                     const draft = callDrafts[lead.id] ?? "";
                     const followUp = formatFollowUp(lead.follow_up_date);
+                    const serialNumber = (page - 1) * PAGE_SIZE + index + 1;
+                    const whatsappUrl = buildWhatsAppUrl(lead.phone_number);
+                    const tone = avatarTone(String(lead.id));
+
+                    const sortedNotes = [...(lead.call_notes ?? [])].sort(
+                      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    );
+                    const latestNote = sortedNotes[0];
+                    const noteCount = sortedNotes.length;
+
+                    const interestedNames = (lead.interested_course_ids ?? [])
+                      .map((id) => courseMap.get(id)?.name)
+                      .filter((n): n is string => Boolean(n));
+
+                    const railColor = followUp.overdue ? OVERDUE_RAIL : PRIORITY_RAIL[safePriority];
+
+                    // When a course filter is active, show whether this lead matched
+                    // via its primary course, an interested course, or both — since the
+                    // filter now searches both fields for cross-selling visibility.
+                    let courseMatch: CourseMatchKind = null;
+                    if (courseFilter.length > 0) {
+                      const isPrimaryMatch = lead.course_id != null && courseFilter.includes(lead.course_id);
+                      const isInterestedMatch = (lead.interested_course_ids ?? []).some((id) => courseFilter.includes(id));
+                      courseMatch = isPrimaryMatch && isInterestedMatch ? "both" : isPrimaryMatch ? "primary" : isInterestedMatch ? "interested" : null;
+                    }
 
                     return (
-                      <Fragment key={lead.id}>
-                        <tr
-                          className={cn(
-                            "border-b border-slate-100 transition-colors",
-                            isFlashed ? "bg-emerald-50/60" : "hover:bg-slate-50/70"
-                          )}
-                          style={{ boxShadow: `inset 3px 0 0 ${PRIORITY_RAIL[safePriority]}` }}
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2.5">
-                              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1E3A6E]/[0.08] font-mono text-[11px] font-semibold text-[#1E3A6E]">
-                                {initials(lead.name)}
-                              </span>
-                              <div className="min-w-0">
+                      <tr
+                        key={lead.id}
+                        className={cn(
+                          "border-b border-slate-100 transition-all duration-200 ease-out",
+                          isFlashed
+                            ? "bg-emerald-50/60"
+                            : followUp.overdue
+                            ? "bg-rose-50/40 hover:bg-rose-50/70"
+                            : "hover:bg-slate-50/70"
+                        )}
+                        style={{ boxShadow: `inset 3px 0 0 ${railColor}` }}
+                      >
+                        <td className="px-4 py-3 align-top">
+                          <p className="font-mono text-[12.5px] text-slate-400">{serialNumber}</p>
+                        </td>
+
+                        {/* Lead */}
+                        <td className="px-4 py-3 align-top">
+                          <button
+                            onClick={() => setDrawerLeadId(lead.id)}
+                            className="flex w-full items-center gap-2.5 text-left"
+                            title="Open lead details"
+                          >
+                            <span
+                              className={cn(
+                                "flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-semibold",
+                                tone.bg,
+                                tone.text
+                              )}
+                            >
+                              {initials(lead.name)}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
                                 <p className="flex items-center gap-1 truncate font-mono text-[14.5px] font-semibold text-slate-800">
                                   <Phone size={11} className="shrink-0 text-slate-400" />
                                   {formatPhone(lead.phone_number)}
                                 </p>
-                                {lead.name && (
-                                  <p className="truncate text-[12px] italic text-slate-400">{lead.name}</p>
-                                )}
+                                {whatsappUrl ? (
+                                  <a
+                                    href={whatsappUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    title="Message on WhatsApp"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition-colors hover:bg-emerald-100"
+                                  >
+                                    <MessageCircle size={11} />
+                                  </a>
+                                ) : null}
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="truncate text-[13px] text-slate-700">
-                              {lead.syllabi_v2?.name ?? "No Course Assigned"}
-                            </p>
-                            <p className="text-[11.5px] capitalize text-slate-400">{lead.learning_mode ?? "—"}</p>
-                          </td>
-                          <td className="px-4 py-3">
-                            <select
-                              value={safePriority}
-                              onChange={(e) => updateLeadPriority(lead.id, e.target.value as Priority)}
-                              disabled={isPending}
-                              className={cn(
-                                "h-8 w-full rounded-md border bg-white px-2 text-[12.5px] font-medium capitalize outline-none disabled:opacity-50",
-                                PRIORITY_SELECT_TONE[safePriority]
+                              {lead.name && (
+                                <p className="truncate text-[12px] italic text-slate-400">{lead.name}</p>
                               )}
-                            >
-                              {PRIORITY_OPTIONS.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className={cn("inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11.5px] font-medium capitalize", PAYMENT_BADGE[safePayment])}>
-                              <span className={cn("h-1.5 w-1.5 rounded-full", PAYMENT_DOT[safePayment])} />
-                              {lead.payment_status ?? "—"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-[13px] text-slate-600">{formatRelative(lead.last_contacted_at)}</p>
-                            <p className="font-mono text-[11px] text-slate-400">{formatTimestamp(lead.last_contacted_at)}</p>
-                          </td>
-                          <td className="px-4 py-3">
+                            </div>
+                          </button>
+                        </td>
+
+                        {/* Call outcome — the most-edited field, right after Lead */}
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5">
                             <input
-                              type="date"
-                              value={toDateInputValue(lead.follow_up_date)}
-                              onChange={(e) => updateFollowUpDate(lead.id, e.target.value)}
+                              value={draft}
+                              onChange={(e) => updateCallDraft(lead.id, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault();
+                                  submitCallLog(lead.id);
+                                }
+                              }}
+                              placeholder="Call outcome…"
                               disabled={isPending}
-                              className={cn(
-                                "h-8 w-full rounded-md border bg-white px-2 text-[12px] outline-none disabled:opacity-50",
-                                followUp.overdue ? "border-rose-300 text-rose-700" : "border-slate-300 text-slate-600"
-                              )}
+                              className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#1E3A6E] disabled:opacity-50"
                             />
-                            {lead.follow_up_date && (
-                              <p className={cn("mt-1 text-[11px]", followUp.overdue ? "font-medium text-rose-500" : "text-slate-400")}>
-                                {followUp.overdue ? "Overdue · " : ""}
-                                {followUp.label}
-                              </p>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <select
-                              value={safeStatus}
-                              onChange={(e) => updateLeadStatus(lead.id, e.target.value as LeadStatus)}
-                              disabled={isPending}
-                              className={cn(
-                                "h-8 w-full rounded-md border bg-white px-2 text-[12.5px] font-medium capitalize outline-none disabled:opacity-50",
-                                STATUS_SELECT_TONE[safeStatus]
-                              )}
+                            <button
+                              onClick={() => submitCallLog(lead.id)}
+                              disabled={isPending || !draft.trim()}
+                              title="Save call log"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#F2711C] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              {LEAD_STATUS_OPTIONS.map((o) => (
+                              {isPending ? <Loader2 size={12} className="animate-spin" /> : <MessageSquarePlus size={12} />}
+                            </button>
+                            <button
+                              onClick={() => setDrawerLeadId(lead.id)}
+                              title="View timeline"
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-slate-300 text-slate-500 hover:border-slate-400"
+                            >
+                              <History size={13} />
+                            </button>
+                          </div>
+                          {latestNote && (
+                            <div className="mt-1.5 rounded-md bg-slate-50 px-2 py-1.5">
+                              <p className="whitespace-pre-wrap break-words text-[11.5px] leading-snug text-slate-500">
+                                <span className="font-medium text-slate-600">Latest: </span>
+                                {latestNote.note}
+                              </p>
+                              <p className="mt-0.5 text-[10.5px] text-slate-400">
+                                ({noteCount} {noteCount === 1 ? "note" : "notes"})
+                              </p>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Course + tutor hierarchy */}
+                        <td className="px-4 py-3 align-top">
+                          <div className="flex items-center gap-1.5">
+                            <p className="truncate text-[13px] font-medium text-slate-700">
+                              {lead.syllabi_v2?.name ?? "No course assigned"}
+                            </p>
+                            {courseMatch && (
+                              <span
+                                className={cn(
+                                  "inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide",
+                                  courseMatch === "primary" && "bg-[#1E3A6E]/[0.08] text-[#1E3A6E]",
+                                  courseMatch === "interested" && "bg-[#F2711C]/[0.10] text-[#F2711C]",
+                                  courseMatch === "both" && "bg-emerald-50 text-emerald-700"
+                                )}
+                                title={
+                                  courseMatch === "primary"
+                                    ? "Matched via primary course"
+                                    : courseMatch === "interested"
+                                    ? "Matched via interested course — cross-sell opportunity"
+                                    : "Matches both primary and interested course"
+                                }
+                              >
+                                {courseMatch === "interested" ? (
+                                  <Sparkles size={9} />
+                                ) : (
+                                  <Star size={9} />
+                                )}
+                                {courseMatch === "primary" ? "Primary" : courseMatch === "interested" ? "Interested" : "Primary + Interested"}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-slate-400">
+                            <GraduationCap size={11} className="shrink-0" />
+                            <span className="truncate">{lead.syllabi_v2?.online_tutors?.name ?? "No tutor"}</span>
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-400">
+                            {lead.learning_mode === "physical" ? (
+                              <MapPin size={11} className="shrink-0" />
+                            ) : (
+                              <Globe size={11} className="shrink-0" />
+                            )}
+                            <select
+                              value={lead.learning_mode ?? "online"}
+                              onChange={(e) => updateLearningMode(lead.id, e.target.value as LearningMode)}
+                              disabled={isPending}
+                              title="Change learning mode"
+                              className="h-6 cursor-pointer rounded border border-transparent bg-transparent text-[11px] capitalize text-slate-500 outline-none transition-colors hover:border-slate-300 hover:bg-slate-50 focus:border-[#1E3A6E] disabled:opacity-50"
+                            >
+                              {MODE_OPTIONS.map((o) => (
                                 <option key={o.value} value={o.value}>
                                   {o.label}
                                 </option>
                               ))}
                             </select>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <input
-                                value={draft}
-                                onChange={(e) => updateCallDraft(lead.id, e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    submitCallLog(lead.id);
-                                  }
-                                }}
-                                placeholder="Call outcome…"
-                                disabled={isPending}
-                                className="h-8 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 text-[12.5px] text-slate-700 outline-none placeholder:text-slate-400 focus:border-[#1E3A6E] disabled:opacity-50"
-                              />
-                              <button
-                                onClick={() => submitCallLog(lead.id)}
-                                disabled={isPending || !draft.trim()}
-                                title="Save call log"
-                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#F2711C] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
-                              >
-                                {isPending ? <Loader2 size={12} className="animate-spin" /> : <MessageSquarePlus size={12} />}
-                              </button>
-                              <button
-                                onClick={() => setExpandedRow(isExpanded ? null : lead.id)}
-                                title="View full call log"
-                                className={cn(
-                                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors",
-                                  isExpanded
-                                    ? "border-[#1E3A6E] bg-[#1E3A6E]/[0.06] text-[#1E3A6E]"
-                                    : "border-slate-300 text-slate-500 hover:border-slate-400"
-                                )}
-                              >
-                                {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                        <AnimatePresence>
-                          {isExpanded && <CallNotesDrawer key={`${lead.id}-notes`} lead={lead} onAddNote={addCallNote} />}
-                        </AnimatePresence>
-                      </Fragment>
+                          </div>
+                          {interestedNames.length > 0 && (
+                            <p className="mt-1 truncate text-[11px] text-slate-400">
+                              <span className="text-slate-500">{interestedNames[0]}</span>
+                              {interestedNames.length > 1 && (
+                                <span className="ml-1 font-medium text-[#F2711C]">
+                                  +{interestedNames.length - 1} more
+                                </span>
+                              )}
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Priority */}
+                        <td className="px-4 py-3 align-top">
+                          <select
+                            value={safePriority}
+                            onChange={(e) => updateLeadPriority(lead.id, e.target.value as Priority)}
+                            disabled={isPending}
+                            className={cn(
+                              "h-8 w-full rounded-md border bg-white px-2 text-[12.5px] font-medium capitalize outline-none disabled:opacity-50",
+                              PRIORITY_SELECT_TONE[safePriority]
+                            )}
+                          >
+                            {PRIORITY_OPTIONS.map((o) => (
+                              <option key={o.value} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                          {safePriority === "high" && (
+                            <p className="mt-1 flex items-center gap-1 text-[10.5px] font-medium text-rose-500">
+                              <Flame size={10} />
+                              Needs attention
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Status — colored chip dropdown */}
+                        <td className="px-4 py-3 align-top">
+                          <StatusChipSelect
+                            value={safeStatus}
+                            onChange={(v) => updateLeadStatus(lead.id, v)}
+                            disabled={isPending}
+                          />
+                        </td>
+
+                        {/* Payment */}
+                        <td className="px-4 py-3 align-top">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-[11.5px] font-medium capitalize",
+                              PAYMENT_BADGE[safePayment]
+                            )}
+                          >
+                            <span className={cn("h-1.5 w-1.5 rounded-full", PAYMENT_DOT[safePayment])} />
+                            {lead.payment_status ?? "—"}
+                          </span>
+                        </td>
+
+                        {/* Follow-up */}
+                        <td className="px-4 py-3 align-top">
+                          <input
+                            type="date"
+                            value={toDateInputValue(lead.follow_up_date)}
+                            onChange={(e) => updateFollowUpDate(lead.id, e.target.value)}
+                            disabled={isPending}
+                            className={cn(
+                              "h-8 w-full rounded-md border bg-white px-2 text-[12px] outline-none disabled:opacity-50",
+                              followUp.overdue ? "border-rose-300 text-rose-700" : "border-slate-300 text-slate-600"
+                            )}
+                          />
+                          {lead.follow_up_date && (
+                            <p className={cn("mt-1 text-[11px]", followUp.overdue ? "font-medium text-rose-500" : "text-slate-400")}>
+                              {followUp.overdue ? "Overdue · " : ""}
+                              {followUp.label}
+                            </p>
+                          )}
+                        </td>
+
+                        {/* Activity */}
+                        <td className="px-4 py-3 align-top">
+                          <p className="flex items-center gap-1 text-[13px] text-slate-600">
+                            <Clock size={11} className="shrink-0 text-slate-400" />
+                            {formatRelative(lead.last_contacted_at)}
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-400">{formatTimestamp(lead.last_contacted_at)}</p>
+                        </td>
+                      </tr>
                     );
                   })}
               </tbody>
@@ -1067,7 +1761,7 @@ export default function CrmLeadsDashboard() {
             <button
               onClick={() => goToPage(page - 1)}
               disabled={page <= 1 || loading}
-              className="flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2.5 text-[12.5px] font-medium text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2.5 text-[12.5px] font-medium text-slate-600 transition-all duration-150 hover:border-[#1E3A6E]/40 hover:text-[#1E3A6E] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
             >
               <ChevronLeft size={13} />
               Previous
@@ -1084,10 +1778,10 @@ export default function CrmLeadsDashboard() {
                   onClick={() => goToPage(p)}
                   disabled={loading}
                   className={cn(
-                    "flex h-8 min-w-[32px] items-center justify-center rounded-md border px-2 text-[12.5px] font-medium transition-colors disabled:cursor-not-allowed",
+                    "flex h-8 min-w-[32px] items-center justify-center rounded-md border px-2 text-[12.5px] font-medium transition-all duration-150 disabled:cursor-not-allowed",
                     p === page
-                      ? "border-[#1E3A6E] bg-[#1E3A6E] text-white"
-                      : "border-slate-300 text-slate-600 hover:border-slate-400"
+                      ? "border-[#1E3A6E] bg-[#1E3A6E] text-white shadow-[0_4px_10px_-4px_rgba(30,58,110,0.5)]"
+                      : "border-slate-300 text-slate-600 hover:border-[#1E3A6E]/40 hover:text-[#1E3A6E]"
                   )}
                 >
                   {p}
@@ -1098,7 +1792,7 @@ export default function CrmLeadsDashboard() {
             <button
               onClick={() => goToPage(page + 1)}
               disabled={page >= totalPages || loading}
-              className="flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2.5 text-[12.5px] font-medium text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2.5 text-[12.5px] font-medium text-slate-600 transition-all duration-150 hover:border-[#1E3A6E]/40 hover:text-[#1E3A6E] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-300 disabled:hover:text-slate-600"
             >
               Next
               <ChevronRight size={13} />
@@ -1111,6 +1805,57 @@ export default function CrmLeadsDashboard() {
           <span className="text-slate-500">trigger_update_crm_updated_at</span>.
         </p>
       </main>
+      </div>
+
+      {/* Productivity footer — same filtered, all-pages counts as the header KPIs */}
+      <footer className="crm-shell-header shrink-0 border-t border-slate-200 bg-[#12203D]">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-center gap-x-8 gap-y-2 px-6 py-2.5 text-[12.5px] text-slate-200">
+          <span className="flex items-center gap-1.5">
+            <PhoneCall size={13} className="text-sky-300" />
+            {stats.contactedToday} contacted today
+          </span>
+          <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+          <span className="flex items-center gap-1.5">
+            <CalendarClock size={13} className="text-amber-300" />
+            {stats.followupsToday} follow-ups today
+          </span>
+          <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+          <span className="flex items-center gap-1.5">
+            <AlertTriangle size={13} className="text-rose-300" />
+            {stats.overdue} overdue
+          </span>
+          <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+          <span className="flex items-center gap-1.5">
+            <Flame size={13} className="text-rose-300" />
+            {stats.highPriority} high priority
+          </span>
+          <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+          <span className="flex items-center gap-1.5 text-slate-400">
+            <CheckCircle2 size={13} className="text-emerald-300" />
+            {stats.paid} paid
+          </span>
+          {activeFilterCount > 0 && (
+            <>
+              <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+              <span className="text-slate-400">· matching current filters, across all pages</span>
+            </>
+          )}
+        </div>
+      </footer>
+
+      {/* Right-side lead drawer */}
+      <AnimatePresence>
+        {drawerLead && (
+          <LeadDrawer
+            key={drawerLead.id}
+            lead={drawerLead}
+            courses={courses}
+            onClose={() => setDrawerLeadId(null)}
+            onAddNote={addCallNote}
+            onUpdateInterestedCourses={updateInterestedCourses}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
