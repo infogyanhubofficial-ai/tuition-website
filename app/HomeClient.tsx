@@ -112,7 +112,7 @@ const BUNDLES: BundlePackage[] = [
     originalPrice: 10000,
     badge: "🏛️ Best for Architects",
     highlight: "Online theory + Physical practical",
-    targetAudience: ["Architecture Students", "Draftsmen", "Interior Designers", "Freelance Visualizers"],
+    targetAudience: ["Architecture Students", "Draftmen", "Interior Designers", "Freelance Visualizers"],
     careerPath: ["2D Drafting", "BIM Modeling", "3D Visualization", "Job Ready Architect"],
   },
   {
@@ -158,7 +158,7 @@ const BUNDLES: BundlePackage[] = [
 
 const LOCATION = {
   label: "Physical Classes: Near Eyeplex Mall, New Baneshwor, Kathmandu",
-  mapsUrl: "https://www.google.com/maps/search/?api=1&query=Eyeplex+Mall+New+Baneshwor+Kathmandu",
+  mapsUrl: "https://maps.app.goo.gl/5ejsLX3YUsPtJjgQ9",
 };
 
 /* ============================================================
@@ -371,79 +371,6 @@ function PhysicalClassCard({ item, scrollY, index }: { item: PhysicalClass; scro
 }
 
 /* ============================================================
-   EXAM PREP BANNER — BE Civil Crash Course countdown
-   ============================================================ */
-function ExamPrepBanner({ nextBatchDate }: { nextBatchDate: string | null }) {
-  const [timeLeft, setTimeLeft] = useState<{ d: number; h: number; m: number; s: number } | null>(null);
-
-  useEffect(() => {
-    if (!nextBatchDate) return;
-    const target = new Date(nextBatchDate).getTime();
-    const tick = () => {
-      const diff = target - Date.now();
-      if (diff <= 0) {
-        setTimeLeft({ d: 0, h: 0, m: 0, s: 0 });
-        return;
-      }
-      setTimeLeft({
-        d: Math.floor(diff / 86400000),
-        h: Math.floor((diff % 86400000) / 3600000),
-        m: Math.floor((diff % 3600000) / 60000),
-        s: Math.floor((diff % 60000) / 1000),
-      });
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [nextBatchDate]);
-
-  return (
-    <section className="py-10 md:py-14 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-blue-900 via-blue-800 to-slate-900 text-white p-6 sm:p-10 md:p-12 shadow-2xl">
-        <div className="absolute -top-20 -right-20 w-72 h-72 bg-emerald-400/20 rounded-full blur-[90px]" />
-        <div className="absolute -bottom-24 -left-16 w-64 h-64 bg-orange-500/10 rounded-full blur-[90px]" />
-        <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 md:gap-10">
-          <div className="text-center lg:text-left">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 px-3 py-1 text-[11px] sm:text-xs font-bold mb-4">
-              <Flame className="w-3.5 h-3.5" /> Exam-Oriented Fast-Track Crash Course
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-black leading-tight mb-3">
-              BE Civil Exam Prep<br className="hidden sm:block" /> Crash Course
-            </h2>
-            <p className="text-blue-100/80 text-sm sm:text-base font-medium max-w-lg mb-7">
-              Physical, instructor-led fast-track sessions in New Baneshwor built specifically to clear your
-              university exams — focused syllabus, solved past papers, and rapid revision.
-            </p>
-            <Link
-              href="/offline-class?category=be-civil-exam-prep"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white font-bold px-7 py-3.5 rounded-xl hover:from-orange-600 hover:to-orange-700 hover:shadow-lg hover:shadow-orange-500/30 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 text-sm sm:text-base shadow-md"
-            >
-              Reserve Your Seat <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-
-          {timeLeft && (
-            <div className="flex gap-2 sm:gap-3 shrink-0">
-              {[
-                { v: timeLeft.d, l: "Days" },
-                { v: timeLeft.h, l: "Hrs" },
-                { v: timeLeft.m, l: "Min" },
-                { v: timeLeft.s, l: "Sec" },
-              ].map((t) => (
-                <div key={t.l} className="bg-white/10 border border-white/20 backdrop-blur-md rounded-2xl w-16 sm:w-20 py-3 sm:py-4 text-center">
-                  <div className="text-2xl sm:text-3xl font-black tabular-nums">{String(t.v).padStart(2, "0")}</div>
-                  <div className="text-[9px] sm:text-[10px] font-bold uppercase text-blue-200 mt-1">{t.l}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ============================================================
    MAIN COMPONENT
    ============================================================ */
 export default function HomeClient() {
@@ -454,7 +381,6 @@ export default function HomeClient() {
   const [promoCourses, setPromoCourses] = useState<CoursePromo[]>([]);
   const [recordings, setRecordings] = useState<RecordingCourse[]>([]);
   const [physicalClasses, setPhysicalClasses] = useState<PhysicalClass[]>([]);
-  const [nextExamBatch, setNextExamBatch] = useState<string | null>(null);
   const [certificateCount, setCertificateCount] = useState<number>(2000);
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -499,23 +425,6 @@ export default function HomeClient() {
         }
         if (physicalClassesRes.error) {
           console.error("Professional Training fetch error:", physicalClassesRes.error);
-        }
-
-        // Next upcoming BE Civil exam prep batch — drives the countdown banner.
-        // NOTE: physicalcourses.category only allows "Professional Training" or
-        // "University Subjects" (per the table's check constraint), so the exam-prep
-        // countdown is sourced from "University Subjects" rows. If you add a
-        // dedicated exam-prep category later, update this filter to match.
-        const examPrepRes = await supabase
-          .from("physicalcourses")
-          .select("start_date")
-          .eq("category", "University Subjects")
-          .eq("is_active", true)
-          .gte("start_date", new Date().toISOString())
-          .order("start_date", { ascending: true })
-          .limit(1);
-        if (isMounted && examPrepRes.data && examPrepRes.data.length > 0) {
-          setNextExamBatch(examPrepRes.data[0].start_date);
         }
 
         if (coursesRes.data && coursesRes.data.length > 0) {
@@ -832,8 +741,7 @@ export default function HomeClient() {
           </motion.h1>
 
           <motion.p initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2, duration: 0.6 }} className="mt-4 sm:mt-6 max-w-2xl text-sm sm:text-lg font-medium leading-relaxed text-slate-600 px-2">
-            On-demand recorded courses for self-paced learning, plus hands-on Professional & Exam-Prep Physical
-            Training at our New Baneshwor center — built for engineers who need real skills, not just theory.
+            On-demand recorded courses for self-paced learning, plus hands-on Professional Training at our New Baneshwor center — built for engineers who need real skills, not just theory.
           </motion.p>
 
           {/* Search Bar */}
@@ -846,7 +754,7 @@ export default function HomeClient() {
                 onChange={(e) => setSearch(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search courses, BE Civil exam prep, physical classes..."
+                placeholder="Search courses, physical classes..."
                 className="h-11 sm:h-14 w-full bg-transparent px-3 sm:px-4 text-sm sm:text-lg font-medium outline-none placeholder:text-slate-400 text-slate-800"
               />
               <button onClick={handleSearch} className="h-11 sm:h-12 px-5 sm:px-8 rounded-full bg-blue-900 text-white text-sm sm:text-base font-bold hover:bg-blue-950 transition-colors shrink-0">Search</button>
@@ -856,7 +764,6 @@ export default function HomeClient() {
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute top-[calc(100%+12px)] left-2 right-2 sm:left-0 sm:right-0 bg-white border border-slate-200 rounded-3xl shadow-xl overflow-hidden text-left p-2">
                   <p className="px-4 py-2 text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-400">Quick Links</p>
                   <button onMouseDown={() => router.push("/offline-class")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-xl text-sm sm:text-base font-semibold text-slate-700 transition-colors"><MapPin className="w-4 h-4 text-emerald-500" /> Physical Classes</button>
-                  <button onMouseDown={() => router.push("/offline-class?category=be-civil-exam-prep")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-xl text-sm sm:text-base font-semibold text-slate-700 transition-colors"><Award className="w-4 h-4 text-blue-600" /> BE Civil Exam Prep</button>
                   <button onMouseDown={() => router.push("/onlinecourse")} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-xl text-sm sm:text-base font-semibold text-slate-700 transition-colors"><MonitorPlay className="w-4 h-4 text-slate-400" /> Live Online Courses</button>
                 </motion.div>
               )}
@@ -899,10 +806,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 3. FAST-TRACK EXAM PREP — BE Civil */}
-        <ExamPrepBanner nextBatchDate={nextExamBatch} />
-
-        {/* 4. PROFESSIONAL TRAINING HUB — live from physicalcourses */}
+        {/* 3. PROFESSIONAL TRAINING HUB — live from physicalcourses */}
         <section className="py-12 md:py-20 bg-white border-y border-slate-200/60 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 md:mb-10">
             <div>
@@ -940,7 +844,7 @@ export default function HomeClient() {
           <Link href="/offline-class" className="mt-6 sm:hidden flex justify-center text-sm font-bold text-emerald-600 border border-emerald-100 bg-emerald-50 py-3 rounded-xl items-center gap-1">View All Physical Training <ArrowRight className="w-4 h-4" /></Link>
         </section>
 
-        {/* 5. FEATURED LIVE ONLINE COURSES */}
+        {/* 4. FEATURED LIVE ONLINE COURSES */}
         <section className="py-12 md:py-20 bg-slate-50 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-end justify-between mb-8 md:mb-10">
             <div>
@@ -984,7 +888,7 @@ export default function HomeClient() {
           <Link href="/onlinecourse" className="mt-6 sm:hidden flex justify-center text-sm font-bold text-blue-600 border border-blue-100 bg-blue-50 py-3 rounded-xl items-center gap-1">View All Live Courses <ArrowRight className="w-4 h-4" /></Link>
         </section>
 
-        {/* 6. RECORDINGS */}
+        {/* 5. RECORDINGS */}
         <section className="py-12 md:py-20 bg-white max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-end justify-between mb-8 md:mb-10">
             <div>
@@ -1030,7 +934,7 @@ export default function HomeClient() {
           <Link href="/recording" className="mt-6 sm:hidden flex justify-center text-sm font-bold text-orange-600 border border-orange-100 bg-orange-50 py-3 rounded-xl items-center gap-1">View All Recordings <ArrowRight className="w-4 h-4" /></Link>
         </section>
 
-        {/* 7. BUNDLES — theory + physical bridge */}
+        {/* 6. BUNDLES — theory + physical bridge */}
         <section id="bundles-section" className="py-12 md:py-20 bg-[#F8FAFC] border-y border-slate-200/60">
           <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row items-center gap-3 sm:gap-4 mb-8 md:mb-12 text-center md:text-left justify-center md:justify-start">
@@ -1142,7 +1046,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 8. CERTIFICATE TRUST SECTION */}
+        {/* 7. CERTIFICATE TRUST SECTION */}
         <section className="py-14 md:py-20 bg-emerald-900 text-white overflow-hidden relative">
           <div className="absolute -top-40 -right-40 w-80 h-80 md:w-96 md:h-96 bg-emerald-500/30 blur-[80px] md:blur-[100px] rounded-full" />
           <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 relative z-10">
@@ -1177,14 +1081,13 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 9. WHY CHOOSE */}
+        {/* 8. WHY CHOOSE */}
         <section className="py-12 md:py-20 bg-slate-50 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="text-center mb-10 md:mb-16"><h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900">Why train with us?</h2></div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
             {[
-              { title: "Nepal-Focused Curriculum", desc: "Built specifically for BE Civil and engineering exam syllabi used in Nepal." },
+              { title: "Nepal-Focused Curriculum", desc: "Built specifically for engineering syllabi and job markets used in Nepal." },
               { title: "Physical + Online Hybrid", desc: "Combine self-paced online theory with hands-on physical practical sessions." },
-              { title: "Exam-Oriented Fast-Track", desc: "Crash courses focused exclusively on clearing upcoming university exams." },
               { title: "Practical, Career-Led Training", desc: "We focus on software and skills (AutoCAD, GIS, Revit) that get you hired." },
               { title: "Central Kathmandu Location", desc: `Easy to reach physical center ${LOCATION.label.replace("Physical Classes: ", "")}.` },
               { title: "Verifiable Achievements", desc: "Digital certificates that employers can verify with one click." },
@@ -1200,7 +1103,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 10. LOCATION BANNER — fixed CTA, better spacing */}
+        {/* 9. LOCATION BANNER — fixed CTA, better spacing */}
         <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 -mt-6 md:-mt-10 mb-12 md:mb-16">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-6 bg-slate-900 text-white rounded-[28px] px-6 py-6 sm:px-10 sm:py-8 shadow-xl">
             <div className="flex items-center gap-4 text-center sm:text-left">
@@ -1223,7 +1126,7 @@ export default function HomeClient() {
           </div>
         </section>
 
-        {/* 11. FINAL CTA */}
+        {/* 10. FINAL CTA */}
         <section className="py-14 md:py-24 max-w-6xl mx-auto px-3 sm:px-6">
           <div className="bg-slate-900 rounded-[32px] sm:rounded-[40px] p-8 sm:p-16 text-center text-white relative overflow-hidden shadow-2xl">
             <div className="absolute top-[-50%] left-[-10%] w-[100%] h-[200%] bg-blue-600/20 rotate-12 blur-3xl" />

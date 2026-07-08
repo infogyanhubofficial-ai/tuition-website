@@ -20,7 +20,7 @@ const SOCIAL_LINKS = [
 
 const COMPANY_LINKS = [
   { label: "About GyanHub", href: "/about" },
-  { label: "GyanHub Stories", href: "/stories" }, // Updated route and unlocked
+  { label: "GyanHub Stories", href: "/stories", isLocked: true }, // Locked
   { label: "User's Data Policy", href: "/privacy-policy" },
 ];
 
