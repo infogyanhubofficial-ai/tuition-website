@@ -7,24 +7,14 @@
  * Self-contained per Nischal's convention: all types, helpers, sub-components,
  * and data-fetching are inlined here. No shared utils imported.
  *
- * This page's single job is to build enough trust that the visitor fills in
- * the "Reserve Your Seat" form further down this same page. Every CTA on
- * the page (hero, pricing, sidebar, mobile bar, final CTA) is an in-page
- * anchor link to #reserve-seat — there is no separate /enroll route.
- * Submitting the form inserts a row directly into public.physical_leads
- * (see ReserveSeatForm), so every submission is a lead the sales/counselor
- * team can follow up on and move through status: new → contacted →
- * interested → follow_up → booked → deposit_paid → enrolled.
- *
- * INSTANT BOOKING OFFER
- * ----------------------
- * A separate, time-pressure-flavoured upsell from the plain lead form:
- * discount_price (or price) × 0.8 → instant booking price, × 0.10 →
- * today's deposit. Clicking its CTA does NOT scroll to #reserve-seat —
- * it opens a tiny modal for name/email/WhatsApp, then redirects to
- * /order with `price` set to the deposit and `locked_price` set to the
- * full instant booking price, so the order page can track the remaining
- * balance as pending. 
+ * INSTANT BOOKING vs RESERVE SEAT FIX:
+ * - "Reserve Seat" merely inserts into public.physical_leads. A DB trigger 
+ *   automatically creates the order. We explicitly ensure `pending_amount = 0` 
+ *   and `paid_amount = 0` so it doesn't trigger the "Verify Funds" UI or mark 
+ *   it as paid in the admin dashboard. 
+ * - "Instant Booking" updates the lead/order to the discounted locked price 
+ *   and redirects to /order, where the user actually pays the deposit.
+ * - UUID generation is handled client-side to avoid RLS `PGRST116` SELECT errors.
  */
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -260,6 +250,7 @@ function ReserveSeatForm({ course, courseCode }: { course: PhysicalCourse; cours
 
     const fullName = form.fullName.trim();
     const phone = form.phone.trim();
+    const email = form.email.trim() || null;
 
     setSubmitting(true);
 
@@ -272,40 +263,35 @@ function ReserveSeatForm({ course, courseCode }: { course: PhysicalCourse; cours
 
       const startDate = currentCourse?.start_date ?? course.start_date ?? null;
 
-      const { data: existingLead, error: lookupError } = await supabase
+      // 1. Check for existing lead
+      const { data: existingLead } = await supabase
         .from("physical_leads")
         .select("id, remarks")
         .eq("course_id", course.id)
         .eq("phone", phone)
         .maybeSingle();
 
-      if (lookupError) {
-        console.error("[ReserveSeatForm] Lookup error:", lookupError.message);
-      }
+      let targetLeadId: string;
 
       if (existingLead) {
+        targetLeadId = existingLead.id;
         const mergedRemarks = form.remarks.trim()
           ? existingLead.remarks
             ? `${existingLead.remarks} | ${form.remarks.trim()}`
             : form.remarks.trim()
           : existingLead.remarks;
 
-        const { error: updateError } = await supabase
+        await supabase
           .from("physical_leads")
           .update({
             updated_at: new Date().toISOString(),
             remarks: mergedRemarks,
           })
-          .eq("id", existingLead.id);
-
-        if (updateError) {
-          console.error("[ReserveSeatForm] Update error:", updateError.message);
-          setErrorMsg("Something went wrong updating your details. Please try again, or message us on WhatsApp instead.");
-          setSubmitting(false);
-          return;
-        }
+          .eq("id", targetLeadId);
       } else {
+        targetLeadId = crypto.randomUUID(); // Pre-generate to avoid RLS block on .select()
         const { error: insertError } = await supabase.from("physical_leads").insert({
+          id: targetLeadId,
           course_id: course.id,
           course_code: course.course_code ?? courseCode,
           start_date: startDate,
@@ -313,23 +299,35 @@ function ReserveSeatForm({ course, courseCode }: { course: PhysicalCourse; cours
           category: course.category,
           full_name: fullName,
           phone,
-          email: form.email.trim() || null,
+          email,
           current_education: form.currentEducation.trim() || null,
           institution_name: form.institutionName.trim() || null,
           office_location: course.location || "New Baneshwor",
           course_price: course.price,
           discount_price: course.discount_price ?? null,
+          booking_amount: 0,
           remarks: form.remarks.trim() || null,
           source: "Website",
         });
 
         if (insertError) {
-          console.error("[ReserveSeatForm] Insert error:", insertError.message);
-          setErrorMsg("Something went wrong submitting your details. Please try again, or message us on WhatsApp instead.");
-          setSubmitting(false);
-          return;
+          throw new Error(insertError?.message || "Failed to create lead");
         }
       }
+
+      // 2. Override the DB trigger to strictly format the generated order.
+      // We MUST ensure that paid_amount and pending_amount are explicitly 0 
+      // to avoid phantom payments triggering the "Verify Funds" admin UI.
+      const finalPrice = course.discount_price ?? course.price;
+      
+      await supabase
+        .from("orders_v2")
+        .update({ 
+          pending_amount: 0,
+          paid_amount: 0,
+          locked_price: finalPrice
+        })
+        .eq("leads_id", targetLeadId);
 
       setSubmitting(false);
       setSubmitted(true);
@@ -589,7 +587,7 @@ function InstantBookingModal({
       setError("Please enter your full name.");
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -639,13 +637,13 @@ function InstantBookingModal({
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-[#0B1B3A]/60 mb-1.5">Email *</label>
+            <label className="block text-xs font-medium text-[#0B1B3A]/60 mb-1.5">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border border-[#0B1B3A]/15 px-3.5 py-2.5 text-sm text-[#0B1B3A] focus:outline-none focus:ring-2 focus:ring-[#1E3A8A]/30"
-              placeholder="you@example.com"
+              placeholder="you@example.com (Optional)"
             />
           </div>
           <div>
@@ -791,22 +789,27 @@ export default function OfflineCourseDetailPage() {
       .eq("phone", details.phone)
       .maybeSingle();
 
+    let targetLeadId: string;
+
     if (existingLead) {
+      targetLeadId = existingLead.id;
       const updatedRemarks = existingLead.remarks 
         ? `${existingLead.remarks} | Upgraded to Instant Booking` 
         : "Upgraded to Instant Booking";
 
-      const { error } = await supabase
+      await supabase
         .from("physical_leads")
         .update({
           discount_price: instantBookingPrice,
+          booking_amount: bookingAmount,
           remarks: updatedRemarks,
+          updated_at: new Date().toISOString(),
         })
-        .eq("id", existingLead.id);
-
-      if (error) console.error("Error updating physical lead record:", error);
+        .eq("id", targetLeadId);
     } else {
+      targetLeadId = crypto.randomUUID(); // Pre-generate to avoid RLS block on .select()
       const { error } = await supabase.from("physical_leads").insert({
+        id: targetLeadId,
         course_id: course!.id,
         course_code: course!.course_code ?? courseCode,
         start_date: currentCourse?.start_date ?? course!.start_date ?? null,
@@ -818,25 +821,49 @@ export default function OfflineCourseDetailPage() {
         office_location: course!.location || "New Baneshwor",
         course_price: course!.price,
         discount_price: instantBookingPrice,
+        booking_amount: bookingAmount,
         source: "Website",
         status: "new",
-        remarks: "Initiated Instant Booking (Order Type: Offline Course)",
+        remarks: "Initiated Instant Booking",
       });
 
-      if (error) console.error("Error creating physical lead record:", error);
+      if (error) {
+        console.error("Error creating physical lead record:", error);
+        throw error;
+      }
     }
 
-    const params = new URLSearchParams({
+    // Force Orders v2 to acknowledge the newly negotiated locks without pending/paid trigger bleed
+    await supabase.from("orders_v2").update({
+      locked_price: instantBookingPrice,
+      pending_amount: 0,
+      paid_amount: 0 
+    }).eq("leads_id", targetLeadId);
+
+    // Get existing order if we are allowed to read it to seamlessly pass the UUID via URL
+    const { data: existingOrder } = await supabase
+      .from("orders_v2")
+      .select("id")
+      .eq("leads_id", targetLeadId)
+      .maybeSingle();
+
+    const redirectParams = new URLSearchParams({
       type: "course",
-      order_type: "Offline Course",
+      order_type: "Physical Class",
       courseName: course!.title,
-      price: String(bookingAmount),
+      price: String(bookingAmount), 
       locked_price: String(instantBookingPrice),
       name: details.name,
-      email: details.email,
+      email: details.email || "",
       phone: details.phone,
+      leads_id: targetLeadId,
     });
-    router.push(`/order?${params.toString()}`);
+    
+    if (existingOrder?.id) {
+      redirectParams.append("order_id", existingOrder.id);
+    }
+
+    router.push(`/order?${redirectParams.toString()}`);
   }
 
   return (
@@ -855,15 +882,6 @@ export default function OfflineCourseDetailPage() {
             @keyframes ghInstantCtaPulse {
               0%, 100% { transform: scale(1); }
               50% { transform: scale(1.02); }
-            }
-            .gh-instant-card-enter {
-              animation: ghInstantCardIn 0.4s ease-out both;
-            }
-            .gh-instant-shadow-pulse {
-              animation: ghInstantShadowPulse 4s ease-in-out infinite;
-            }
-            .gh-instant-cta-pulse {
-              animation: ghInstantCtaPulse 2.4s ease-in-out infinite;
             }
             @keyframes ghFlamePulse {
               0%, 100% { transform: scale(1) rotate(0deg); }

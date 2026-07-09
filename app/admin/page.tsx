@@ -21,12 +21,14 @@ interface OnlineCourse {
   duration: string; cover_pic: string; tutor_name: string; is_active: boolean;
   start_datetime: string; created_at: string;
 }
+
 interface CourseBatch {
   id: string; course_id: string; course_name: string; batch_no: number;
   start_datetime?: string; timing?: string; online_class_link?: string;
   google_classroom_link?: string; whatsapp_group_link?: string;
   is_active: boolean; created_at?: string;
 }
+
 interface PhysicalCourse {
   id: string; title: string; course_code: string | null; course_image_url: string | null;
   instructor_image_url: string | null; category: "Professional Training" | "University Subjects";
@@ -36,6 +38,7 @@ interface PhysicalCourse {
   is_active: boolean; tutor_bio: string | null; batch_no: number | null;
   created_at: string; updated_at: string;
 }
+
 interface Enrollment {
   id: string; user_id: string; course_id: string; full_name: string; email: string;
   whatsapp_number: string; remarks: string; status: string; created_at: string;
@@ -43,33 +46,46 @@ interface Enrollment {
   starting_date: string; confirmed: boolean; is_confirmed?: boolean; paid_amount: number; remaining_amount: number;
   pending_amount: number; batch_no: number | null; order_id?: string | null;
 }
+
 interface Message {
   id: string; user_id: string; sender_role: string; content: string;
   created_at: string; is_read?: boolean;
   profiles?: { full_name: string; avatar_url: string; role: string; };
 }
+
 interface Certificate {
   id: string; name: string; email: string; syllabus_name: string;
   syllabus_id: number | null; issue_date: string; certificate_image: string;
   certificate_code: string; created_at: string; user_id?: string;
 }
+
 interface Order {
   id: string; full_name: string; email: string; contact_number: string;
   order_type: string; order_name: string; paid_amount: number; pending_amount: number;
   locked_price: number; screenshot_url: string; payment_screenshots: string[];
   status: string; created_at: string; updated_at?: string; user_id?: string;
-  enrollment_id?: string;
+  enrollment_id?: string; leads_id?: string | null; bill_no?: string | number | null; remaining_amount?: number;
 }
+
 interface PhysicalLead {
   id: string; course_id: string; course_code: string; course_title: string; category: string;
   full_name: string; phone: string; email: string | null; current_education: string | null;
-  institution_name: string | null; office_location: string; course_price: number;
-  discount_price: number | null; booking_amount: number | null; source: string;
+  institution_name: string | null; office_location: string; source: string;
   status: 'new' | 'contacted' | 'interested' | 'follow_up' | 'booked' | 'deposit_paid' | 'enrolled' | 'cancelled';
   remarks: string | null; counselor_notes: string | null; assigned_to: string | null;
   follow_up_date: string | null; batch_no: number | null; is_confirmed: boolean | null;
-  created_at: string; updated_at: string; deleted: boolean; deleted_at: string | null; 
+  start_date?: string | null; created_at: string; updated_at: string; deleted: boolean; deleted_at: string | null;
+  course_price: number;
+  discount_price?: number | null;
+  booking_amount?: number | null;
+  order_id?: string | null;
+  bill_no?: string | number | null;
+  locked_price?: number;
+  paid_amount?: number;
   pending_amount?: number;
+  remaining_amount?: number;
+  order_status?: string;
+  payment_screenshots?: string[];
 }
 
 function timeAgo(dateString: string) {
@@ -157,6 +173,8 @@ function useOrdersAndEnrollments(supabase: any, enabled: boolean) {
     const fetchedOrders = ordRes.data ? ordRes.data.map((o: any) => ({
       ...o, full_name: o.full_name || 'N/A', email: o.email || 'N/A', contact_number: o.whatsapp_number || o.contact_number || 'N/A',
       paid_amount: o.paid_amount ?? 0, pending_amount: o.pending_amount ?? 0, locked_price: o.locked_price ?? 0,
+      remaining_amount: o.remaining_amount ?? Math.max(0, (o.locked_price ?? 0) - (o.paid_amount ?? 0) - (o.pending_amount ?? 0)),
+      leads_id: o.leads_id ?? null, bill_no: o.bill_no ?? null,
       order_type: o.order_type || 'Online Course', order_name: o.order_name || 'Course Enrollment', payment_screenshots: o.payment_screenshots || [],
       screenshot_url: o.payment_screenshots?.length > 0 ? o.payment_screenshots[o.payment_screenshots.length - 1] : o.screenshot_url,
       updated_at: o.updated_at || o.created_at,
@@ -696,50 +714,50 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
   };
 
   const handleVerifyPayment = async (order: Order) => {
-  if (order.pending_amount <= 0) return;
-  if (!confirm(`Verify Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
+    if (order.pending_amount <= 0) return;
+    if (!confirm(`Verify Rs. ${order.pending_amount} for ${order.full_name}?`)) return;
 
-  const newPaid = order.paid_amount + order.pending_amount;
+    const newPaid = order.paid_amount + order.pending_amount;
 
-  // 1. Update the order status and amounts
-  const { error: orderError } = await supabase
-    .from('orders_v2')
-    .update({ 
-      paid_amount: newPaid, 
-      pending_amount: 0, 
-      status: 'verified', 
-      updated_at: new Date().toISOString() 
-    })
-    .eq('id', order.id);
+    // 1. Update the order status and amounts
+    const { error: orderError } = await supabase
+      .from('orders_v2')
+      .update({ 
+        paid_amount: newPaid, 
+        pending_amount: 0, 
+        status: 'verified', 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', order.id);
 
-  if (orderError) {
-    alert("Verification failed: " + orderError.message);
-    return;
-  }
-
-  // 2. Branch based on order type
-  if (order.enrollment_id) {
-    if (order.order_type === "Online Course") {
-      await supabase
-        .from("enrollments_v2")
-        .update({ is_confirmed: true })
-        .eq("id", order.enrollment_id);
-    } 
-    else if (order.order_type === "Physical Class") {
-      await supabase
-        .from("physical_leads")
-        .update({
-          is_confirmed: true,
-          status: "deposit_paid", // Updating to appropriate status
-        })
-        .eq("id", order.enrollment_id);
+    if (orderError) {
+      alert("Verification failed: " + orderError.message);
+      return;
     }
-  }
 
-  // 3. Refresh UI
-  refresh();
-  setSelectedOrder(null);
-};
+    // 2. Branch based on order type
+    if (order.enrollment_id) {
+      if (order.order_type === "Online Course") {
+        await supabase
+          .from("enrollments_v2")
+          .update({ is_confirmed: true })
+          .eq("id", order.enrollment_id);
+      } 
+      else if (order.order_type === "Physical Class") {
+        await supabase
+          .from("physical_leads")
+          .update({
+            is_confirmed: true,
+            status: "deposit_paid", // Updating to appropriate status
+          })
+          .eq("id", order.enrollment_id);
+      }
+    }
+
+    // 3. Refresh UI
+    refresh();
+    setSelectedOrder(null);
+  };
 
   const handleRejectPayment = async (order: Order) => {
     if (order.pending_amount <= 0) return;
@@ -1332,7 +1350,7 @@ function BookingsManager({ courses, enrollments, batches, syllabi, physicalCours
       {bookingType === 'online' ? (
         <OnlineBookingsView courses={courses} enrollments={enrollments} batches={batches} syllabi={syllabi} orders={orders} refresh={refresh} onOpenChat={onOpenChat} />
       ) : (
-        <PhysicalLeadsView physicalCourses={physicalCourses} data={physicalLeads} refresh={refresh} />
+        <PhysicalLeadsView physicalCourses={physicalCourses} data={physicalLeads} orders={orders} refresh={refresh} />
       )}
     </motion.div>
   );
@@ -1380,7 +1398,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
 
   const savePayment = async () => {
     if (!editingPayment) return;
-    const newPending = editLocked - editPaid;
+    const newPending = 0; // Fix: We explicitly set pending to 0 since we are manually confirming funds here.
 
     if (!editingPayment.order_id) {
       const course = courses.find((c: any) => c.id === editingPayment.course_id);
@@ -1424,9 +1442,11 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     const enrPayload = { batch_id: resolvedBatchId, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa, is_confirmed: true };
     const { data: enrData, error: enrErr } = await supabase.from('enrollments_v2').insert([enrPayload]).select().single();
     if (enrErr) { alert("Error adding enrollment: " + enrErr.message); return; }
+    
     const ordPayload = {
       enrollment_id: enrData.id, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa,
-      order_type: 'Online Course', order_name: selectedCourse.title, paid_amount: newBooking.paid_amount, pending_amount: Math.max(0, newBooking.locked_price - newBooking.paid_amount),
+      order_type: 'Online Course', order_name: selectedCourse.title, paid_amount: newBooking.paid_amount, 
+      pending_amount: 0, // Fix: Do not calculate pending_amount as remaining balance. Pending is for unverified screenshots.
       locked_price: newBooking.locked_price, status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
     };
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
@@ -1509,7 +1529,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
 
   const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.confirmed ? (e.locked_price || 0) : 0), 0);
   const collectedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.paid_amount || 0), 0);
-  const pendingVolume = courseEnrollments.reduce((sum: number, e: any) => sum + ((e.locked_price || 0) - (e.paid_amount || 0)), 0);
+  const pendingVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.confirmed ? ((e.locked_price || 0) - (e.paid_amount || 0)) : 0), 0);
 
   const totalPages = Math.ceil(courseEnrollments.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -1655,21 +1675,49 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   );
 }
 
-function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses: PhysicalCourse[]; data: PhysicalLead[]; refresh: () => void }) {
+function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physicalCourses: PhysicalCourse[]; data: PhysicalLead[]; orders: Order[]; refresh: () => void }) {
   const supabase = useSupabase();
   const [selectedCourse, setSelectedCourse] = useState<PhysicalCourse | null>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmedFilter, setConfirmedFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
   const [editingLead, setEditingLead] = useState<PhysicalLead | null>(null);
+  const [editForm, setEditForm] = useState({
+    full_name: '', phone: '', email: '', office_location: '', remarks: '', counselor_notes: '',
+    status: 'new' as PhysicalLead['status'], assigned_to: '', follow_up_date: '', batch_no: undefined as number | undefined, start_date: '',
+  });
   const [editLocked, setEditLocked] = useState<number>(0);
   const [editPaid, setEditPaid] = useState<number>(0);
   const [isAddingLead, setIsAddingLead] = useState(false);
-  const [newLead, setNewLead] = useState({ full_name: '', phone: '', email: '', office_location: '', source: 'Walk-in' });
+  const [newLead, setNewLead] = useState({ full_name: '', phone: '', email: '', locked_price: 0, paid_amount: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
   useEffect(() => { setCurrentPage(1); }, [selectedCourse, selectedBatch, searchQuery, confirmedFilter]);
+
+  // Join leads (lead info) with their linked order (payment info) via orders_v2.leads_id.
+  const leadsWithOrders: PhysicalLead[] = useMemo(() => {
+    const physicalOrders = orders.filter(o => !!o.leads_id);
+    return data.map(lead => {
+      const matches = physicalOrders.filter(o => o.leads_id === lead.id);
+      if (matches.length === 0) return { ...lead, order_id: null };
+      if (matches.length > 1) {
+        console.warn(`[PhysicalLeadsView] Multiple orders found for lead ${lead.id}; using the most recent one.`);
+      }
+      const newest = matches.reduce((a, b) => new Date(a.created_at) > new Date(b.created_at) ? a : b);
+      return {
+        ...lead,
+        order_id: newest.id,
+        bill_no: newest.bill_no ?? null,
+        locked_price: newest.locked_price ?? 0,
+        paid_amount: newest.paid_amount ?? 0,
+        pending_amount: newest.pending_amount ?? 0,
+        remaining_amount: newest.remaining_amount ?? Math.max(0, (newest.locked_price ?? 0) - (newest.paid_amount ?? 0) - (newest.pending_amount ?? 0)),
+        order_status: newest.status,
+        payment_screenshots: newest.payment_screenshots || [],
+      };
+    });
+  }, [data, orders]);
 
   const toggleConfirmation = async (leadId: string, currentStatus: boolean) => {
     try {
@@ -1691,30 +1739,62 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
 
   const openEditLead = (lead: PhysicalLead) => {
     setEditingLead(lead);
-    setEditLocked(lead.discount_price ?? lead.course_price ?? 0);
-    setEditPaid(lead.booking_amount || 0);
+    setEditForm({
+      full_name: lead.full_name || '', phone: lead.phone || '', email: lead.email || '',
+      office_location: lead.office_location || '', remarks: lead.remarks || '', counselor_notes: lead.counselor_notes || '',
+      status: lead.status, assigned_to: lead.assigned_to || '', follow_up_date: lead.follow_up_date || '',
+      batch_no: lead.batch_no ?? undefined, start_date: (lead as any).start_date || '',
+    });
+    setEditLocked(lead.locked_price ?? 0);
+    setEditPaid(lead.paid_amount ?? 0);
   };
 
-  const saveLeadPayment = async () => {
-    if (!editingLead) return;
-    const newPending = editLocked - editPaid;
+  const saveLeadDetails = async (leadId: string) => {
     const { error } = await supabase.from('physical_leads').update({
-      booking_amount: editPaid,
-      pending_amount: newPending,
-      discount_price: editLocked,
-      updated_at: new Date().toISOString()
-    }).eq('id', editingLead.id);
-    
-    if (error) alert("Error: " + error.message);
-    else { setEditingLead(null); refresh(); }
+      full_name: editForm.full_name,
+      phone: editForm.phone,
+      email: editForm.email || null,
+      office_location: editForm.office_location || null,
+      remarks: editForm.remarks || null,
+      counselor_notes: editForm.counselor_notes || null,
+      status: editForm.status,
+      assigned_to: editForm.assigned_to || null,
+      follow_up_date: editForm.follow_up_date || null,
+      batch_no: editForm.batch_no ?? null,
+      start_date: editForm.start_date || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', leadId);
+    if (error) { alert("Failed to update lead details: " + error.message); return false; }
+    return true;
+  };
+
+  const saveOrderPayment = async (leadId: string) => {
+    const { error } = await supabase.from('orders_v2').update({
+      locked_price: editLocked,
+      paid_amount: editPaid,
+      pending_amount: 0, // Fix: Admin is explicitly confirming payments here. Zero out pending amount.
+      updated_at: new Date().toISOString(),
+    }).eq('leads_id', leadId);
+    if (error) { alert("Failed to update payment: " + error.message); return false; }
+    return true;
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingLead) return;
+    const leadOk = await saveLeadDetails(editingLead.id);
+    if (!leadOk) return;
+    if (editingLead.order_id) {
+      const orderOk = await saveOrderPayment(editingLead.id);
+      if (!orderOk) return;
+    }
+    setEditingLead(null);
+    refresh();
   };
 
   const saveManualLead = async () => {
     if (!selectedCourse) return;
     if (!newLead.full_name || !newLead.phone) { alert("Name and Phone are required."); return; }
-
     const targetBatch = selectedCourse.batch_no;
-
     const payload = {
       course_id: selectedCourse.id,
       course_code: selectedCourse.course_code || '',
@@ -1723,14 +1803,11 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
       full_name: newLead.full_name,
       phone: newLead.phone,
       email: newLead.email || null,
-      office_location: newLead.office_location || selectedCourse.location || 'Kathmandu',
-      course_price: selectedCourse.price,
-      discount_price: selectedCourse.discount_price,
-      source: newLead.source,
+      office_location: selectedCourse.location || 'Kathmandu',
+      course_price: selectedCourse.discount_price || selectedCourse.price,
+      source: 'Walk-in',
       status: 'new',
       batch_no: targetBatch,
-      booking_amount: 0,
-      pending_amount: selectedCourse.discount_price || selectedCourse.price,
       current_education: null,
       institution_name: null,
       remarks: 'Manually added by Admin',
@@ -1739,28 +1816,41 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
       follow_up_date: null,
       is_confirmed: false
     };
+    
+    const { data: leadData, error: leadErr } = await supabase.from('physical_leads').insert([payload]).select().single();
+    if (leadErr) { alert("Failed to add lead: " + leadErr.message); return; }
 
-    const { error } = await supabase.from('physical_leads').insert([payload]);
-    if (error) { alert("Failed to add lead: " + error.message); return; }
+    const ordPayload = {
+      leads_id: leadData.id,
+      full_name: newLead.full_name,
+      email: newLead.email || '',
+      whatsapp_number: newLead.phone,
+      order_type: 'Physical Class',
+      order_name: selectedCourse.title,
+      paid_amount: newLead.paid_amount,
+      pending_amount: 0,
+      locked_price: newLead.locked_price,
+      status: newLead.paid_amount >= newLead.locked_price ? 'verified' : 'pending'
+    };
+
+    const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
+    if (ordErr) alert("Lead added, but order creation failed: " + ordErr.message);
 
     setIsAddingLead(false);
-    setNewLead({ full_name: '', phone: '', email: '', office_location: '', source: 'Walk-in' });
+    setNewLead({ full_name: '', phone: '', email: '', locked_price: 0, paid_amount: 0 });
     refresh();
   };
 
-  const filteredLeads = data.filter(l => {
+  const filteredLeads = leadsWithOrders.filter(l => {
     const matchesCourse = l.course_id === selectedCourse?.id || l.course_code === selectedCourse?.course_code;
     if (!matchesCourse) return false;
-
     if (selectedBatch === 'unassigned') {
       if (l.batch_no) return false;
     } else if (selectedBatch !== null) {
       if (l.batch_no !== selectedBatch) return false;
     }
-
     if (confirmedFilter === 'confirmed' && !l.is_confirmed) return false;
     if (confirmedFilter === 'pending' && l.is_confirmed) return false;
-
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -1779,8 +1869,8 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
   };
 
   const handleCopyCSV = () => {
-    const header = "name,email,phone,course,office,status,confirmed\n";
-    const rows = filteredLeads.map(e => `"${e.full_name || ''}","${e.email || ''}","${e.phone || ''}","${e.course_title || ''}","${e.office_location || ''}","${e.status}","${e.is_confirmed ? 'Yes' : 'No'}"`).join("\n");
+    const header = "name,email,phone,course,office,status,confirmed,locked_price,paid_amount,remaining_amount\n";
+    const rows = filteredLeads.map(e => `"${e.full_name || ''}","${e.email || ''}","${e.phone || ''}","${e.course_title || ''}","${e.office_location || ''}","${e.status}","${e.is_confirmed ? 'Yes' : 'No'}","${e.locked_price ?? 0}","${e.paid_amount ?? 0}","${e.remaining_amount ?? 0}"`).join("\n");
     navigator.clipboard.writeText(header + rows).then(() => alert("Lead list copied to clipboard!"));
   };
 
@@ -1788,14 +1878,13 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5 mt-2 w-full">
         {physicalCourses.map(course => {
-          const activeLeadCount = data.filter(l => 
+          const activeLeadCount = leadsWithOrders.filter(l =>
             (l.course_id === course.id || l.course_code === course.course_code) && l.status !== 'cancelled'
           ).length;
-
           return (
-            <div 
-              key={course.id} 
-              onClick={() => setSelectedCourse(course)} 
+            <div
+              key={course.id}
+              onClick={() => setSelectedCourse(course)}
               className="flex flex-col items-center justify-center p-6 bg-white border border-[#E6E0D2] rounded-2xl hover:border-[#B8543D] hover:shadow-md cursor-pointer transition-all aspect-square relative text-center group w-full max-w-[280px] mx-auto"
             >
               <div className="absolute top-4 right-4 bg-[#B8543D]/10 text-[#B8543D] font-bold text-[10px] uppercase tracking-wider px-3 py-1.5 rounded-lg">
@@ -1819,14 +1908,12 @@ function PhysicalLeadsView({ physicalCourses, data, refresh }: { physicalCourses
     );
   }
 
-if (selectedCourse && selectedBatch === null) {
+  if (selectedCourse && selectedBatch === null) {
     const availableBatches = Array.from(new Set([
-      ...data.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no).map(l => l.batch_no as number),
+      ...leadsWithOrders.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no).map(l => l.batch_no as number),
       selectedCourse.batch_no
     ])).filter((b): b is number => b !== null && b !== undefined).sort((a, b) => b - a);
-
-    const unassignedCount = data.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && !l.batch_no).length;
-
+    const unassignedCount = leadsWithOrders.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && !l.batch_no).length;
     return (
       <div className="space-y-6 w-full">
         <div className="flex items-center gap-4">
@@ -1835,7 +1922,7 @@ if (selectedCourse && selectedBatch === null) {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {availableBatches.map(b => {
-            const batchCount = data.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no === b).length;
+            const batchCount = leadsWithOrders.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no === b).length;
             return (
               <div key={b} onClick={() => setSelectedBatch(b)} className="flex items-center justify-between p-6 bg-white border border-[#E6E0D2] rounded-2xl hover:border-[#B8543D] hover:shadow-md cursor-pointer transition-all">
                 <div className="flex items-center gap-4"><div className="w-14 h-14 bg-[#B8543D]/10 text-[#B8543D] rounded-xl flex items-center justify-center font-bold text-2xl">{b}</div><h3 className="font-bold text-[#14161F] text-xl">Batch {b}</h3></div>
@@ -1854,10 +1941,10 @@ if (selectedCourse && selectedBatch === null) {
     );
   }
 
-  const predictedVolume = filteredLeads.reduce((sum, l) => sum + (l.is_confirmed ? (l.discount_price ?? l.course_price ?? 0) : 0), 0);
-  const collectedVolume = filteredLeads.reduce((sum, l) => sum + (l.booking_amount || 0), 0);
-  const pendingVolume = filteredLeads.reduce((sum, l) => sum + ((l.discount_price ?? l.course_price ?? 0) - (l.booking_amount || 0)), 0);
-
+  const predictedVolume = filteredLeads.reduce((sum, l) => sum + (l.is_confirmed ? (l.locked_price ?? 0) : 0), 0);
+  const collectedVolume = filteredLeads.reduce((sum, l) => sum + (l.paid_amount ?? 0), 0);
+  const pendingVolume = filteredLeads.reduce((sum, l) => sum + (l.is_confirmed ? (l.remaining_amount ?? 0) : 0), 0);
+  const missingOrderCount = filteredLeads.filter(l => !l.order_id).length;
   const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const paginatedLeads = filteredLeads.slice(startIndex, startIndex + ITEMS_PER_PAGE);
@@ -1871,10 +1958,13 @@ if (selectedCourse && selectedBatch === null) {
             <div><h2 className="text-xl font-serif font-bold text-[#14161F]">{selectedCourse.title}</h2><p className="text-sm font-medium text-[#857D6E]">{selectedBatch === 'unassigned' ? 'Unassigned Leads' : `Batch ${selectedBatch} Leads`}</p></div>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <button onClick={() => setIsAddingLead(true)} className="px-5 py-3 bg-[#B8543D] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"><Plus size={16} /> Add Lead</button>
+            <button onClick={() => {
+              const defaultPrice = selectedCourse?.discount_price || selectedCourse?.price || 0;
+              setNewLead({ full_name: '', phone: '', email: '', locked_price: defaultPrice, paid_amount: 0 });
+              setIsAddingLead(true);
+            }} className="px-5 py-3 bg-[#B8543D] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"><Plus size={16} /> Add Lead</button>
           </div>
         </div>
-        
         <div className="flex flex-wrap gap-3 items-center w-full">
           <div className="flex-1 min-w-[240px]">
             <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search applicants by name, phone, or email..." />
@@ -1887,12 +1977,18 @@ if (selectedCourse && selectedBatch === null) {
         </div>
       </div>
 
+      {missingOrderCount > 0 && (
+        <div className="flex items-center gap-2 bg-[#F5E7C8] border border-[#E9D6A2] text-[#8A6416] px-4 py-3 rounded-xl text-xs font-bold">
+          <AlertCircle size={15} /> {missingOrderCount} lead(s) here have no linked order yet — payment editing is disabled for them until an order exists.
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#FAF8F3] p-4 rounded-2xl border border-[#E6E0D2] mb-4 gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-sm font-bold text-[#4A4638] bg-white px-3 py-1.5 rounded-lg border border-[#E6E0D2] shadow-sm whitespace-nowrap">Showing {filteredLeads.length} Leads</span>
           <span className="text-sm font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded-lg border border-[#0E7C7B]/20 shadow-sm whitespace-nowrap">Predicted: <span className="font-black">Rs. {predictedVolume}</span></span>
           <span className="text-sm font-bold text-[#1E8F6F] bg-[#DCEEE6] px-3 py-1.5 rounded-lg border border-[#C3E3D5] shadow-sm whitespace-nowrap">Collected: <span className="font-black">Rs. {collectedVolume}</span></span>
-          <span className="text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Pending: <span className="font-black">Rs. {pendingVolume}</span></span>
+          <span className="text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Remaining: <span className="font-black">Rs. {pendingVolume}</span></span>
         </div>
         <div className="flex gap-2">
           <button onClick={handleCopyContactsCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Contact Details</button>
@@ -1917,20 +2013,26 @@ if (selectedCourse && selectedBatch === null) {
             </thead>
             <tbody>
               {paginatedLeads.map(lead => {
-                const lockedFee = lead.discount_price ?? lead.course_price ?? 0;
-                const paidAmt = lead.booking_amount || 0;
-                const pendingAmt = lockedFee - paidAmt;
-
+                const hasOrder = !!lead.order_id;
+                const lockedFee = lead.locked_price ?? 0;
+                const paidAmt = lead.paid_amount ?? 0;
+                const remainingAmt = lead.remaining_amount ?? 0;
                 return (
                   <tr key={lead.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
                     <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#14161F]">{lead.full_name}</td>
                     <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{lead.email || '-'}</td>
                     <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{lead.phone}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">Rs. {lockedFee}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {paidAmt}</td>
-                    <td className={`p-3 border-r border-[#E6E0D2] font-bold ${pendingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>
-                      Rs. {pendingAmt}
-                    </td>
+                    {hasOrder ? (
+                      <>
+                        <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">Rs. {lockedFee}</td>
+                        <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {paidAmt}</td>
+                        <td className={`p-3 border-r border-[#E6E0D2] font-bold ${remainingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>Rs. {remainingAmt}</td>
+                      </>
+                    ) : (
+                      <td colSpan={3} className="p-3 border-r border-[#E6E0D2] text-[#8A6416] font-bold">
+                        <span className="inline-flex items-center gap-1 bg-[#F5E7C8] px-2 py-1 rounded text-[10px] uppercase"><AlertCircle size={11} /> No Order Linked</span>
+                      </td>
+                    )}
                     <td className="p-3 border-r border-[#E6E0D2] text-center">
                       <input type="checkbox" checked={!!lead.is_confirmed} onChange={() => toggleConfirmation(lead.id, !!lead.is_confirmed)} className="w-5 h-5 cursor-pointer accent-[#1E8F6F] rounded" />
                     </td>
@@ -1963,14 +2065,14 @@ if (selectedCourse && selectedBatch === null) {
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setIsAddingLead(false)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
             <h3 className="text-2xl font-serif font-bold mb-1">Add Walk-in Lead</h3>
-            <p className="text-xs font-medium text-[#857D6E] mb-6">Create a physical lead directly in the ledger.</p>
+            <p className="text-xs font-medium text-[#857D6E] mb-6">Create a physical lead directly in the ledger. A linked order is created automatically.</p>
             <div className="space-y-4">
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={newLead.full_name} onChange={(e) => setNewLead({ ...newLead, full_name: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="John Doe" /></div>
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Phone Number</label><input type="text" value={newLead.phone} onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="98XXXXXXXX" /></div>
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email Address (Optional)</label><input type="email" value={newLead.email} onChange={(e) => setNewLead({ ...newLead, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="john@example.com" /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Office / Branch</label><input type="text" value={newLead.office_location} onChange={(e) => setNewLead({ ...newLead, office_location: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="Kathmandu" /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Source</label><input type="text" value={newLead.source} onChange={(e) => setNewLead({ ...newLead, source: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="Walk-in" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={newLead.locked_price} onChange={(e) => setNewLead({ ...newLead, locked_price: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={newLead.paid_amount} onChange={(e) => setNewLead({ ...newLead, paid_amount: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
               </div>
               <div className="bg-[#B8543D]/10 p-3 rounded-xl border border-[#B8543D]/20 mt-2">
                 <p className="text-xs font-bold text-[#B8543D]">Note: This lead will be saved permanently into the currently active Batch {selectedCourse?.batch_no || '(Unassigned)'}.</p>
@@ -1986,21 +2088,59 @@ if (selectedCourse && selectedBatch === null) {
 
       {editingLead && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setEditingLead(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full relative overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setEditingLead(null)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-xl font-serif font-bold mb-1">Edit Payment Details</h3>
+            <h3 className="text-xl font-serif font-bold mb-1">Edit Lead</h3>
             <p className="text-xs font-medium text-[#857D6E] mb-6">{editingLead.full_name}</p>
             <div className="space-y-4">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416]" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F]" /></div>
-              <div className="p-3 bg-[#EFEBE1] rounded-xl flex justify-between items-center border border-[#E6E0D2]">
-                <label className="block text-[10px] font-bold text-[#857D6E] uppercase">Remaining Amount</label>
-                <span className={`font-black ${editLocked - editPaid > 0 ? 'text-[#B23B3B]' : 'text-[#1E8F6F]'}`}>Rs. {Math.max(0, editLocked - editPaid)}</span>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#857D6E]">Lead Information</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Phone</label><input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
               </div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email</label><input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Status</label>
+                  <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value as any })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]">
+                    <option value="new">New</option><option value="contacted">Contacted</option><option value="interested">Interested</option>
+                    <option value="follow_up">Follow Up</option><option value="booked">Booked</option><option value="deposit_paid">Deposit Paid</option>
+                    <option value="enrolled">Enrolled</option><option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Batch No.</label><input type="number" value={editForm.batch_no ?? ''} onChange={e => setEditForm({ ...editForm, batch_no: e.target.value === '' ? undefined : Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+              </div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Office / Branch</label><input type="text" value={editForm.office_location} onChange={e => setEditForm({ ...editForm, office_location: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Follow-up Date</label><input type="date" value={editForm.follow_up_date} onChange={e => setEditForm({ ...editForm, follow_up_date: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Assigned To</label><input type="text" value={editForm.assigned_to} onChange={e => setEditForm({ ...editForm, assigned_to: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+              </div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Counselor Notes</label><textarea rows={2} value={editForm.counselor_notes} onChange={e => setEditForm({ ...editForm, counselor_notes: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] resize-none" /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Remarks</label><textarea rows={2} value={editForm.remarks} onChange={e => setEditForm({ ...editForm, remarks: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] resize-none" /></div>
+            </div>
+            <div className="mt-6 pt-6 border-t border-[#E6E0D2] space-y-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#857D6E]">Payment Information (orders_v2)</p>
+              {editingLead.order_id ? (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416]" /></div>
+                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F]" /></div>
+                  </div>
+                  <div className="p-3 bg-[#EFEBE1] rounded-xl flex justify-between items-center border border-[#E6E0D2]">
+                    <label className="block text-[10px] font-bold text-[#857D6E] uppercase">Remaining Amount (auto-calculated)</label>
+                    <span className={`font-black ${editLocked - editPaid > 0 ? 'text-[#B23B3B]' : 'text-[#1E8F6F]'}`}>Rs. {Math.max(0, editLocked - editPaid)}</span>
+                  </div>
+                  {editingLead.bill_no && <p className="text-[10px] font-bold text-[#B4AF9F]">Bill No: {editingLead.bill_no}</p>}
+                </>
+              ) : (
+                <div className="flex items-center gap-2 bg-[#F5E7C8] border border-[#E9D6A2] text-[#8A6416] px-4 py-3 rounded-xl text-xs font-bold">
+                  <AlertCircle size={15} /> No linked order found for this lead. Payment editing is disabled.
+                </div>
+              )}
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <button onClick={() => setEditingLead(null)} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors">Cancel</button>
-              <button onClick={saveLeadPayment} className="px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg hover:opacity-90 transition-colors">Save Details</button>
+              <button onClick={handleSaveEdit} className="px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg hover:opacity-90 transition-colors">Save Changes</button>
             </div>
           </div>
         </div>

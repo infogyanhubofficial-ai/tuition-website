@@ -913,7 +913,7 @@ export default function CrmLeadsDashboard() {
     if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
     if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
     if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
-    if (hideContacted) query = query.neq("lead_status", "contacted");
+    if (hideContacted) query = query.is("last_contacted_at", null); // <--- FIXED HERE
 
     const startToday = startOfTodayIso();
     const todayStr = todayInputValue();
@@ -945,7 +945,7 @@ export default function CrmLeadsDashboard() {
     if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
     if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
     if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
-    if (!ignoreHideContacted && hideContacted) query = query.neq("lead_status", "contacted");
+    if (!ignoreHideContacted && hideContacted) query = query.is("last_contacted_at", null); // <--- FIXED HERE
     return query;
   }, [courseFilter, paymentFilter, modeFilter, priorityFilter, statusFilter, hideContacted]);
 
@@ -1232,7 +1232,7 @@ export default function CrmLeadsDashboard() {
       if (statusFilter !== "all") {
         text += LEAD_STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label.toLowerCase() + " status ";
       }
-      if (hideContacted && statusFilter !== "contacted") {
+      if (hideContacted) { // <--- FIXED HERE
         text += "uncontacted ";
       }
       text += "leads ";
