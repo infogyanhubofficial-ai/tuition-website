@@ -271,10 +271,44 @@ export default function CourseEnrollmentClient() {
       const { data: existingRecords, error: checkError } = await query;
       if (checkError) throw checkError;
 
+      // --- NEW DUPLICATE HANDLING LOGIC ---
       if (existingRecords && existingRecords.length > 0) {
-        router.push('/dashboard');
-        return;
+        const existingEnrollmentId = existingRecords[0].id;
+        
+        // 1. Look for their existing order
+        const { data: existingOrder } = await supabase
+          .from('orders_v2')
+          .select('id')
+          .eq('enrollment_id', existingEnrollmentId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existingOrder?.id) {
+          // 2. Alert the user and redirect to the checkout page with their existing order_id
+          alert("You are already enrolled! Redirecting you to complete your pending payment.");
+          
+          const queryParams = new URLSearchParams({
+            name: form.full_name,
+            email: form.email,
+            phone: form.whatsapp.replace(/\D/g, ''),
+            order_type: 'Online Course', 
+            order_name: course.title,
+            course_name: course.title,
+            price: String(amountToPay ?? 0),
+            order_id: existingOrder.id // Passing the intercepted Order ID
+          });
+          
+          router.push(`/order?${queryParams.toString()}`);
+          return;
+        } else {
+          // Fallback: If they are enrolled but somehow have no order record
+          alert("You are already enrolled! Redirecting to your dashboard.");
+          router.push('/dashboard');
+          return;
+        }
       }
+      // --- END NEW DUPLICATE HANDLING LOGIC ---
 
       const { data: newEnrollment, error: insertError } = await supabase
         .from('enrollments_v2')

@@ -151,7 +151,7 @@ export default function OfflineClassesPage() {
             <span style={{ color: BRAND.orange }}>New Baneshwor</span>
           </h1>
           <p className="mt-4 max-w-xl text-sm text-white/80 sm:text-base">
-            Walk-in and reserve a seat for our upcoming professional training batches, taught on-campus at our New Baneshwor centre.
+            Walk-in and reserve a seat for our upcoming professional training batches, taught on-office at our New Baneshwor centre.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-xs font-medium uppercase tracking-wide text-white backdrop-blur-sm">

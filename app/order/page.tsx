@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense, useMemo } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -13,6 +13,52 @@ import {
 
 // --- TYPES ---
 type OrderMode = "cv_phone" | "badge" | "course" | "physical_course" | "recording" | "unknown";
+
+// --- HELPERS ---
+function convertOrderType(orderType: string): OrderMode {
+  if (!orderType) return "unknown";
+  const lowerCaseType = orderType.toLowerCase();
+  
+  if (lowerCaseType === "online course") return "course";
+  if (lowerCaseType === "offline course" || lowerCaseType === "physical class") return "physical_course";
+  if (lowerCaseType === "recording") return "recording";
+  if (lowerCaseType.includes("verification") || lowerCaseType.includes("badge") || lowerCaseType.includes("batch")) return "badge";
+  if (lowerCaseType.includes("tutoring") || lowerCaseType.includes("cv") || lowerCaseType.includes("phone")) return "cv_phone";
+  
+  return "unknown";
+}
+
+function getModeFromUrl(urlType: string, requestType: string, orderTypeParam: string): OrderMode {
+  if (urlType === "recording") return "recording";
+  if (
+    orderTypeParam === "offline course" ||
+    orderTypeParam === "physical class"
+  )
+    return "physical_course";
+
+  if (
+    orderTypeParam.includes("course") ||
+    requestType === "course" ||
+    orderTypeParam === "online course"
+  )
+    return "course";
+
+  if (
+    orderTypeParam.includes("verif") ||
+    orderTypeParam.includes("batch") ||
+    orderTypeParam.includes("badge")
+  )
+    return "badge";
+
+  if (
+    requestType === "cv" ||
+    requestType === "phone" ||
+    orderTypeParam === "tutoring"
+  )
+    return "cv_phone";
+
+  return "unknown";
+}
 
 // --- IMAGE COMPRESSION UTILITY ---
 const compressImage = (file: File): Promise<File> => {
@@ -114,37 +160,7 @@ function CheckoutContent() {
   const [isPhoneLocked, setIsPhoneLocked] = useState<boolean>(Boolean(urlPhone));
 
   // 2. DETERMINE ORDER MODE
-  const currentMode = useMemo<OrderMode>(() => {
-    if (urlType === "recording") return "recording";
-    if (
-      orderTypeParam === "offline course" ||
-      orderTypeParam === "physical class"
-    )
-      return "physical_course";
-
-    if (
-      orderTypeParam.includes("course") ||
-      requestType === "course" ||
-      orderTypeParam === "online course"
-    )
-      return "course";
-
-    if (
-      orderTypeParam.includes("verif") ||
-      orderTypeParam.includes("batch") ||
-      orderTypeParam.includes("badge")
-    )
-      return "badge";
-
-    if (
-      requestType === "cv" ||
-      requestType === "phone" ||
-      orderTypeParam === "tutoring"
-    )
-      return "cv_phone";
-
-    return "unknown";
-  }, [urlType, orderTypeParam, requestType]);
+  const [currentMode, setCurrentMode] = useState<OrderMode>("unknown");
 
   // 3. BULLETPROOF FORM STATE
   const [fullName, setFullName] = useState<string>(urlName || "");
@@ -188,7 +204,45 @@ function CheckoutContent() {
           }
         }
 
-        if (tutorId && !urlTutorName && currentMode === 'cv_phone') {
+        let determinedMode: OrderMode | null = null;
+
+        // Priority 1: Existing Order ID
+        if (urlOrderId) {
+          const { data: existingOrder } = await supabase
+            .from('orders_v2')
+            .select('order_type')
+            .eq('id', urlOrderId)
+            .maybeSingle();
+
+          if (existingOrder?.order_type) {
+            determinedMode = convertOrderType(existingOrder.order_type);
+          }
+        }
+
+        // Priority 2: Existing Enrollment ID
+        if (!determinedMode && urlEnrollmentId) {
+          const { data: existingOrder } = await supabase
+            .from('orders_v2')
+            .select('order_type')
+            .eq('enrollment_id', urlEnrollmentId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (existingOrder?.order_type) {
+            determinedMode = convertOrderType(existingOrder.order_type);
+          }
+        }
+
+        // Priority 3: URL Fallback
+        if (!determinedMode) {
+          determinedMode = getModeFromUrl(urlType, requestType, orderTypeParam);
+        }
+
+        setCurrentMode(determinedMode);
+
+        // Fetch dependent data based on determinedMode
+        if (tutorId && !urlTutorName && determinedMode === 'cv_phone') {
           const { data, error } = await supabase
             .from('tutors')
             .select('name, full_name')
@@ -199,7 +253,7 @@ function CheckoutContent() {
           else setFetchedTutorName(`Tutor #${tutorId}`);
         }
 
-        if (currentMode === 'course' && urlCourseName && !urlOrderId) {
+        if (determinedMode === 'course' && urlCourseName && !urlOrderId) {
           const { data: syllabus } = await supabase
             .from('syllabi_v2')
             .select('id')
@@ -226,7 +280,7 @@ function CheckoutContent() {
       }
     };
     initializeCheckout();
-  }, [tutorId, urlTutorName, urlName, urlEmail, urlPhone, urlCourseName, currentMode, urlOrderId, supabase]);
+  }, [tutorId, urlTutorName, urlName, urlEmail, urlPhone, urlCourseName, urlOrderId, urlEnrollmentId, urlType, requestType, orderTypeParam, supabase]);
 
   // 7. CONFIGURE UI AND DATA BASED ON MODE
   const getOrderConfig = () => {
@@ -235,69 +289,69 @@ function CheckoutContent() {
     switch (currentMode) {
       case "recording":
         return {
-          title: urlOrderId ? "Invoice Payment" : "Recording Video Access",
+          title: "Recording Video Access", 
           orderName: urlCourseName || "Selected Course",
           price: customPrice,
           dbOrderType: "recording",
-          icon: <PlayCircle className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: `You are making a payment for "${urlCourseName || 'this course'}". Please complete the payment to proceed.`,
-          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
-          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
+          icon: <PlayCircle className="w-5 h-5 text-indigo-600" />,
+          noticeIcon: <Info className="w-5 h-5 text-indigo-600 shrink-0" />,
+          noticeStyle: "bg-indigo-50/50 border-indigo-100 text-indigo-900",
+          notice: "Payment for recording access. You will receive an email shortly with details."
         };
       case "course":
         return {
-          title: urlOrderId ? "Invoice Payment" : "Online Course Enrollment",
+          title: "Online Course Enrollment", 
           orderName: urlCourseName || "Selected Course",
           price: customPrice, 
           dbOrderType: "Online Course",
-          icon: <GraduationCap className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: `You are processing a payment for "${urlCourseName || 'this course'}". We will verify your deposit within 24 hours.`,
-          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
-          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
+          icon: <GraduationCap className="w-5 h-5 text-blue-600" />,
+          noticeIcon: <Info className="w-5 h-5 text-blue-600 shrink-0" />,
+          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-900",
+          notice: "Your enrollment is currently pending. Please complete your payment below to secure your spot."
         };
       case "physical_course":
         return {
-          title: urlOrderId ? "Invoice Payment" : "Offline Course Seat Reservation",
+          title: "Offline Course Seat Reservation", 
           orderName: urlCourseName || "Selected Offline Course",
           price: customPrice, 
           dbOrderType: "Offline Course",
-          icon: <Users className="w-5 h-5 text-orange-600 shrink-0" />,
-          notice: `You are processing a payment to reserve your seat for "${urlCourseName || 'this class'}". We will verify your deposit and confirm your seat shortly.`,
-          noticeStyle: "bg-orange-50/50 border-orange-100 text-orange-800",
-          noticeIcon: <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5 text-orange-600" />
+          icon: <Users className="w-5 h-5 text-purple-600" />,
+          noticeIcon: <Info className="w-5 h-5 text-purple-600 shrink-0" />,
+          noticeStyle: "bg-purple-50/50 border-purple-100 text-purple-900",
+          notice: "Your seat reservation is currently pending. Complete the payment below to reserve."
         };
       case "badge":
         return {
-          title: urlOrderId ? "Invoice Payment" : "Verification Badge (1-Year)",
+          title: "Verification Badge (1-Year)", 
           orderName: fullName || urlName || "Your Profile Verification",
-          price: customPrice || 500,
-          dbOrderType: "other",
-          icon: <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: "You must submit original documents later. Badge won't be verified otherwise and payment is non-refundable.",
-          noticeStyle: "bg-slate-50 border-slate-200 text-slate-700",
-          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-slate-500" />
+          dbOrderType: "Verification",
+          price: customPrice,
+          icon: <Sparkles className="w-5 h-5 text-amber-600" />,
+          noticeIcon: <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0" />,
+          noticeStyle: "bg-amber-50/50 border-amber-100 text-amber-900",
+          notice: "Your verification request has been received. Complete payment to activate your badge."
         };
       case "cv_phone":
         return {
-          title: urlOrderId ? "Invoice Payment" : "CV & Contact Detail Unlock",
+          title: "CV & Contact Detail Unlock", 
           orderName: fetchedTutorName || urlCourseName || `Tutor #${tutorId || 'Unknown'}`,
-          price: customPrice || 1000,
-          dbOrderType: "CV and Contact",
-          icon: <FileText className="w-5 h-5 text-blue-600 shrink-0" />,
-          notice: "Bonus Highlight: We will provide you BOTH the CV and the Direct Contact Details within 24 hours via WhatsApp and Email.",
-          noticeStyle: "bg-emerald-50/50 border-emerald-100 text-emerald-800",
-          noticeIcon: <Sparkles className="w-5 h-5 shrink-0 mt-0.5 text-emerald-600" />
+          dbOrderType: "Tutoring",
+          price: customPrice,
+          icon: <FileText className="w-5 h-5 text-emerald-600" />,
+          noticeIcon: <Info className="w-5 h-5 text-emerald-600 shrink-0" />,
+          noticeStyle: "bg-emerald-50/50 border-emerald-100 text-emerald-900",
+          notice: "Complete payment below to unlock this profile's complete CV and contact information."
         };
       default:
         return {
-          title: urlOrderId ? "Invoice Payment" : "General Service",
+          title: "Secure Checkout", 
           orderName: urlCourseName || "Selected Service",
+          dbOrderType: "Unknown",
           price: customPrice,
-          dbOrderType: orderTypeParam || "other",
-          icon: <Receipt className="w-5 h-5 text-slate-600 shrink-0" />,
-          notice: "You are making a secure payment. Please ensure your details match your invoice.",
-          noticeStyle: "bg-blue-50/50 border-blue-100 text-blue-800",
-          noticeIcon: <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
+          icon: <Receipt className="w-5 h-5 text-slate-600" />,
+          noticeIcon: <Info className="w-5 h-5 text-slate-600 shrink-0" />,
+          noticeStyle: "bg-slate-50/50 border-slate-200 text-slate-800",
+          notice: "Please review your payment details before completing the checkout."
         };
     }
   };
