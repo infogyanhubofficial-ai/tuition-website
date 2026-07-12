@@ -11,6 +11,7 @@ import {
   Flame, X, MonitorPlay, ShieldCheck, BadgeCheck, History, MapPin,
   CheckCircle, Star, Award, Layers, PlayCircle, Package, Layers3, CheckCircle2,
   Calendar, Briefcase, ChevronRight, TrendingUp, Navigation, Tag, XCircle,
+  ArrowLeft, MessageSquare
 } from "lucide-react";
 
 /* ============================================================
@@ -146,7 +147,7 @@ const BUNDLES: BundlePackage[] = [
       "Property Valuation",
       "ArcGIS and Mapping",
     ],
-    price: 5999,
+    price: 9999,
     originalPrice: 20000,
     badge: "🚀 Ultimate Value",
     highlight: "The complete career accelerator (7 Courses)",
@@ -390,6 +391,7 @@ export default function HomeClient() {
   const [isFabOpen, setIsFabOpen] = useState(false);
 
   const [showPromoPopup, setShowPromoPopup] = useState(false);
+  const [popupView, setPopupView] = useState<"home" | "online" | "physical" | "recordings">("home");
   const [selectedBundle, setSelectedBundle] = useState<BundlePackage | null>(null);
 
   useEffect(() => {
@@ -463,18 +465,18 @@ export default function HomeClient() {
   }, []);
 
   useEffect(() => {
-    if (promoCourses.length > 0) {
-      const hasSeenPromo = sessionStorage.getItem("has_seen_home_promo");
-      if (!hasSeenPromo) {
-        const timer = setTimeout(() => setShowPromoPopup(true), 1500);
-        return () => clearTimeout(timer);
-      }
+    // Show AI assistant popup after 1.5 seconds if not seen
+    const hasSeenPromo = sessionStorage.getItem("has_seen_home_promo");
+    if (!hasSeenPromo) {
+      const timer = setTimeout(() => setShowPromoPopup(true), 1500);
+      return () => clearTimeout(timer);
     }
-  }, [promoCourses]);
+  }, []);
 
   const closePromoPopup = () => {
     setShowPromoPopup(false);
     sessionStorage.setItem("has_seen_home_promo", "true");
+    setTimeout(() => setPopupView("home"), 300); // reset state after closing animation
   };
 
   useEffect(() => {
@@ -680,44 +682,139 @@ export default function HomeClient() {
         <div className="absolute top-[20%] right-[-10%] w-[40vw] h-[40vw] rounded-full bg-emerald-400/10 blur-[120px]" />
       </div>
 
-      {/* PROMO POPUP */}
+      {/* MULTI-STEP AI PROMO POPUP */}
       <AnimatePresence>
-        {showPromoPopup && promoCourses.length > 0 && (
+        {showPromoPopup && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closePromoPopup} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" />
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col border border-slate-100">
-              <button onClick={closePromoPopup} className="absolute top-3 right-3 z-20 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center hover:bg-black/60 transition-colors backdrop-blur-md"><X className="w-4 h-4" /></button>
-              <div className="relative h-48 sm:h-56 bg-slate-100 w-full overflow-hidden">
-                {promoCourses[0].cover_pic ? (
-                  <Image src={promoCourses[0].cover_pic} alt={promoCourses[0].title} fill className="object-cover" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={closePromoPopup} className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }} className="relative w-full max-w-sm sm:max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden z-10 flex flex-col border border-slate-100 max-h-[85vh]">
+              
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0 bg-white z-20">
+                {popupView !== "home" ? (
+                  <button onClick={() => setPopupView("home")} className="flex items-center gap-1.5 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors">
+                    <ArrowLeft className="w-4 h-4" /> Back
+                  </button>
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-slate-900 text-white"><MonitorPlay className="w-10 h-10 opacity-50" /></div>
+                  <span className="font-extrabold text-slate-800 flex items-center gap-2 text-base">🤖 GyanHub AI Assistant</span>
                 )}
-                <div className="absolute top-3 left-3 bg-orange-500 text-white text-[10px] sm:text-[11px] font-black uppercase px-3 py-1 sm:py-1.5 rounded-lg flex items-center gap-1.5 shadow-lg"><Flame className="w-3.5 h-3.5" /> New Live Course</div>
+                <button onClick={closePromoPopup} className="p-1.5 bg-slate-100 text-slate-500 rounded-full hover:bg-slate-200 transition-colors"><X className="w-4 h-4" /></button>
               </div>
-              <div className="p-5 sm:p-6 flex flex-col">
-                <h3 className="text-lg sm:text-xl font-bold text-slate-900 mb-4 line-clamp-2 leading-snug">{promoCourses[0].title}</h3>
-                <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 sm:p-4 flex flex-col gap-3 mb-5">
-                  <div className="flex items-center gap-3 text-xs sm:text-sm font-semibold text-slate-700">
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0"><Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
-                    <div><span className="text-slate-500 text-[10px] sm:text-xs block font-medium">Starting Date</span>{promoCourses[0].start_date || "Upcoming"}</div>
-                  </div>
-                  {promoCourses[0].duration && (
-                    <div className="flex items-center gap-3 text-xs sm:text-sm font-semibold text-slate-700">
-                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center shrink-0"><Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
-                      <div><span className="text-slate-500 text-[10px] sm:text-xs block font-medium">Duration</span>{promoCourses[0].duration}</div>
-                    </div>
-                  )}
-                  {promoCourses[0].timing && (
-                    <div className="flex items-center gap-3 text-xs sm:text-sm font-semibold text-slate-700">
-                      <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0"><Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
-                      <div><span className="text-slate-500 text-[10px] sm:text-xs block font-medium">Timing</span>{promoCourses[0].timing}</div>
-                    </div>
-                  )}
-                </div>
-                <Link href={`/onlinecourse/${encodeURIComponent(promoCourses[0].course_code || promoCourses[0].title)}`} onClick={closePromoPopup} className="w-full py-3.5 sm:py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm sm:text-base text-center transition-colors shadow-md flex items-center justify-center gap-2">
-                  View Course Details <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                </Link>
+
+              {/* Body */}
+              <div className="p-5 overflow-y-auto bg-slate-50/50 flex-grow scrollbar-thin scrollbar-thumb-slate-200">
+                
+                {popupView === "home" && (
+                  <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-3">
+                    <p className="text-slate-600 font-medium mb-2 text-sm sm:text-base leading-relaxed">
+                      Hello! I'm the AI Assistant of GyanHub. <br/>What do you want today?
+                    </p>
+                    <button onClick={() => setPopupView("online")} className="w-full bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
+                      <span className="flex items-center gap-3"><MonitorPlay className="w-5 h-5 text-blue-600"/> Online Courses</span>
+                      <ChevronRight className="w-5 h-5 text-blue-400" />
+                    </button>
+                    <button onClick={() => setPopupView("physical")} className="w-full bg-white hover:bg-emerald-50 border border-slate-200 hover:border-emerald-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
+                      <span className="flex items-center gap-3"><MapPin className="w-5 h-5 text-emerald-600"/> Physical Classes</span>
+                      <ChevronRight className="w-5 h-5 text-emerald-400" />
+                    </button>
+                    <button onClick={() => setPopupView("recordings")} className="w-full bg-white hover:bg-orange-50 border border-slate-200 hover:border-orange-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
+                      <span className="flex items-center gap-3"><Play className="w-5 h-5 text-orange-600"/> Recordings</span>
+                      <ChevronRight className="w-5 h-5 text-orange-400" />
+                    </button>
+                    <button onClick={() => window.open("https://wa.me/9763695665","_blank")} className="w-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
+                      <span className="flex items-center gap-3"><MessageSquare className="w-5 h-5 text-slate-500"/> Contact Administration</span>
+                      <ChevronRight className="w-5 h-5 text-slate-400" />
+                    </button>
+                  </motion.div>
+                )}
+
+                {popupView === "online" && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-4">
+                    {promoCourses.length > 0 ? promoCourses.map(course => (
+                      <div key={course.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                        <div className="relative h-32 bg-slate-100">
+                          {course.cover_pic ? <Image src={course.cover_pic} alt={course.title} fill className="object-cover" /> : <div className="absolute inset-0 flex items-center justify-center"><MonitorPlay className="w-8 h-8 text-slate-300"/></div>}
+                        </div>
+                        <div className="p-4 flex flex-col gap-3">
+                          <h4 className="font-bold text-slate-900 line-clamp-2 leading-tight">{course.title}</h4>
+                          <div className="flex items-baseline gap-2">
+                            <span className="font-black text-blue-700 text-lg">{formatCurrency(course.fee)}</span>
+                            {!!course.discount && course.discount > 0 && <span className="text-xs font-medium line-through text-slate-400">{formatCurrency(course.original_fee)}</span>}
+                          </div>
+                          <div className="text-xs font-medium text-slate-600 grid grid-cols-2 gap-2 mt-1">
+                            {course.start_date && <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-blue-500"/> Starts: {course.start_date}</div>}
+                            {course.timing && <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-orange-500"/> {course.timing}</div>}
+                            {course.duration && <div className="flex items-center gap-1.5 col-span-2"><Layers className="w-3.5 h-3.5 text-emerald-500"/> Duration: {course.duration}</div>}
+                          </div>
+                          <Link onClick={closePromoPopup} href={`/onlinecourse/${encodeURIComponent(course.course_code || course.title)}`} className="mt-2 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-xl text-center text-sm transition-colors shadow-sm">VIEW DETAILS</Link>
+                        </div>
+                      </div>
+                    )) : <div className="text-center py-8 text-sm text-slate-500 font-medium">No online courses currently scheduled.</div>}
+                  </motion.div>
+                )}
+
+                {popupView === "physical" && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-4">
+                    {sortedPhysicalClasses.length > 0 ? sortedPhysicalClasses.map(course => {
+                      const hasDisc = course.discount_price !== null && course.discount_price !== undefined && Number(course.discount_price) > 0 && Number(course.discount_price) < Number(course.price);
+                      return (
+                        <div key={course.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                          <div className="relative h-32 bg-slate-100">
+                            {course.course_image_url ? <Image src={course.course_image_url} alt={course.title} fill className="object-cover" /> : <div className="absolute inset-0 flex items-center justify-center"><Award className="w-8 h-8 text-slate-300"/></div>}
+                          </div>
+                          <div className="p-4 flex flex-col gap-3">
+                            <h4 className="font-bold text-slate-900 line-clamp-2 leading-tight">{course.title}</h4>
+                            <div className="flex items-baseline gap-2">
+                              <span className="font-black text-emerald-700 text-lg">{formatCurrency(hasDisc ? course.discount_price : course.price)}</span>
+                              {hasDisc && <span className="text-xs font-medium line-through text-slate-400">{formatCurrency(course.price)}</span>}
+                            </div>
+                            <div className="text-xs font-medium text-slate-600 grid grid-cols-2 gap-2 mt-1">
+                              {course.start_date && <div className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5 text-blue-500"/> Starts: {formatDateString(course.start_date)}</div>}
+                              {course.timing && <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-orange-500"/> {course.timing}</div>}
+                              {course.location && <div className="flex items-center gap-1.5 col-span-2"><MapPin className="w-3.5 h-3.5 text-emerald-500"/> {course.location}</div>}
+                              {course.duration_weeks && <div className="flex items-center gap-1.5 col-span-2"><Layers className="w-3.5 h-3.5 text-blue-500"/> Duration: {formatDurationWeeks(course.duration_weeks)}</div>}
+                            </div>
+                            <Link onClick={closePromoPopup} href={`/offline-class/${encodeURIComponent(course.course_code || course.id)}`} className="mt-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-center text-sm transition-colors shadow-sm">VIEW DETAILS</Link>
+                          </div>
+                        </div>
+                      )
+                    }) : <div className="text-center py-8 text-sm text-slate-500 font-medium">No physical classes available right now.</div>}
+                  </motion.div>
+                )}
+
+                {popupView === "recordings" && (
+                  <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="flex flex-col gap-4">
+                    {recordings.length > 0 ? recordings.map(course => {
+                      const salePrice = calculateRecordingSalePrice(course.standard_fee, course.discount);
+                      return (
+                        <div key={course.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm flex items-stretch h-28">
+                          <div className="relative w-28 shrink-0 bg-slate-900 flex items-center justify-center border-r border-slate-100">
+                            {course.cover_pic_url ? (
+                              <Image src={course.cover_pic_url} alt={course.course_name} fill className="object-cover opacity-80" />
+                            ) : (
+                              <Play className="w-8 h-8 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="p-3 flex flex-col flex-grow justify-between min-w-0">
+                            <h4 className="font-bold text-slate-900 text-sm line-clamp-2 leading-tight">{course.course_name}</h4>
+                            <div className="flex items-center justify-between w-full mt-1">
+                               <div className="flex items-baseline gap-1.5">
+                                 <span className="font-black text-orange-600 text-sm">{formatCurrency(salePrice)}</span>
+                                 {!!course.discount && course.discount > 0 && <span className="text-[10px] font-medium line-through text-slate-400">{formatCurrency(course.standard_fee)}</span>}
+                               </div>
+                               <Link onClick={closePromoPopup} href={`/recording/${encodeURIComponent(course.course_name)}`} className="bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap shadow-sm">Details</Link>
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] font-medium text-slate-500 mt-1">
+                               {course.course_hours && <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-slate-400" /> {course.course_hours}+ hrs</span>}
+                               <span className="flex items-center gap-1"><Users className="w-3 h-3 text-slate-400" /> {(course.enrolled_students || 0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    }) : <div className="text-center py-8 text-sm text-slate-500 font-medium">No recordings available.</div>}
+                  </motion.div>
+                )}
+
               </div>
             </motion.div>
           </div>
