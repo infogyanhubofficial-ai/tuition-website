@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     // RESTORED: Slogan in OpenGraph title
     title: "GyanHub - Learn Today | Lead Tomorrow",
     description:
-      "Connect with the best tutors in Nepal. Join 1200+ students mastering technical skills.",
+      "Connect with the best tutors in Nepal. Join 4000+ students mastering technical skills.",
     url: SITE_URL,
     siteName: "GyanHub",
     images: [
