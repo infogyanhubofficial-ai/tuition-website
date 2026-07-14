@@ -11,14 +11,12 @@
  * - Color, type, icon-size, and motion are tokenized once below and reused
  *   everywhere instead of being redeclared per-component.
  * - Rows render in a compact single line by default; click the chevron to
- *   expand call-log / course / mode editing inline, so row height stays
+ *   expand call-log / course editing inline, so row height stays
  *   predictable instead of stretching per-lead.
  * - Status / priority / mode all use one ChipSelect component so every
  *   "pick one" control in the table looks and behaves identically.
  *
- * Assumes `crm_leads.created_at` exists (standard Supabase default column,
- * used for the "New leads today" KPI). If your table doesn't have it yet:
- *   alter table crm_leads add column created_at timestamptz default now();
+ * Assumes `crm_leads.created_at` exists (standard Supabase default column).
  */
 
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
@@ -34,7 +32,7 @@ import {
   ArrowUp,
   ArrowDown,
   MessageSquarePlus,
-  MessageCircle,
+  Copy,
   BookOpen,
   GraduationCap,
   X,
@@ -155,11 +153,11 @@ interface CrmLead {
 
 type SortDir = "asc" | "desc";
 
-type QuickFilter = "newToday" | "contactedToday" | "followupsToday" | "overdue" | "enrolledToday" | null;
+type QuickFilter = "new" | "contactedToday" | "followupsToday" | "overdue" | "enrolledToday" | null;
 
 interface DashboardStats {
   totalLeads: number;
-  newToday: number;
+  newLeads: number;
   contactedToday: number;
   followupsToday: number;
   overdue: number;
@@ -284,18 +282,6 @@ function formatPhone(raw: string | null | undefined): string {
   const digits = raw.replace(/\D/g, "");
   if (digits.length === 10) return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6)}`;
   return raw;
-}
-
-function toWhatsAppNumber(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  const digits = raw.replace(/[^\d]/g, "");
-  return digits.length > 0 ? digits : null;
-}
-
-function buildWhatsAppUrl(raw: string | null | undefined): string | null {
-  const digits = toWhatsAppNumber(raw);
-  if (!digits) return null;
-  return "https://wa.me/" + digits;
 }
 
 function toDateInputValue(iso: string | null | undefined): string {
@@ -831,13 +817,13 @@ function LeadDrawer({ lead, onClose, onAddNote }: { lead: CrmLead; onClose: () =
 // ---------------------------------------------------------------------------
 
 function SkeletonRow({ i }: { i: number }) {
-  const widths = [140, 60, 90, 50, 80]; // Notes, Status, Priority, Follow-up, Activity — varied per column
+  const widths = [140, 60, 90, 80, 50, 80]; // Notes, Status, Priority, Mode, Follow-up, Activity — varied per column
   return (
     <tr className="border-b border-slate-100">
-      <td className="overflow-hidden px-4 py-3">
+      <td className="px-4 py-3">
         <div className="h-3 w-5 animate-pulse rounded bg-slate-100" />
       </td>
-      <td className="overflow-hidden px-4 py-3">
+      <td className="px-4 py-3">
         <div className="flex items-center gap-2.5">
           <div className="h-8 w-8 shrink-0 animate-pulse rounded-full bg-slate-100" />
           <div className="space-y-1.5">
@@ -847,10 +833,11 @@ function SkeletonRow({ i }: { i: number }) {
         </div>
       </td>
       {widths.map((w, j) => (
-        <td key={j} className="overflow-hidden px-4 py-3">
+        <td key={j} className="px-4 py-3">
           <div className="h-3 animate-pulse rounded bg-slate-100" style={{ width: `${w}%`, maxWidth: 120 }} />
         </td>
       ))}
+      <td className="px-4 py-3" />
     </tr>
   );
 }
@@ -867,7 +854,7 @@ export default function CrmLeadsDashboard() {
 
   const [stats, setStats] = useState<DashboardStats>({
     totalLeads: 0,
-    newToday: 0,
+    newLeads: 0,
     contactedToday: 0,
     followupsToday: 0,
     overdue: 0,
@@ -945,7 +932,7 @@ export default function CrmLeadsDashboard() {
 
     const startToday = startOfTodayIso();
     const todayStr = todayInputValue();
-    if (quickFilter === "newToday") query = query.gte("created_at", startToday);
+    if (quickFilter === "new") query = query.eq("lead_status", "new");
     if (quickFilter === "contactedToday") query = query.gte("last_contacted_at", startToday);
     if (quickFilter === "followupsToday") query = query.eq("follow_up_date", todayStr);
     if (quickFilter === "overdue") query = query.lt("follow_up_date", todayStr);
@@ -986,9 +973,9 @@ export default function CrmLeadsDashboard() {
 
     // Pass `true` for ignoreHideContacted for activity-based KPIs so they
     // don't drop to 0 when "Hide contacted" is on.
-    const [totalRes, newTodayRes, contactedRes, followupsRes, overdueRes, enrolledRes, highPriorityRes] = await Promise.all([
+    const [totalRes, newLeadsRes, contactedRes, followupsRes, overdueRes, enrolledRes, highPriorityRes] = await Promise.all([
       buildFilteredCountQuery(false),
-      buildFilteredCountQuery(true).gte("created_at", startToday),
+      buildFilteredCountQuery(true).eq("lead_status", "new"),
       buildFilteredCountQuery(true).gte("last_contacted_at", startToday),
       buildFilteredCountQuery(true).eq("follow_up_date", todayStr),
       buildFilteredCountQuery(true).lt("follow_up_date", todayStr),
@@ -998,7 +985,7 @@ export default function CrmLeadsDashboard() {
 
     setStats({
       totalLeads: totalRes.count ?? 0,
-      newToday: newTodayRes.count ?? 0,
+      newLeads: newLeadsRes.count ?? 0,
       contactedToday: contactedRes.count ?? 0,
       followupsToday: followupsRes.count ?? 0,
       overdue: overdueRes.count ?? 0,
@@ -1177,6 +1164,20 @@ export default function CrmLeadsDashboard() {
     fetchStats();
   };
 
+  const handleCopyPhone = (e: React.MouseEvent, raw: string | null) => {
+    e.stopPropagation();
+    if (!raw) return;
+    let digits = raw.replace(/\D/g, "");
+    if (digits.length === 10) {
+      digits = "+977" + digits;
+    } else if (digits.startsWith("977") && digits.length > 3) {
+      digits = "+" + digits;
+    } else {
+      digits = "+977" + digits; // enforce prefix
+    }
+    navigator.clipboard.writeText(digits);
+  };
+
   const visibleLeads = useMemo(() => {
     const indexed = leads.map((lead, index) => ({ lead, index }));
     if (!search.trim()) return indexed;
@@ -1202,7 +1203,7 @@ export default function CrmLeadsDashboard() {
   };
 
   const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, null>, string> = {
-    newToday: "New today",
+    new: "New leads",
     contactedToday: "Contacted today",
     followupsToday: "Follow-ups today",
     overdue: "Overdue",
@@ -1308,7 +1309,7 @@ export default function CrmLeadsDashboard() {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <KpiCard label={activeFilterCount > 0 ? "Matching filters" : "Total leads"} value={stats.totalLeads} icon={<Users size={ICON.md} />} accent="#93C5FD" onClick={quickFilter ? () => setQuickFilter(null) : undefined} active={!quickFilter} />
-            <KpiCard label="New today" value={stats.newToday} icon={<UserPlus size={ICON.md} />} accent="#34D399" onClick={() => toggleQuickFilter("newToday")} active={quickFilter === "newToday"} />
+            <KpiCard label="New Leads" value={stats.newLeads} icon={<UserPlus size={ICON.md} />} accent="#34D399" onClick={() => toggleQuickFilter("new")} active={quickFilter === "new"} />
             <KpiCard label="Courses" value={courses.length} icon={<BookOpen size={ICON.md} />} accent="#A78BFA" onClick={() => setShowCoursesModal(true)} />
             <KpiCard label="Contacted today" value={stats.contactedToday} icon={<PhoneCall size={ICON.md} />} accent="#38BDF8" onClick={() => toggleQuickFilter("contactedToday")} active={quickFilter === "contactedToday"} />
             <KpiCard label="Follow-ups today" value={stats.followupsToday} icon={<CalendarClock size={ICON.md} />} accent="#FBBF24" onClick={() => toggleQuickFilter("followupsToday")} active={quickFilter === "followupsToday"} />
@@ -1406,16 +1407,17 @@ export default function CrmLeadsDashboard() {
             )}
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1180px] border-collapse text-left">
+              <table className="w-full min-w-[1300px] border-collapse text-left">
                 <thead>
                   <tr className={cn(TX.micro, "border-b border-slate-200 bg-slate-50 font-semibold uppercase tracking-wider text-slate-500")}>
                     <th className="w-[44px] px-4 py-2.5">#</th>
                     <th className="w-[230px] px-4 py-2.5">Lead</th>
                     <th className="w-[240px] px-4 py-2.5">Notes</th>
-                    <th className="w-[150px] px-4 py-2.5">Status</th>
+                    <th className="w-[140px] px-4 py-2.5">Status</th>
                     <th className="w-[120px] px-4 py-2.5">Priority</th>
-                    <th className="w-[150px] px-4 py-2.5">Follow-up</th>
-                    <th className="w-[150px] px-4 py-2.5">Activity</th>
+                    <th className="w-[110px] px-4 py-2.5">Mode</th>
+                    <th className="w-[140px] px-4 py-2.5">Follow-up</th>
+                    <th className="w-[140px] px-4 py-2.5">Activity</th>
                     <th className="w-[44px] px-4 py-2.5" />
                   </tr>
                 </thead>
@@ -1424,7 +1426,7 @@ export default function CrmLeadsDashboard() {
 
                   {!loading && visibleLeads.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-4 py-16 text-center">
+                      <td colSpan={9} className="px-4 py-16 text-center">
                         <Inbox size={26} className="mx-auto mb-2 text-slate-300" />
                         <p className={cn(TX.body, "font-medium text-slate-500")}>No leads match these filters</p>
                         <p className={cn(TX.dense, "mt-0.5 text-slate-400")}>Try clearing a filter or adjusting your search.</p>
@@ -1443,7 +1445,6 @@ export default function CrmLeadsDashboard() {
                       const draft = callDrafts[lead.id] ?? "";
                       const followUp = formatFollowUp(lead.follow_up_date);
                       const serialNumber = (page - 1) * PAGE_SIZE + index + 1;
-                      const whatsappUrl = buildWhatsAppUrl(lead.phone_number);
                       const tone = avatarTone(String(lead.id));
 
                       const sortedNotes = [...(lead.call_notes ?? [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -1461,35 +1462,32 @@ export default function CrmLeadsDashboard() {
                             className={cn("border-b border-slate-100 transition-colors duration-150", isFlashed ? "bg-emerald-50/60" : followUp.overdue ? "bg-rose-50/30 hover:bg-rose-50/60" : "hover:bg-slate-50/70")}
                             style={{ boxShadow: `inset 3px 0 0 ${railColor}` }}
                           >
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <p className={cn(TX.dense, "text-slate-400")}>{serialNumber}</p>
                             </td>
 
                             {/* Lead */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <div className="flex items-center gap-2.5">
-                                <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-mono font-semibold", TX.dense, tone.bg, tone.text)}>{initials(lead.name)}</span>
-                                <button onClick={() => setDrawerLeadId(lead.id)} className="min-w-0 flex-1 text-left" title="Open lead timeline">
+                                <button onClick={() => setDrawerLeadId(lead.id)} title="Open lead timeline" className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-mono font-semibold transition-opacity duration-150 hover:opacity-80", TX.dense, tone.bg, tone.text)}>
+                                  {initials(lead.name)}
+                                </button>
+                                <div className="min-w-0 flex-1 text-left">
                                   <div className="flex items-center gap-1.5">
-                                    <p className={cn(TX.emph, "flex items-center gap-1 truncate font-mono font-semibold text-slate-800")}>
+                                    <button onClick={() => setDrawerLeadId(lead.id)} title="Open lead timeline" className={cn(TX.emph, "flex items-center gap-1 truncate font-mono font-semibold text-slate-800 transition-colors duration-150 hover:text-slate-600")}>
                                       <Phone size={ICON.sm} className="shrink-0 text-slate-400" />
                                       {formatPhone(lead.phone_number)}
-                                    </p>
-                                    {whatsappUrl && (
-                                      <a
-                                        href={whatsappUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="Message on WhatsApp"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition-colors duration-150 hover:bg-emerald-100"
-                                      >
-                                        <MessageCircle size={ICON.sm} />
-                                      </a>
-                                    )}
+                                    </button>
+                                    <button
+                                      title="Copy phone number"
+                                      onClick={(e) => handleCopyPhone(e, lead.phone_number)}
+                                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors duration-150 hover:bg-slate-200 hover:text-slate-700"
+                                    >
+                                      <Copy size={10} />
+                                    </button>
                                   </div>
-                                  <div className="flex min-w-0 items-center gap-1.5">
-                                    {lead.name && <p className={cn(TX.micro, "truncate italic text-slate-400")}>{lead.name}</p>}
+                                  <div className="flex min-w-0 items-center gap-1.5 mt-0.5">
+                                    {lead.name && <button onClick={() => setDrawerLeadId(lead.id)} title="Open lead timeline" className={cn(TX.micro, "truncate italic text-slate-400 transition-colors duration-150 hover:text-slate-600")}>{lead.name}</button>}
                                     {interestedNames.length > 0 && (
                                       <span className={cn(TX.micro, "min-w-0 truncate rounded bg-[var(--c-blue-soft)] px-1.5 py-0.5 font-medium text-[var(--c-blue)]")}>
                                         {interestedNames[0]}
@@ -1497,12 +1495,12 @@ export default function CrmLeadsDashboard() {
                                       </span>
                                     )}
                                   </div>
-                                </button>
+                                </div>
                               </div>
                             </td>
 
                             {/* Notes — always visible, no expand needed */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <div className="flex items-center gap-1.5">
                                 <input
                                   value={draft}
@@ -1533,17 +1531,22 @@ export default function CrmLeadsDashboard() {
                             </td>
 
                             {/* Status */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <ChipSelect value={safeStatus} options={STATUS_META} onChange={(v) => updateLeadStatus(lead.id, v)} disabled={isPending} />
                             </td>
 
                             {/* Priority */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <ChipSelect value={safePriority} options={PRIORITY_META} onChange={(v) => updateLeadPriority(lead.id, v)} disabled={isPending} />
                             </td>
 
+                            {/* Mode */}
+                            <td className="px-4 py-2.5 align-middle">
+                              <ChipSelect value={lead.learning_mode ?? "online"} options={MODE_META} onChange={(v) => updateLearningMode(lead.id, v)} disabled={isPending} />
+                            </td>
+
                             {/* Follow-up */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <div className="flex items-center gap-1.5">
                                 <input
                                   type="date"
@@ -1562,7 +1565,7 @@ export default function CrmLeadsDashboard() {
                             </td>
 
                             {/* Activity */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <p className={cn(TX.body, "flex items-center gap-1 text-slate-600")}>
                                 <Clock size={ICON.sm} className="shrink-0 text-slate-400" />
                                 {formatRelative(lead.last_contacted_at)}
@@ -1570,7 +1573,7 @@ export default function CrmLeadsDashboard() {
                             </td>
 
                             {/* Expand toggle */}
-                            <td className="overflow-hidden px-4 py-2.5 align-middle">
+                            <td className="px-4 py-2.5 align-middle">
                               <button
                                 onClick={() => setExpandedRowId(isExpanded ? null : lead.id)}
                                 title={isExpanded ? "Collapse" : "Edit courses / mode"}
@@ -1583,9 +1586,12 @@ export default function CrmLeadsDashboard() {
 
                           {isExpanded && (
                             <tr key={`${lead.id}-expanded`} className="border-b border-slate-100 bg-slate-50/60">
-                              <td colSpan={8} className="px-4 py-4">
+                              <td colSpan={9} className="px-4 py-4">
                                 <div>
-                                  <p className={cn(TX.micro, "mb-1.5 font-semibold uppercase tracking-wide text-slate-400")}>Interested courses</p>
+                                  <div className="mb-1.5 flex items-center gap-3">
+                                    <p className={cn(TX.micro, "font-semibold uppercase tracking-wide text-slate-400")}>Interested courses</p>
+                                    {lead.payment_status && <span className={cn(TX.micro, "rounded px-1.5 py-0.5 font-medium", PAYMENT_BADGE[lead.payment_status])}>{lead.payment_status}</span>}
+                                  </div>
                                   <div className="max-w-md">
                                     <CourseMultiSelect courses={courses} selected={interestedIds} onChange={(ids) => updateInterestedCourses(lead.id, ids)} placeholder="Select courses…" addNewToFront />
                                   </div>
@@ -1598,14 +1604,6 @@ export default function CrmLeadsDashboard() {
                                       ))}
                                     </div>
                                   )}
-                                  <div className="mt-3 flex items-center gap-2">
-                                    <p className={cn(TX.micro, "font-semibold uppercase tracking-wide text-slate-400")}>Mode</p>
-                                    {lead.learning_mode === "physical" ? <MapPin size={ICON.sm} className="text-slate-400" /> : <Globe size={ICON.sm} className="text-slate-400" />}
-                                    <div className="w-32">
-                                      <ChipSelect value={lead.learning_mode ?? "online"} options={MODE_META} onChange={(v) => updateLearningMode(lead.id, v)} disabled={isPending} />
-                                    </div>
-                                    {lead.payment_status && <span className={cn(TX.micro, "rounded px-1.5 py-0.5 font-medium", PAYMENT_BADGE[lead.payment_status])}>{lead.payment_status}</span>}
-                                  </div>
                                 </div>
                               </td>
                             </tr>
@@ -1673,7 +1671,7 @@ export default function CrmLeadsDashboard() {
           <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
           <span className="flex items-center gap-1.5">
             <UserPlus size={ICON.sm} className="text-emerald-300" />
-            {stats.newToday} new today
+            {stats.newLeads} new leads
           </span>
           <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
           <span className="flex items-center gap-1.5">
