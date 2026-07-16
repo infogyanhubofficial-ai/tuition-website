@@ -19,9 +19,9 @@ const SOCIAL_LINKS = [
 ];
 
 const COMPANY_LINKS = [
-  { label: "About GyanHub", href: "/about" },
+  { label: "About GyanHub", href: "/company/about" },
   { label: "GyanHub Stories", href: "/stories", isLocked: true }, // Locked
-  { label: "User's Data Policy", href: "/privacy-policy" },
+  { label: "User's Data Policy", href: "/company/privacy-policy" },
 ];
 
 // Updated links and added contextual icons (Removed BE Civil Exam Prep)
@@ -32,9 +32,9 @@ const OUR_PROGRAMS = [
 ];
 
 const ADMIN_LINKS = [
-  { label: "Contact Us", href: "/contact" },
-  { label: "FAQs", href: "/faqs" },
-  { label: "Refund & Return Policy", href: "/refund" },
+  { label: "Contact Us", href: "/company/contact" },
+  { label: "FAQs", href: "/company/faqs" },
+  { label: "Refund & Return Policy", href: "/company/refund" },
 ];
 
 export default function Footer() {

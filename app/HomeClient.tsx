@@ -383,6 +383,7 @@ export default function HomeClient() {
   const [recordings, setRecordings] = useState<RecordingCourse[]>([]);
   const [physicalClasses, setPhysicalClasses] = useState<PhysicalClass[]>([]);
   const [certificateCount, setCertificateCount] = useState<number>(2000);
+  const [activeCoursesCount, setActiveCoursesCount] = useState<number>(50); // Fallback until fetched
   const [showCompleted, setShowCompleted] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -405,7 +406,7 @@ export default function HomeClient() {
     const fetchHomeData = async () => {
       setLoading(true);
       try {
-        const [recordingsRes, certRes, coursesRes, physicalClassesRes] = await Promise.all([
+        const [recordingsRes, certRes, coursesRes, physicalClassesRes, syllabiRes] = await Promise.all([
           supabase.from("recordings").select("*").eq("is_active", true).order("created_at", { ascending: false }),
           supabase.from("certificates").select("*", { count: "exact", head: true }),
           supabase.from("online_courses_v2").select("*").eq("is_active", true).limit(4),
@@ -416,11 +417,14 @@ export default function HomeClient() {
             .eq("category", "Professional Training")
             .eq("is_active", true)
             .order("start_date", { ascending: true }),
+          // Fetch exact count of syllabi for active courses stat
+          supabase.from("syllabi_v2").select("*", { count: "exact", head: true }),
         ]);
         if (!isMounted) return;
 
         if (recordingsRes.data) setRecordings(recordingsRes.data as RecordingCourse[]);
         if (certRes.count !== null) setCertificateCount(certRes.count);
+        if (syllabiRes.count !== null) setActiveCoursesCount(syllabiRes.count);
 
         if (physicalClassesRes.data) {
           setPhysicalClasses(physicalClassesRes.data as PhysicalClass[]);
@@ -516,13 +520,6 @@ export default function HomeClient() {
       return aTime - bTime;
     });
   }, [physicalClasses, showCompleted]);
-
-  const totalRemainingSeats = useMemo(() => {
-    return physicalClasses.reduce((sum, c) => {
-      const r = remainingSeats(c);
-      return sum + (r ?? 0);
-    }, 0);
-  }, [physicalClasses]);
 
   /* ---- Bundle Modal ---- */
   const renderBundleModal = () => {
@@ -721,6 +718,13 @@ export default function HomeClient() {
                       <span className="flex items-center gap-3"><Play className="w-5 h-5 text-orange-600"/> Recordings</span>
                       <ChevronRight className="w-5 h-5 text-orange-400" />
                     </button>
+
+                    {/* NEW: View Certificate Button */}
+                    <button onClick={() => { closePromoPopup(); router.push('/certificate'); }} className="w-full bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
+                      <span className="flex items-center gap-3"><BadgeCheck className="w-5 h-5 text-blue-600"/> View Certificate</span>
+                      <ChevronRight className="w-5 h-5 text-blue-400" />
+                    </button>
+
                     <button onClick={() => window.open("https://wa.me/9763695665","_blank")} className="w-full bg-white hover:bg-slate-100 border border-slate-200 text-slate-800 font-bold py-4 px-5 rounded-2xl flex items-center justify-between transition-all shadow-sm">
                       <span className="flex items-center gap-3"><MessageSquare className="w-5 h-5 text-slate-500"/> Contact Administration</span>
                       <ChevronRight className="w-5 h-5 text-slate-400" />
@@ -892,8 +896,8 @@ export default function HomeClient() {
                 <p className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mt-1 sm:mt-2">Active Students</p>
               </div>
               <div className="flex flex-col items-center justify-center">
-                <p className="text-2xl sm:text-4xl font-black text-slate-900">{totalRemainingSeats || 50}+</p>
-                <p className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mt-1 sm:mt-2">Physical Class Slots</p>
+                <p className="text-2xl sm:text-4xl font-black text-slate-900">{activeCoursesCount}+</p>
+                <p className="text-[9px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider mt-1 sm:mt-2">Active Courses</p>
               </div>
               <div className="flex flex-col items-center justify-center">
                 <p className="text-2xl sm:text-4xl font-black text-slate-900">{certificateCount}+</p>
