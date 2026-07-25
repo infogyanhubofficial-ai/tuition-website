@@ -21,7 +21,6 @@ import {
   MessageSquarePlus,
   Copy,
   BookOpen,
-  GraduationCap,
   X,
   Check,
   Loader2,
@@ -35,12 +34,11 @@ import {
   Users,
   CheckCircle2,
   Command,
-  Globe,
-  MapPin,
   History,
   Sparkles,
   UserPlus,
   Lock,
+  Download,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -94,7 +92,7 @@ type LearningMode = "online" | "physical";
 type Priority = "high" | "normal" | "low";
 
 interface CallNote { id: string; note: string; created_at: string; created_by?: string; }
-interface SyllabusRef { id: number; name: string; description?: string | null; online_tutors?: { name: string } | null; }
+interface SyllabusRef { id: number; name: string; description?: string | null; online_tutors?: { name: string }[] | null; }
 
 interface CrmLead {
   id: number; name: string | null; phone_number: string | null; course_id: number | null;
@@ -139,10 +137,6 @@ const PRIORITY_META: ChipOption<Priority>[] = [
 const MODE_META: ChipOption<LearningMode>[] = [
   { value: "online", label: "Online", dot: "bg-sky-500", tone: "bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200" },
   { value: "physical", label: "Physical", dot: "bg-violet-500", tone: "bg-violet-50 text-violet-700 ring-1 ring-inset ring-violet-200" },
-];
-
-const PAYMENT_OPTIONS: { value: PaymentStatus; label: string }[] = [
-  { value: "unpaid", label: "Unpaid" }, { value: "advance", label: "Advance" }, { value: "paid", label: "Paid" },
 ];
 
 const PAYMENT_BADGE: Record<PaymentStatus, string> = {
@@ -358,7 +352,7 @@ function PillSelect<T extends string>({ label, value, options, onChange }: { lab
   );
 }
 
-function ChipSelect<T extends string>({ value, options, onChange, disabled }: { value: T; options: ChipOption<T>[]; onChange: (v: T) => void; disabled?: boolean; }) {
+function ChipSelect<T extends string>({ value, options, onChange, disabled }: { value: T; options: ChipOption<T>[] ; onChange: (v: T) => void; disabled?: boolean; }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const current = options.find((o) => o.value === value) ?? options[0];
@@ -488,7 +482,6 @@ function SkeletonRow() {
       <td className="px-2 py-3"><div className="h-3 w-full animate-pulse rounded bg-slate-100" /></td>
       <td className="px-2 py-3"><div className="h-3 w-full animate-pulse rounded bg-slate-100" /></td>
       <td className="px-2 py-3"><div className="h-3 w-full animate-pulse rounded bg-slate-100" /></td>
-      <td className="px-2 py-3" />
     </tr>
   );
 }
@@ -510,10 +503,11 @@ export default function CrmLeadsDashboard() {
 
   const [search, setSearch] = useState("");
   const [courseFilter, setCourseFilter] = useState<number[]>([]);
-  const [paymentFilter, setPaymentFilter] = useState<PaymentStatus | "all">("all");
+  const [priorityFilter, setPriorityFilter] = useState<Priority | "all">("all");
   const [modeFilter, setModeFilter] = useState<LearningMode | "all">("all");
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [hideContacted, setHideContacted] = useState(false);
+  const [showPaid, setShowPaid] = useState(false);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
 
@@ -525,7 +519,7 @@ export default function CrmLeadsDashboard() {
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [flashIds, setFlashIds] = useState<Set<number>>(new Set());
   const [callDrafts, setCallDrafts] = useState<Record<number, string>>({});
-  const [expandedRowId, setExpandedRowId] = useState<number | null>(null);
+  const [isDownloadingNumbers, setIsDownloadingNumbers] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -544,10 +538,11 @@ export default function CrmLeadsDashboard() {
     let query = supabase.from("crm_leads").select("*, syllabi_v2(id, name, description, online_tutors(name))", { count: "exact" }).order("last_contacted_at", { ascending: sortDir === "asc", nullsFirst: sortDir === "asc" }).range(from, to);
 
     if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
-    if (paymentFilter !== "all") query = query.eq("payment_status", paymentFilter);
+    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
     if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
     if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
     if (hideContacted) query = query.is("last_contacted_at", null);
+    if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
 
     const startToday = startOfTodayIso(); const todayStr = todayInputValue();
     if (quickFilter === "new") query = query.eq("lead_status", "new");
@@ -559,17 +554,18 @@ export default function CrmLeadsDashboard() {
     const { data, error, count } = await query;
     if (error) { setError(error.message); setLeads([]); setTotalCount(0); } else { setLeads((data ?? []) as unknown as CrmLead[]); setTotalCount(count ?? 0); }
     setLoading(false);
-  }, [sortDir, courseFilter, paymentFilter, modeFilter, statusFilter, hideContacted, quickFilter, page]);
+  }, [sortDir, courseFilter, priorityFilter, showPaid, modeFilter, statusFilter, hideContacted, quickFilter, page]);
 
   const buildFilteredCountQuery = useCallback((ignoreHideContacted = false) => {
     let query = supabase.from("crm_leads").select("id", { count: "exact", head: true });
     if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
-    if (paymentFilter !== "all") query = query.eq("payment_status", paymentFilter);
+    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
     if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
     if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
     if (!ignoreHideContacted && hideContacted) query = query.is("last_contacted_at", null);
+    if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
     return query;
-  }, [courseFilter, paymentFilter, modeFilter, statusFilter, hideContacted]);
+  }, [courseFilter, priorityFilter, modeFilter, statusFilter, hideContacted, showPaid]);
 
   const fetchStats = useCallback(async () => {
     const startToday = startOfTodayIso(); const todayStr = todayInputValue();
@@ -593,7 +589,7 @@ export default function CrmLeadsDashboard() {
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const filterSignature = JSON.stringify([sortDir, courseFilter, paymentFilter, modeFilter, statusFilter, hideContacted, quickFilter]);
+  const filterSignature = JSON.stringify([sortDir, courseFilter, showPaid, priorityFilter, modeFilter, statusFilter, hideContacted, quickFilter]);
   const prevFilterSignature = useRef(filterSignature);
   useEffect(() => { if (prevFilterSignature.current !== filterSignature) { prevFilterSignature.current = filterSignature; setPage(1); } }, [filterSignature]);
 
@@ -629,6 +625,68 @@ export default function CrmLeadsDashboard() {
     navigator.clipboard.writeText(digits);
   };
 
+  const handleDownloadNumbers = async () => {
+    setIsDownloadingNumbers(true);
+    try {
+      let query = supabase.from("crm_leads").select("name, phone_number, syllabi_v2(name)");
+
+      if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
+      if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
+      if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
+      if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
+      if (hideContacted) query = query.is("last_contacted_at", null);
+      if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
+
+      const startToday = startOfTodayIso(); const todayStr = todayInputValue();
+      if (quickFilter === "new") query = query.eq("lead_status", "new");
+      if (quickFilter === "contactedToday") query = query.gte("last_contacted_at", startToday);
+      if (quickFilter === "followupsToday") query = query.eq("follow_up_date", todayStr);
+      if (quickFilter === "overdue") query = query.lt("follow_up_date", todayStr);
+      if (quickFilter === "enrolledToday") query = query.eq("lead_status", "enrolled").gte("updated_at", startToday);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      // FIX: typed as any[] to safely map the untyped relation without throwing an error
+      let results: any[] = data || [];
+      
+      if (search.trim()) {
+        const q = search.trim().toLowerCase();
+        results = results.filter((l: any) => {
+          const safeName = (l.name ?? "").toLowerCase();
+          const safePhone = (l.phone_number ?? "").replace(/\D/g, "");
+          // Prevent runtime failure in case Supabase inferred a 1-to-many array join
+          const courseData = Array.isArray(l.syllabi_v2) ? l.syllabi_v2[0] : l.syllabi_v2;
+          const safeCourse = (courseData?.name ?? "").toLowerCase();
+          return safeName.includes(q) || safePhone.includes(q.replace(/\D/g, "")) || safeCourse.includes(q);
+        });
+      }
+
+      const csvContent = "Name,Phone\n" + results.map((l: any) => {
+        let digits = (l.phone_number || "").replace(/\D/g, "");
+        if (digits.startsWith("977") && digits.length > 10) {
+          digits = digits.substring(3);
+        }
+        const name = (l.name || "Unknown").replace(/,/g, ""); 
+        return `${name},${digits}`;
+      }).join("\n");
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `filtered_leads_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to download numbers.");
+    } finally {
+      setIsDownloadingNumbers(false);
+    }
+  };
+
   const visibleLeads = useMemo(() => {
     const indexed = leads.map((lead, index) => ({ lead, index })); if (!search.trim()) return indexed;
     const q = search.trim().toLowerCase();
@@ -638,8 +696,8 @@ export default function CrmLeadsDashboard() {
     });
   }, [leads, search]);
 
-  const activeFilterCount = (courseFilter.length > 0 ? 1 : 0) + (paymentFilter !== "all" ? 1 : 0) + (modeFilter !== "all" ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (hideContacted ? 1 : 0);
-  const clearFilters = () => { setCourseFilter([]); setPaymentFilter("all"); setModeFilter("all"); setStatusFilter("all"); setHideContacted(false); setQuickFilter(null); };
+  const activeFilterCount = (courseFilter.length > 0 ? 1 : 0) + (priorityFilter !== "all" ? 1 : 0) + (showPaid ? 1 : 0) + (modeFilter !== "all" ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (hideContacted ? 1 : 0);
+  const clearFilters = () => { setCourseFilter([]); setPriorityFilter("all"); setShowPaid(false); setModeFilter("all"); setStatusFilter("all"); setHideContacted(false); setQuickFilter(null); };
 
   const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, null>, string> = { new: "New leads", contactedToday: "Contacted today", followupsToday: "Follow-ups today", overdue: "Overdue", enrolledToday: "Enrolled today" };
   const toggleQuickFilter = (qf: Exclude<QuickFilter, null>) => setQuickFilter((cur) => (cur === qf ? null : qf));
@@ -649,8 +707,9 @@ export default function CrmLeadsDashboard() {
     if (quickFilter) { text += QUICK_FILTER_LABELS[quickFilter].toLowerCase() + " "; } else { if (statusFilter !== "all") text += STATUS_META.find((o) => o.value === statusFilter)?.label.toLowerCase() + " status "; if (hideContacted) text += "uncontacted "; text += "leads "; }
     const conditions: string[] = [];
     if (courseFilter.length > 0) { const names = courseFilter.map((id) => courseMap.get(id)?.name).filter(Boolean); if (names.length > 0) conditions.push(`for ${names.join(", ")}`); }
+    if (priorityFilter !== "all") conditions.push(`${PRIORITY_META.find((o) => o.value === priorityFilter)?.label.toLowerCase()} priority`);
     if (modeFilter !== "all") conditions.push(`in ${MODE_META.find((o) => o.value === modeFilter)?.label.toLowerCase()} mode`);
-    if (paymentFilter !== "all") conditions.push(`with ${paymentFilter} payment`);
+    if (showPaid) conditions.push(`including paid numbers`);
     if (conditions.length > 0) text += conditions.join(", "); if (search.trim()) text += ` matching "${search.trim()}"`;
     return text + ".";
   };
@@ -705,7 +764,9 @@ export default function CrmLeadsDashboard() {
             <KpiCard label="Contacted today" value={stats.contactedToday} icon={<PhoneCall size={ICON.md} />} accent="#38BDF8" onClick={() => toggleQuickFilter("contactedToday")} active={quickFilter === "contactedToday"} />
             <KpiCard label="Follow-ups today" value={stats.followupsToday} icon={<CalendarClock size={ICON.md} />} accent="#FBBF24" onClick={() => toggleQuickFilter("followupsToday")} active={quickFilter === "followupsToday"} />
             <KpiCard label="Overdue" value={stats.overdue} icon={<AlertTriangle size={ICON.md} />} accent="#FB7185" onClick={() => toggleQuickFilter("overdue")} active={quickFilter === "overdue"} />
-            <KpiCard label="Enrolled today" value={stats.enrolledToday} icon={<CheckCircle2 size={ICON.md} />} accent="#34D399" onClick={() => toggleQuickFilter("enrolledToday")} active={quickFilter === "enrolledToday"} />
+            {stats.enrolledToday > 0 && (
+              <KpiCard label="Enrolled today" value={stats.enrolledToday} icon={<CheckCircle2 size={ICON.md} />} accent="#34D399" onClick={() => toggleQuickFilter("enrolledToday")} active={quickFilter === "enrolledToday"} />
+            )}
             <button onClick={refreshAll} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-white/15 text-white/80 transition-colors duration-150 hover:border-white/30 hover:bg-white/10 hover:text-white" title="Refresh"><RefreshCcw size={ICON.md} className={loading ? "animate-spin" : ""} /></button>
           </div>
         </div>
@@ -719,11 +780,15 @@ export default function CrmLeadsDashboard() {
               <div className="flex items-center gap-1.5 pr-1 text-slate-400"><SlidersHorizontal size={ICON.md} /></div>
               <div className="w-52"><CourseMultiSelect courses={courses} selected={courseFilter} onChange={setCourseFilter} placeholder="All courses" /></div>
               <PillSelect label="Status" value={statusFilter} options={STATUS_META} onChange={setStatusFilter} />
-              <PillSelect label="Payment" value={paymentFilter} options={PAYMENT_OPTIONS} onChange={setPaymentFilter} />
+              <PillSelect label="Priority" value={priorityFilter} options={PRIORITY_META} onChange={setPriorityFilter} />
               <PillSelect label="Mode" value={modeFilter} options={MODE_META} onChange={setModeFilter} />
 
               <button onClick={() => setHideContacted((h) => !h)} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3", hideContacted && "border-[var(--c-blue)] bg-[var(--c-blue-soft)] text-[var(--c-blue)] hover:border-[var(--c-blue)]")}>
                 <span className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors duration-150", hideContacted ? "border-[var(--c-blue)] bg-[var(--c-blue)]" : "border-slate-300")}>{hideContacted && <Check size={10} className="text-white" strokeWidth={3} />}</span> Hide contacted
+              </button>
+
+              <button onClick={() => setShowPaid((p) => !p)} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3", showPaid && "border-[var(--c-blue)] bg-[var(--c-blue-soft)] text-[var(--c-blue)] hover:border-[var(--c-blue)]")}>
+                <span className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors duration-150", showPaid ? "border-[var(--c-blue)] bg-[var(--c-blue)]" : "border-slate-300")}>{showPaid && <Check size={10} className="text-white" strokeWidth={3} />}</span> Show paid numbers
               </button>
 
               <button onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3")}>{sortDir === "desc" ? <ArrowDown size={ICON.sm} /> : <ArrowUp size={ICON.sm} />} Last contacted</button>
@@ -737,10 +802,16 @@ export default function CrmLeadsDashboard() {
 
               {activeFilterCount > 0 && <button onClick={clearFilters} className={cn(TX.body, "flex h-9 items-center gap-1 rounded-[var(--radius-control)] px-2.5 font-medium text-slate-400 transition-colors duration-150 hover:text-slate-600")}><X size={ICON.sm} /> Clear ({activeFilterCount})</button>}
 
-              <div className="relative ml-auto w-full sm:w-72">
-                <Search size={ICON.sm} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, phone, course…" className={cn(INPUT_CLS, TX.body, "w-full pl-8 pr-16")} />
-                <span className={cn(TX.micro, "pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-medium text-slate-400")}><Command size={10} />K</span>
+              <div className="relative ml-auto flex items-center gap-2 w-full sm:w-auto">
+                <button onClick={handleDownloadNumbers} disabled={isDownloadingNumbers} className={cn(BTN_PRIMARY_CLS, TX.body, "h-9 px-3 shrink-0")}>
+                  {isDownloadingNumbers ? <Loader2 size={ICON.sm} className="animate-spin" /> : <Download size={ICON.sm} />}
+                  Download Numbers
+                </button>
+                <div className="relative w-full sm:w-72">
+                  <Search size={ICON.sm} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input ref={searchInputRef} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, phone, course…" className={cn(INPUT_CLS, TX.body, "w-full pl-8 pr-16")} />
+                  <span className={cn(TX.micro, "pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-medium text-slate-400")}><Command size={10} />K</span>
+                </div>
               </div>
             </div>
             {(activeFilterCount > 0 || quickFilter || search.trim()) && <div className={cn(TX.dense, "flex items-center gap-2 rounded-[var(--radius-control)] bg-[var(--c-blue-soft)] px-3 py-2 text-[var(--c-blue)]")}><Sparkles size={ICON.sm} className="text-[var(--c-accent)]" /><span>{getFilterSummary()}</span></div>}
@@ -748,24 +819,22 @@ export default function CrmLeadsDashboard() {
         </div>
 
         <main className="mx-auto w-full max-w-[1500px] px-6 py-6">
-          <div className="overflow-hidden rounded-[var(--radius-card)] border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.15)]">
+          <div className="overflow-visible rounded-[var(--radius-card)] border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-16px_rgba(15,23,42,0.15)]">
             {error && <div className={cn(TX.body, "flex items-center gap-2 border-b border-rose-200 bg-rose-50 px-4 py-3 text-rose-700")}><AlertTriangle size={ICON.md} /> Failed to load leads: {error}</div>}
 
-            {/* strictly NO horizontal scroll by using table-fixed and w-full */}
             <div className="w-full">
               <table className="w-full table-fixed border-collapse text-left">
                 <thead>
                   <tr className={cn(TX.micro, "border-b border-slate-200 bg-slate-50 font-semibold uppercase tracking-wider text-slate-500")}>
                     <th className="w-[32px] px-2 py-2.5">#</th>
-                    <th className="w-[20%] px-2 py-2.5">Lead</th>
-                    {/* Auto width so Notes dynamically absorbs remaining space */}
+                    <th className="w-[18%] px-2 py-2.5">Lead</th>
+                    <th className="w-[180px] px-2 py-2.5">Courses</th>
                     <th className="px-2 py-2.5">Notes</th>
                     <th className="w-[120px] px-2 py-2.5">Status</th>
                     <th className="w-[110px] px-2 py-2.5">Priority</th>
                     <th className="w-[100px] px-2 py-2.5">Mode</th>
                     <th className="w-[125px] px-2 py-2.5">Follow-up</th>
                     <th className="w-[100px] px-2 py-2.5">Activity</th>
-                    <th className="w-[32px] px-2 py-2.5" />
                   </tr>
                 </thead>
                 <tbody>
@@ -780,12 +849,12 @@ export default function CrmLeadsDashboard() {
                     </tr>
                   )}
                   {!loading && visibleLeads.map(({ lead, index }) => {
-                    const isPending = pendingIds.has(lead.id); const isFlashed = flashIds.has(lead.id); const isExpanded = expandedRowId === lead.id;
+                    const isPending = pendingIds.has(lead.id); const isFlashed = flashIds.has(lead.id);
                     const safePriority = lead.priority ?? "normal"; const safeStatus = lead.lead_status ?? "new"; const draft = callDrafts[lead.id] ?? "";
                     const followUp = formatFollowUp(lead.follow_up_date); const serialNumber = (page - 1) * PAGE_SIZE + index + 1; const tone = avatarTone(String(lead.id));
                     const sortedNotes = [...(lead.call_notes ?? [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
                     const latestNote = sortedNotes[0]; const noteCount = sortedNotes.length;
-                    const interestedIds = lead.interested_course_ids ?? []; const interestedNames = interestedIds.map((id) => courseMap.get(id)?.name).filter(Boolean);
+                    const interestedIds = lead.interested_course_ids ?? [];
                     const railColor = followUp.overdue ? "var(--c-danger)" : safePriority === "high" ? "var(--c-danger)" : safePriority === "low" ? "#CBD5E1" : "var(--c-blue)";
 
                     return (
@@ -803,12 +872,15 @@ export default function CrmLeadsDashboard() {
                                   </button>
                                   <button title="Copy phone number" onClick={(e) => handleCopyPhone(e, lead.phone_number)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors duration-150 hover:bg-slate-200 hover:text-slate-700"><Copy size={10} /></button>
                                 </div>
-                                <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                                <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
                                   {lead.name && <button onClick={() => setDrawerLeadId(lead.id)} title="Open lead timeline" className={cn(TX.micro, "truncate italic text-slate-400 transition-colors duration-150 hover:text-slate-600")}>{lead.name}</button>}
-                                  {interestedNames.length > 0 && <span className={cn(TX.micro, "min-w-0 truncate rounded bg-[var(--c-blue-soft)] px-1.5 py-0.5 font-medium text-[var(--c-blue)]")}>{interestedNames[0] as React.ReactNode}{interestedNames.length > 1 ? ` +${interestedNames.length - 1}` : ""}</span>}
+                                  {lead.payment_status && <span className={cn(TX.micro, "rounded px-1.5 py-0.5 font-medium", PAYMENT_BADGE[lead.payment_status])}>{lead.payment_status}</span>}
                                 </div>
                               </div>
                             </div>
+                          </td>
+                          <td className="px-2 py-2.5 align-middle">
+                            <CourseMultiSelect courses={courses} selected={interestedIds} onChange={(ids) => updateInterestedCourses(lead.id, ids)} placeholder="Select courses…" addNewToFront />
                           </td>
                           <td className="px-2 py-2.5 align-middle">
                             <div className="flex min-w-0 items-center gap-1.5">
@@ -830,30 +902,7 @@ export default function CrmLeadsDashboard() {
                             {lead.follow_up_date && <p className={cn(TX.micro, "mt-1 truncate", followUp.overdue ? "font-medium text-rose-500" : "text-slate-400")}>{followUp.overdue ? "Overdue · " : ""}{followUp.label}</p>}
                           </td>
                           <td className="px-2 py-2.5 align-middle"><p className={cn(TX.body, "flex min-w-0 items-center gap-1 truncate text-slate-600")}><Clock size={ICON.sm} className="shrink-0 text-slate-400" /><span className="truncate">{formatRelative(lead.last_contacted_at)}</span></p></td>
-                          <td className="px-2 py-2.5 align-middle">
-                            <button onClick={() => setExpandedRowId(isExpanded ? null : lead.id)} title={isExpanded ? "Collapse" : "Edit courses / mode"} className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--radius-control)] text-slate-400 transition-colors duration-150 hover:bg-slate-100 hover:text-slate-600", isExpanded && "bg-[var(--c-blue-soft)] text-[var(--c-blue)]")}><ChevronDown size={ICON.md} className={cn("transition-transform duration-150", isExpanded && "rotate-180")} /></button>
-                          </td>
                         </tr>
-                        {isExpanded && (
-                          <tr key={`${lead.id}-expanded`} className="border-b border-slate-100 bg-slate-50/60">
-                            <td colSpan={9} className="px-2 py-4">
-                              <div className="pl-[38px]">
-                                <div className="mb-1.5 flex items-center gap-3">
-                                  <p className={cn(TX.micro, "font-semibold uppercase tracking-wide text-slate-400")}>Interested courses</p>
-                                  {lead.payment_status && <span className={cn(TX.micro, "rounded px-1.5 py-0.5 font-medium", PAYMENT_BADGE[lead.payment_status])}>{lead.payment_status}</span>}
-                                </div>
-                                <div className="w-full max-w-full sm:max-w-md">
-                                  <CourseMultiSelect courses={courses} selected={interestedIds} onChange={(ids) => updateInterestedCourses(lead.id, ids)} placeholder="Select courses…" addNewToFront />
-                                </div>
-                                {interestedNames.length > 0 && (
-                                  <div className="mt-1.5 flex flex-wrap gap-1">
-                                    {interestedNames.map((name, i) => <span key={i} className={cn(TX.micro, "rounded bg-white px-1.5 py-0.5 font-medium text-[var(--c-blue)] ring-1 ring-inset ring-[var(--c-blue-ring)]")}>{name as React.ReactNode}</span>)}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
                       </React.Fragment>
                     );
                   })}
@@ -887,8 +936,14 @@ export default function CrmLeadsDashboard() {
           <span className="flex items-center gap-1.5"><AlertTriangle size={ICON.sm} className="text-rose-300" /> {stats.overdue} overdue</span>
           <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
           <span className="flex items-center gap-1.5"><Flame size={ICON.sm} className="text-rose-300" /> {stats.highPriority} high priority</span>
-          <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
-          <span className="flex items-center gap-1.5"><CheckCircle2 size={ICON.sm} className="text-emerald-300" /> {stats.enrolledToday} enrolled today</span>
+          
+          {stats.enrolledToday > 0 && (
+            <>
+              <span className="hidden h-3.5 w-px bg-white/15 sm:block" />
+              <span className="flex items-center gap-1.5"><CheckCircle2 size={ICON.sm} className="text-emerald-300" /> {stats.enrolledToday} enrolled today</span>
+            </>
+          )}
+
           {activeFilterCount > 0 && <><span className="hidden h-3.5 w-px bg-white/15 sm:block" /><span className="text-slate-400">· matching current filters, across all pages</span></>}
         </div>
       </footer>

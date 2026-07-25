@@ -12,17 +12,26 @@ import {
   Settings, BookOpen, Search, ChevronRight,
   Video, BookMarked, Bell, LayoutDashboard,
   Sparkles, AlertCircle, CheckCircle, ShieldAlert, ShoppingBag, 
-  MessageCircle 
+  MessageCircle, Package
 } from "lucide-react";
+
+/* ============================================================
+   BRAND TOKENS — must match homepage exactly:
+   Primary Blue   #1E3A8A -> blue-900 (trust / headings / dark CTAs)
+   Secondary Blue #2563EB -> blue-600 (interactive / links / online-class identity)
+   Accent Orange  #F97316 -> orange-500 (CTAs, badges, "HOT"/urgency ONLY — never a category identity)
+   Accent Teal    #10B981 -> emerald-500/600 (physical / success / active / location)
+   ============================================================ */
 
 // Data for the universal Search Palette
 const searchData = [
   { label: "Home", href: "/", icon: House },
   { label: "Physical Classes", href: "/offline-class", icon: BookMarked },
-  { label: "Certificates", href: "/certificate", icon: GraduationCap },
-  { label: "Recordings", href: "/recording", icon: Video }, 
-  { label: "Dashboard", href: "/dashboard", icon: Settings },
   { label: "Online Class", href: "/onlinecourse", icon: MonitorPlay },
+  { label: "Recordings", href: "/recording", icon: Video },
+  { label: "Career-Ready Bundles", href: "/#bundles-section", icon: Package },
+  { label: "Certificates", href: "/certificate", icon: GraduationCap },
+  { label: "Dashboard", href: "/dashboard", icon: Settings },
 ];
 
 interface AppNotification {
@@ -100,12 +109,12 @@ export default function Navbar() {
           notifs.push({ id: `ver-${o.id}`, text: `Your payment for ${title} has been verified. Receipt available.`, time: o.updated_at || o.created_at, type: 'success', icon: CheckCircle, actionUrl: '/dashboard?tab=Invoices' });
         }
         
-        // Payment Rejected
+        // Payment Rejected — most severe: blocks the user's enrollment, needs immediate action
         if (o.status === 'rejected') {
           notifs.push({ id: `rej-${o.id}`, text: `Action Required: Your recent payment screenshot for ${title} was invalid. Please re-upload.`, time: o.updated_at || o.created_at, type: 'urgent', icon: ShieldAlert, actionUrl: '/dashboard?tab=Invoices' });
         }
 
-        // Pending Balance
+        // Pending Balance — needs attention but not blocking
         if (o.remaining_amount > 0) {
           notifs.push({ id: `bal-${o.id}`, text: `You have an outstanding balance of Rs. ${o.remaining_amount} for ${title}.`, time: o.created_at, type: 'warning', icon: AlertCircle, actionUrl: '/dashboard?tab=Invoices' });
         }
@@ -129,7 +138,7 @@ export default function Navbar() {
       // ==========================================
       // GLOBAL HUB ACTIVITY
       // ==========================================
-      // Upcoming Live Session Check
+      // Upcoming Live Session Check — time-critical, urgent
       enrollments.forEach((e: any) => {
         const batch = batches.find((b: any) => b.syllabus_id === e.course_id || b.id === e.batch_id);
         if (batch && batch.start_datetime) {
@@ -313,7 +322,7 @@ export default function Navbar() {
     <>
       {/* Progress Bar (Kept fixed so it remains visible at the top edge of the screen) */}
       <motion.div 
-        className="fixed top-0 left-0 right-0 h-[3px] bg-[#2D9CDB] origin-left z-[70]" 
+        className="fixed top-0 left-0 right-0 h-[3px] bg-blue-600 origin-left z-[70]" 
         style={{ scaleX }} 
       />
 
@@ -321,14 +330,14 @@ export default function Navbar() {
         
         {/* Softened Gradient Border Wrapper */}
         <header 
-          className={`w-full transition-all duration-300 ease-in-out rounded-full p-[1px] bg-gradient-to-r from-[#2D9CDB]/20 via-transparent to-[#FF6B35]/15 max-w-[90rem] ${
+          className={`w-full transition-all duration-300 ease-in-out rounded-full p-[1px] bg-gradient-to-r from-blue-600/20 via-transparent to-orange-500/15 max-w-[90rem] ${
             isScrolled ? "shadow-[0_8px_30px_rgba(15,23,42,0.08)]" : ""
           }`}
         >
           <div className="w-full h-full flex items-center justify-between gap-2 xl:gap-6 bg-white/95 backdrop-blur-xl rounded-full py-2 md:py-3.5 px-4 md:px-8">
             
             {/* Logo */}
-            <Link href="/" className="flex-shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB] z-20 rounded-lg">
+            <Link href="/" className="flex-shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-blue-600 z-20 rounded-lg">
               <motion.div 
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -345,23 +354,24 @@ export default function Navbar() {
                 <Link 
                   href="/" 
                   aria-current={isActive("/") ? "page" : undefined}
-                  className={`relative flex items-center px-3 py-2 rounded-lg text-[14px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB]/40 whitespace-nowrap transition-colors duration-200 ${isActive("/") ? "text-[#2D9CDB]" : "text-slate-500 hover:text-slate-800"}`}
+                  className={`relative flex items-center px-3 py-2 rounded-lg text-[14px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40 whitespace-nowrap transition-colors duration-200 ${isActive("/") ? "text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
                 >
                   Home
                 </Link>
                 {isActive("/") && (
-                  <motion.div layoutId="nav-indicator" className="absolute -bottom-1 left-3 right-3 h-[2px] bg-[#2D9CDB] rounded-full" />
+                  <motion.div layoutId="nav-indicator" className="absolute -bottom-1 left-3 right-3 h-[2px] bg-blue-600 rounded-full" />
                 )}
               </motion.div>
 
+              {/* Physical Class — emerald identity, matches homepage's "physical / location" token */}
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex items-center">
                 <Link
                   href="/offline-class"
                   aria-current={isPhysicalClassActive ? "page" : undefined}
-                  className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-semibold whitespace-nowrap transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB]/40 ${
+                  className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-[14px] font-semibold whitespace-nowrap transition-all duration-200 outline-none focus-visible:ring-2 focus-visible:ring-emerald-600/40 ${
                     isPhysicalClassActive
-                      ? "bg-[#2D9CDB] text-white shadow-[0_4px_12px_rgba(45,156,219,0.3)]"
-                      : "bg-[#2D9CDB]/10 text-[#2D9CDB] hover:bg-[#2D9CDB]/15"
+                      ? "bg-emerald-600 text-white shadow-[0_4px_12px_rgba(16,185,129,0.3)]"
+                      : "bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600/15"
                   }`}
                 >
                   <BookMarked className="h-[15px] w-[15px]" strokeWidth={2} />
@@ -369,12 +379,12 @@ export default function Navbar() {
                 </Link>
               </motion.div>
 
-              {/* Online Course Button */}
+              {/* Online Course Button — blue identity (its correct category color); orange stays reserved for the HOT badge only */}
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex items-center px-1 lg:pl-2">
-                <Link href="/onlinecourse" className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-[#FF7A4A] to-[#FF6B35] px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_12px_rgba(255,107,53,0.2)] hover:shadow-[0_6px_16px_rgba(255,107,53,0.3)] transition-all duration-200 mt-1">
+                <Link href="/onlinecourse" className="relative flex items-center gap-1.5 rounded-full bg-gradient-to-b from-blue-500 to-blue-600 px-4 py-2.5 text-[14px] font-semibold text-white shadow-[0_4px_12px_rgba(37,99,235,0.25)] hover:shadow-[0_6px_16px_rgba(37,99,235,0.35)] transition-all duration-200 mt-1">
                   <MonitorPlay className="h-[16px] w-[16px]" strokeWidth={2} />
                   Online Class
-                  <span className="absolute -top-3.5 -right-3 flex items-center justify-center rounded-full bg-white px-2 py-[2px] text-[9px] font-bold tracking-wide text-[#FF6B35] shadow-sm border border-[#FF6B35]/20 z-10 animate-pulse">
+                  <span className="absolute -top-3.5 -right-3 flex items-center justify-center rounded-full bg-white px-2 py-[2px] text-[9px] font-bold tracking-wide text-orange-500 shadow-sm border border-orange-500/20 z-10 animate-pulse">
                     <Sparkles className="w-[10px] h-[10px] mr-[2px]" strokeWidth={2.5} /> HOT
                   </span>
                 </Link>
@@ -382,7 +392,7 @@ export default function Navbar() {
 
               {/* Recordings Button */}
               <motion.div whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} className="relative flex flex-col justify-center px-1 lg:ml-2">
-                <Link href="/recording" className="relative flex items-center gap-1.5 rounded-full bg-[#2D9CDB]/10 hover:bg-[#2D9CDB]/15 px-4 py-2 text-[13px] font-medium text-[#2D9CDB] transition-all duration-200 mt-1">
+                <Link href="/recording" className="relative flex items-center gap-1.5 rounded-full bg-blue-600/10 hover:bg-blue-600/15 px-4 py-2 text-[13px] font-medium text-blue-600 transition-all duration-200 mt-1">
                   <Video className="h-[15px] w-[15px]" strokeWidth={2} />
                   Recordings
                 </Link>
@@ -393,13 +403,13 @@ export default function Navbar() {
                 <Link 
                   href="/certificate" 
                   aria-current={isActive("/certificate") ? "page" : undefined}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[14px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB]/40 whitespace-nowrap transition-colors duration-200 ${isActive("/certificate") ? "text-[#2D9CDB]" : "text-slate-500 hover:text-slate-800"}`}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-[14px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40 whitespace-nowrap transition-colors duration-200 ${isActive("/certificate") ? "text-blue-600" : "text-slate-500 hover:text-slate-800"}`}
                 >
                   <GraduationCap className="h-[16px] w-[16px] text-slate-400" strokeWidth={2} />
                   Certificate
                 </Link>
                 {isActive("/certificate") && (
-                  <motion.div layoutId="nav-indicator" className="absolute -bottom-1 left-3 right-3 h-[2px] bg-[#2D9CDB] rounded-full" />
+                  <motion.div layoutId="nav-indicator" className="absolute -bottom-1 left-3 right-3 h-[2px] bg-blue-600 rounded-full" />
                 )}
               </motion.div>
 
@@ -412,7 +422,7 @@ export default function Navbar() {
               <button 
                 onClick={() => setIsSearchOpen(true)}
                 aria-label="Open search (Cmd+K)"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200/50 hover:bg-slate-100/80 transition-all text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB]/40"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-slate-500 hover:text-slate-800 bg-slate-50 border border-slate-200/50 hover:bg-slate-100/80 transition-all text-[13px] font-medium outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40"
               >
                 <Search className="h-4 w-4 text-slate-400" /> 
                 <span className="hidden xl:inline">Search</span>
@@ -432,7 +442,7 @@ export default function Navbar() {
                       aria-label="Notifications"
                       aria-expanded={showNotifications}
                       aria-haspopup="true"
-                      className="relative mr-3 p-2 text-slate-400 hover:text-slate-700 transition-colors rounded-full hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-[#2D9CDB]/40"
+                      className="relative mr-3 p-2 text-slate-400 hover:text-slate-700 transition-colors rounded-full hover:bg-slate-100 outline-none focus-visible:ring-2 focus-visible:ring-blue-600/40"
                     >
                       <Bell className="h-5 w-5" strokeWidth={1.5} />
                       {hasUnread && <span className="absolute top-2 right-2.5 h-2 w-2 bg-red-500 rounded-full border border-white animate-pulse" />}
@@ -467,9 +477,12 @@ export default function Navbar() {
                                 const isWarning = n.type === 'warning';
                                 const isSuccess = n.type === 'success';
                                 
-                                const bgClass = isUrgent ? 'bg-orange-50/40 border-orange-100/50' : isWarning ? 'bg-red-50/40 border-red-100/50' : isSuccess ? 'bg-emerald-50/40 border-emerald-100/50' : 'bg-white border-transparent hover:bg-slate-50';
+                                // Severity mapping: urgent = red (most severe, blocking),
+                                // warning = orange/amber (needs attention, not blocking),
+                                // success = emerald, info = blue.
+                                const bgClass = isUrgent ? 'bg-red-50/40 border-red-100/50' : isWarning ? 'bg-orange-50/40 border-orange-100/50' : isSuccess ? 'bg-emerald-50/40 border-emerald-100/50' : 'bg-white border-transparent hover:bg-slate-50';
                                 const textClass = 'text-slate-700'; 
-                                const iconColor = isUrgent ? 'text-orange-500' : isWarning ? 'text-red-500' : isSuccess ? 'text-emerald-500' : 'text-blue-500';
+                                const iconColor = isUrgent ? 'text-red-500' : isWarning ? 'text-orange-500' : isSuccess ? 'text-emerald-500' : 'text-blue-600';
                                 const IconComp = n.icon || Bell;
 
                                 return (
@@ -620,7 +633,7 @@ export default function Navbar() {
                       className="flex items-center justify-between w-full px-3 py-2.5 rounded-xl hover:bg-slate-50 group transition-colors outline-none focus-visible:bg-slate-50"
                     >
                       <div className="flex items-center gap-3">
-                        <item.icon className="h-4 w-4 text-slate-400 group-hover:text-[#2D9CDB] transition-colors" strokeWidth={1.5} />
+                        <item.icon className="h-4 w-4 text-slate-400 group-hover:text-blue-600 transition-colors" strokeWidth={1.5} />
                         <span className="text-slate-600 text-sm font-medium group-hover:text-slate-900 transition-colors">{item.label}</span>
                       </div>
                       <ChevronRight className="h-4 w-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -675,7 +688,7 @@ export default function Navbar() {
                   <h4 className="px-2 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Navigation</h4>
                   <div className="flex flex-col gap-1">
                     
-                    <button onClick={() => { setMobileOpen(false); router.push("/"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/") ? "bg-slate-50 text-[#2D9CDB]" : "text-slate-600 hover:bg-slate-50"}`}>
+                    <button onClick={() => { setMobileOpen(false); router.push("/"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/") ? "bg-slate-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}>
                       <House className="h-4 w-4" strokeWidth={2} /> Home
                     </button>
 
@@ -683,26 +696,26 @@ export default function Navbar() {
                       onClick={() => { setMobileOpen(false); router.push("/offline-class"); }}
                       aria-current={isPhysicalClassActive ? "page" : undefined}
                       className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                        isPhysicalClassActive ? "bg-[#2D9CDB] text-white" : "bg-[#2D9CDB]/10 text-[#2D9CDB] hover:bg-[#2D9CDB]/15"
+                        isPhysicalClassActive ? "bg-emerald-600 text-white" : "bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600/15"
                       }`}
                     >
                       <BookMarked className="h-4 w-4" strokeWidth={2} /> Physical Class
                     </button>
 
                     {/* Dominant Primary Mobile Action */}
-                    <button onClick={() => { setMobileOpen(false); router.push("/onlinecourse"); }} className={`relative flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/onlinecourse") ? "bg-[#FF6B35]/5 text-[#FF6B35]" : "text-slate-600 hover:bg-slate-50"}`}>
+                    <button onClick={() => { setMobileOpen(false); router.push("/onlinecourse"); }} className={`relative flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/onlinecourse") ? "bg-blue-500/5 text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}>
                       <MonitorPlay className="h-4 w-4" strokeWidth={2} /> Online Class
-                      <span className="absolute top-2 right-2 flex items-center justify-center rounded-full bg-white px-2 py-[2px] text-[8px] font-bold tracking-wide text-[#FF6B35] shadow-sm border border-[#FF6B35]/20 animate-pulse">
+                      <span className="absolute top-2 right-2 flex items-center justify-center rounded-full bg-white px-2 py-[2px] text-[8px] font-bold tracking-wide text-orange-500 shadow-sm border border-orange-500/20 animate-pulse">
                         <Sparkles className="w-2.5 h-2.5 mr-[2px]" strokeWidth={2.5} /> HOT
                       </span>
                     </button>
 
                     {/* Secondary Action - Softened from gradient */}
-                    <button onClick={() => { setMobileOpen(false); router.push("/recording"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/recording") ? "bg-slate-50 text-[#2D9CDB]" : "text-slate-600 hover:bg-slate-50"}`}>
+                    <button onClick={() => { setMobileOpen(false); router.push("/recording"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/recording") ? "bg-slate-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}>
                       <Video className="h-4 w-4" strokeWidth={2} /> Recordings
                     </button>
 
-                    <button onClick={() => { setMobileOpen(false); router.push("/certificate"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/certificate") ? "bg-slate-50 text-[#2D9CDB]" : "text-slate-600 hover:bg-slate-50"}`}>
+                    <button onClick={() => { setMobileOpen(false); router.push("/certificate"); }} className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${isActive("/certificate") ? "bg-slate-50 text-blue-600" : "text-slate-600 hover:bg-slate-50"}`}>
                       <GraduationCap className="h-4 w-4" strokeWidth={2} /> Certificate
                     </button>
 
@@ -728,7 +741,7 @@ export default function Navbar() {
                   <h4 className="px-2 mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actions</h4>
                   <div className="flex flex-col gap-2">
                     
-                    <button onClick={() => { setMobileOpen(false); router.push('/onlinecourse'); }} className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-[#FF7A4A] to-[#FF6B35] shadow-[0_4px_12px_rgba(255,107,53,0.2)] text-white py-3 text-sm font-semibold mt-1">
+                    <button onClick={() => { setMobileOpen(false); router.push('/onlinecourse'); }} className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-blue-500 to-blue-600 shadow-[0_4px_12px_rgba(37,99,235,0.25)] text-white py-3 text-sm font-semibold mt-1">
                       <MonitorPlay className="h-4 w-4" strokeWidth={2} /> Explore Online Classes
                     </button>
 

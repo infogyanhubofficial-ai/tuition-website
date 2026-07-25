@@ -912,7 +912,7 @@ export default function HomeClient() {
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 md:mb-10">
             <div>
               <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 flex items-center gap-2 sm:gap-3">
-                <Award className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600" /> Professional Training Hub
+                <Award className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600" /> Physical Training Hub
               </h2>
               <p className="mt-1 sm:mt-2 text-sm sm:text-base text-slate-600 font-medium">Hands-on physical sessions at our New Baneshwor center.</p>
             </div>
