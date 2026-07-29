@@ -11,19 +11,20 @@ export default function LayoutWrapper({
 }) {
   const pathname = usePathname();
 
-  const hideFooter = pathname.startsWith("/company");
+  const hideLayout =
+    pathname.startsWith("/company") || pathname.startsWith("/admin");
 
   return (
     <>
-      {/* Navbar is always shown */}
-      <Navbar />
+      {/* Hide Navbar on /company/* and /admin/* */}
+      {!hideLayout && <Navbar />}
 
       <main className="flex-grow w-full">
         {children}
       </main>
 
-      {/* Footer is hidden only on /company/* */}
-      {!hideFooter && <Footer />}
+      {/* Hide Footer on /company/* and /admin/* */}
+      {!hideLayout && <Footer />}
     </>
   );
 }

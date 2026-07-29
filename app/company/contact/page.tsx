@@ -694,7 +694,7 @@ export default function ContactPage() {
             </div>
 
             {/* FAQ Shortcut */}
-            <a href="/faq" className="flex items-center justify-between bg-white rounded-2xl shadow-sm border border-slate-100 p-6 hover:shadow-md transition-shadow group">
+            <a href="/company/faqs" className="flex items-center justify-between bg-white rounded-2xl shadow-sm border border-slate-100 p-6 hover:shadow-md transition-shadow group">
               <span className="font-bold text-slate-700">Still looking for answers? Read FAQs</span>
               <ChevronRight size={18} className="text-slate-400 group-hover:translate-x-1 transition-transform" />
             </a>

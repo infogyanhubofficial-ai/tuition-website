@@ -8,14 +8,21 @@ import {
   AlertCircle, Layers, ShoppingCart, CalendarDays, Award, ChevronDown, Search,
   EyeOff, Eye, Loader2, MessageSquare, ArrowLeft, Upload, Copy, CheckSquare,
   Phone, Building2, CalendarClock, StickyNote, GripVertical, Ban, Globe2,
-  TrendingUp, PieChart, CalendarRange, Archive,
+  TrendingUp, PieChart, CalendarRange, Archive, TrendingDown, Wallet, Landmark,
+  PiggyBank, AlertTriangle, Activity, Target, Pencil, FileBarChart, Calendar, BookOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
+import {
+  ResponsiveContainer, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from "recharts";
 
 /* ============================================================================
    INTERFACES & HELPERS
 ============================================================================ */
+
+// --- Admin Types ---
 interface OnlineCourse {
   id: string; title: string; category: string; fee: number; discount: number; active_batch_no: number;
   duration: string; cover_pic: string; tutor_name: string; is_active: boolean;
@@ -75,18 +82,65 @@ interface PhysicalLead {
   remarks: string | null; counselor_notes: string | null; assigned_to: string | null;
   follow_up_date: string | null; batch_no: number | null; is_confirmed: boolean | null;
   start_date?: string | null; created_at: string; updated_at: string; deleted: boolean; deleted_at: string | null;
-  course_price: number;
-  discount_price?: number | null;
-  booking_amount?: number | null;
-  order_id?: string | null;
-  bill_no?: string | number | null;
-  locked_price?: number;
-  paid_amount?: number;
-  pending_amount?: number;
-  remaining_amount?: number;
-  order_status?: string;
-  payment_screenshots?: string[];
+  course_price: number; discount_price?: number | null; booking_amount?: number | null;
+  order_id?: string | null; bill_no?: string | number | null; locked_price?: number;
+  paid_amount?: number; pending_amount?: number; remaining_amount?: number;
+  order_status?: string; payment_screenshots?: string[];
 }
+
+// --- Finance/ERP Types ---
+type AccountingCategory =
+  | "COURSE_INCOME" | "OTHER_INCOME" | "OWNER_INVESTMENT" | "OWNER_WITHDRAWAL"
+  | "TUTOR_PAYMENT" | "SALARY" | "RENT" | "OFFICE_EXPENSE" | "MISCELLANEOUS" | "MARKETING";
+
+type AccountingStatus = "CURRENT" | "PREPAID" | "OUTSTANDING";
+type AccountingSubType = "PHYSICAL" | "ONLINE" | "HYBRID" | "BOTH" | "MONTHLY" | "BONUS" | "NISCHAL" | "DIPESH";
+type TransactionType = "INCOME" | "EXPENSE" | "INVESTMENT" | "WITHDRAWAL";
+type DateRangeOption = "ALL" | "LAST_7_DAYS" | "LAST_15_DAYS" | "LAST_30_DAYS" | "LAST_45_DAYS" | "LAST_3_MONTHS" | "LAST_6_MONTHS" | "THIS_YEAR" | "CUSTOM";
+
+interface Transaction {
+  id: string; transaction_date: string; category: AccountingCategory; accounting_status: AccountingStatus;
+  syllabus_id: number | null; batch_name: string | null; sub_type: AccountingSubType | null;
+  amount: number; description: string | null; is_accounting: boolean;
+}
+
+interface Syllabus {
+  id: number; name: string;
+}
+
+interface CategoryRule {
+  label: string; requiresSyllabus: boolean; requiresBatch: boolean; subTypeOptions: AccountingSubType[] | null; subTypeRequired: boolean;
+}
+
+const CATEGORY_RULES: Record<AccountingCategory, CategoryRule> = {
+  COURSE_INCOME: { label: "Course income", requiresSyllabus: true, requiresBatch: true, subTypeOptions: ["PHYSICAL", "ONLINE", "HYBRID"], subTypeRequired: true },
+  TUTOR_PAYMENT: { label: "Tutor payment", requiresSyllabus: true, requiresBatch: true, subTypeOptions: ["PHYSICAL", "ONLINE", "BOTH"], subTypeRequired: true },
+  MARKETING: { label: "Marketing", requiresSyllabus: false, requiresBatch: false, subTypeOptions: null, subTypeRequired: false },
+  OWNER_INVESTMENT: { label: "Owner investment", requiresSyllabus: false, requiresBatch: false, subTypeOptions: ["NISCHAL", "DIPESH"], subTypeRequired: true },
+  OWNER_WITHDRAWAL: { label: "Owner withdrawal", requiresSyllabus: false, requiresBatch: false, subTypeOptions: ["NISCHAL", "DIPESH"], subTypeRequired: true },
+  SALARY: { label: "Salary", requiresSyllabus: false, requiresBatch: false, subTypeOptions: ["MONTHLY", "BONUS"], subTypeRequired: true },
+  OTHER_INCOME: { label: "Other income", requiresSyllabus: false, requiresBatch: false, subTypeOptions: null, subTypeRequired: false },
+  RENT: { label: "Rent", requiresSyllabus: false, requiresBatch: false, subTypeOptions: null, subTypeRequired: false },
+  OFFICE_EXPENSE: { label: "Office expense", requiresSyllabus: false, requiresBatch: false, subTypeOptions: null, subTypeRequired: false },
+  MISCELLANEOUS: { label: "Miscellaneous", requiresSyllabus: false, requiresBatch: false, subTypeOptions: null, subTypeRequired: false },
+};
+
+const CATEGORY_ORDER: AccountingCategory[] = ["COURSE_INCOME", "OTHER_INCOME", "OWNER_INVESTMENT", "OWNER_WITHDRAWAL", "TUTOR_PAYMENT", "SALARY", "RENT", "OFFICE_EXPENSE", "MISCELLANEOUS", "MARKETING"];
+const INCOME_CATEGORIES: AccountingCategory[] = ["COURSE_INCOME", "OTHER_INCOME"];
+const OWNER_CATEGORIES: AccountingCategory[] = ["OWNER_INVESTMENT", "OWNER_WITHDRAWAL"];
+
+function deriveTransactionType(category: AccountingCategory): TransactionType {
+  if (INCOME_CATEGORIES.includes(category)) return "INCOME";
+  if (category === "OWNER_INVESTMENT") return "INVESTMENT";
+  if (category === "OWNER_WITHDRAWAL") return "WITHDRAWAL";
+  return "EXPENSE";
+}
+
+// Helpers
+const NPR = new Intl.NumberFormat("en-NP", { style: "currency", currency: "NPR", maximumFractionDigits: 0 });
+const money = (n: number) => NPR.format(n);
+const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
+const PIE_COLORS = ["#1F6F5C", "#5B7DA6", "#9C7A2A", "#8C3F3F", "#7A5B9C", "#4C8C6C", "#B0813F"];
 
 function timeAgo(dateString: string) {
   const now = new Date();
@@ -102,7 +156,167 @@ function timeAgo(dateString: string) {
 function isoDateOnly(d: Date) { return d.toISOString().slice(0, 10); }
 
 /* ============================================================================
-   CUSTOM HOOKS
+   CUSTOM HOOKS (Finance Analytics)
+============================================================================ */
+function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
+  return useMemo(() => {
+    const acct = rows.filter((r) => r.is_accounting);
+
+    const PNL_INCOME: AccountingCategory[] = ["COURSE_INCOME", "OTHER_INCOME", "OWNER_WITHDRAWAL"];
+    const PNL_EXPENSE: AccountingCategory[] = ["TUTOR_PAYMENT", "SALARY", "RENT", "OFFICE_EXPENSE", "MISCELLANEOUS", "MARKETING"];
+
+    const totalIncome = acct.filter((r) => PNL_INCOME.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    const totalExpense = acct.filter((r) => PNL_EXPENSE.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    const netProfit = totalIncome - totalExpense;
+
+    const current = acct.filter((r) => r.accounting_status === "CURRENT");
+    const cashIncome = current.filter((r) => INCOME_CATEGORIES.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    const cashInvestment = current.filter((r) => r.category === "OWNER_INVESTMENT").reduce((s, r) => s + r.amount, 0);
+    const cashWithdrawal = current.filter((r) => r.category === "OWNER_WITHDRAWAL").reduce((s, r) => s + r.amount, 0);
+    const cashExpense = current.filter((r) => PNL_EXPENSE.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    
+    const currentCash = cashIncome + cashInvestment - cashWithdrawal - cashExpense;
+    
+    const outstanding = acct.filter((r) => r.accounting_status === "OUTSTANDING");
+    const outReceivable = outstanding.filter((r) => INCOME_CATEGORIES.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    const outPayable = outstanding.filter((r) => PNL_EXPENSE.includes(r.category)).reduce((s, r) => s + r.amount, 0);
+    
+    const expectedCash = currentCash - outPayable;
+
+    const courseMap = new Map<string, { id: string, name: string, revenue: number, tutor: number, marketing: number }>();
+    const batchMap = new Map<string, { courseName: string, batch: string, revenue: number, tutor: number, marketing: number }>();
+
+    rows.forEach(t => {
+      const isAllocatedMarketing = t.category === "MARKETING" && t.is_accounting === false;
+      const isDirectCoursePnl = (t.category === "COURSE_INCOME" || t.category === "TUTOR_PAYMENT") && t.is_accounting === true;
+
+      if (!isAllocatedMarketing && !isDirectCoursePnl) return;
+      if (!t.syllabus_id) return;
+      
+      const syllabus = syllabi.find(s => s.id === t.syllabus_id);
+      const cName = syllabus ? syllabus.name : `Course #${t.syllabus_id}`;
+      
+      if (!courseMap.has(cName)) courseMap.set(cName, { id: String(t.syllabus_id), name: cName, revenue: 0, tutor: 0, marketing: 0 });
+      const cRow = courseMap.get(cName)!;
+
+      if (t.category === "COURSE_INCOME") cRow.revenue += t.amount;
+      if (t.category === "TUTOR_PAYMENT") cRow.tutor += t.amount;
+      if (t.category === "MARKETING") cRow.marketing += t.amount;
+
+      if (t.batch_name) {
+        const bId = `${cName} - ${t.batch_name}`;
+        if (!batchMap.has(bId)) batchMap.set(bId, { courseName: cName, batch: t.batch_name, revenue: 0, tutor: 0, marketing: 0 });
+        const bRow = batchMap.get(bId)!;
+        if (t.category === "COURSE_INCOME") bRow.revenue += t.amount;
+        if (t.category === "TUTOR_PAYMENT") bRow.tutor += t.amount;
+        if (t.category === "MARKETING") bRow.marketing += t.amount;
+      }
+    });
+
+    const courseStats = Array.from(courseMap.values()).map(c => {
+      const profit = c.revenue - c.tutor - c.marketing;
+      const margin = c.revenue > 0 ? profit / c.revenue : 0;
+      const roi = c.marketing > 0 ? c.revenue / c.marketing : 0;
+      const profitContribution = netProfit > 0 ? profit / netProfit : 0;
+      
+      let score = 1;
+      if (margin > 0.4) score++;
+      if (margin > 0.2) score++;
+      if (roi > 5) score++;
+      if (profit > 50000) score++;
+      
+      return { ...c, profit, margin, roi, profitContribution, score: Math.min(5, Math.max(1, score)) };
+    }).sort((a, b) => b.profit - a.profit);
+
+    const batchStats = Array.from(batchMap.values()).map(b => ({
+      ...b, profit: b.revenue - b.tutor - b.marketing
+    })).sort((a, b) => b.profit - a.profit);
+
+    const expenseData = [
+      { name: "Tutor", value: acct.filter(r => r.category === "TUTOR_PAYMENT").reduce((s, r) => s + r.amount, 0) },
+      { name: "Salary", value: acct.filter(r => r.category === "SALARY").reduce((s, r) => s + r.amount, 0) },
+      { name: "Rent", value: acct.filter(r => r.category === "RENT").reduce((s, r) => s + r.amount, 0) },
+      { name: "Marketing", value: acct.filter(r => r.category === "MARKETING").reduce((s, r) => s + r.amount, 0) },
+      { name: "Office", value: acct.filter(r => r.category === "OFFICE_EXPENSE").reduce((s, r) => s + r.amount, 0) },
+      { name: "Misc", value: acct.filter(r => r.category === "MISCELLANEOUS").reduce((s, r) => s + r.amount, 0) },
+    ].filter(d => d.value > 0);
+
+    const monthMap = new Map<string, { month: string, revenue: number, expense: number, profit: number }>();
+    acct.forEach(t => {
+      if (!PNL_INCOME.includes(t.category) && !PNL_EXPENSE.includes(t.category)) return;
+
+      const d = new Date(t.transaction_date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      if (!monthMap.has(key)) monthMap.set(key, { month: d.toLocaleString('en', { month: 'short', year: '2-digit' }), revenue: 0, expense: 0, profit: 0 });
+      
+      const m = monthMap.get(key)!;
+      if (PNL_INCOME.includes(t.category)) m.revenue += t.amount;
+      else if (PNL_EXPENSE.includes(t.category)) m.expense += t.amount;
+      
+      m.profit = m.revenue - m.expense;
+    });
+    const monthlyTrends = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0])).map((x, i, arr) => {
+      const m = x[1];
+      const expenseRatio = m.revenue > 0 ? m.expense / m.revenue : 0;
+      let profitGrowth: number | null = null;
+      if (i > 0) {
+        const prev = arr[i - 1][1];
+        if (prev.profit > 0) {
+          profitGrowth = (m.profit - prev.profit) / prev.profit;
+        }
+      }
+      return { ...m, expenseRatio, profitGrowth };
+    });
+
+    let healthScore = 50;
+    const overallMargin = totalIncome > 0 ? netProfit / totalIncome : 0;
+    
+    if (overallMargin > 0.3) healthScore += 20;
+    else if (overallMargin > 0.1) healthScore += 10;
+    else if (overallMargin < 0) healthScore -= 20;
+    if (currentCash > 200000) healthScore += 15;
+    else if (currentCash < 50000) healthScore -= 15;
+    if (outReceivable > outPayable) healthScore += 10;
+    else if (outPayable > outReceivable * 1.5) healthScore -= 10;
+
+    const avgMonthlyExpense = totalExpense / Math.max(1, monthlyTrends.length);
+    const runwayMonths = avgMonthlyExpense > 0 ? currentCash / avgMonthlyExpense : 99;
+    if (runwayMonths > 6) healthScore += 5;
+
+    const nischalInv = acct.filter(r => r.category === "OWNER_INVESTMENT" && r.sub_type === "NISCHAL").reduce((s, r) => s + r.amount, 0);
+    const nischalWith = acct.filter(r => r.category === "OWNER_WITHDRAWAL" && r.sub_type === "NISCHAL").reduce((s, r) => s + r.amount, 0);
+    const dipeshInv = acct.filter(r => r.category === "OWNER_INVESTMENT" && r.sub_type === "DIPESH").reduce((s, r) => s + r.amount, 0);
+    const dipeshWith = acct.filter(r => r.category === "OWNER_WITHDRAWAL" && r.sub_type === "DIPESH").reduce((s, r) => s + r.amount, 0);
+
+    const positiveCourseProfits = courseStats.filter(c => c.profit > 0);
+    const totalCourseProfit = positiveCourseProfits.reduce((s, c) => s + c.profit, 0);
+
+    const reports = {
+      operatingExpenseRatio: totalIncome > 0 ? totalExpense / totalIncome : 0,
+      receivableRatio: totalIncome > 0 ? outReceivable / totalIncome : 0,
+      cashCollectionCoverage: (currentCash + outReceivable) > 0 ? currentCash / (currentCash + outReceivable) : 0,
+      expenseEfficiency: totalExpense > 0 ? netProfit / totalExpense : 0,
+      breakEvenRevenue: totalExpense,
+      top1Dependency: totalCourseProfit > 0 && positiveCourseProfits.length > 0 ? positiveCourseProfits[0].profit / totalCourseProfit : 0,
+      top3Dependency: totalCourseProfit > 0 ? positiveCourseProfits.slice(0, 3).reduce((s, c) => s + c.profit, 0) / totalCourseProfit : 0,
+      cashSafety: runwayMonths,
+      liabilityRisk: outPayable > 0 ? outReceivable / outPayable : (outReceivable > 0 ? 999 : 0)
+    };
+
+    return {
+      totalIncome, totalExpense, netProfit, overallMargin,
+      currentCash, outReceivable, outPayable, expectedCash,
+      courseStats, batchStats, expenseData, monthlyTrends,
+      healthScore: Math.min(100, Math.max(0, healthScore)),
+      runwayMonths, avgMonthlyExpense, reports,
+      nischal: { inv: nischalInv, with: nischalWith, net: nischalInv - nischalWith },
+      dipesh: { inv: dipeshInv, with: dipeshWith, net: dipeshInv - dipeshWith }
+    };
+  }, [rows, syllabi]);
+}
+
+/* ============================================================================
+   CUSTOM HOOKS (Admin Data)
 ============================================================================ */
 function useSupabase() {
   return useMemo(() => createClient(), []);
@@ -295,8 +509,1033 @@ function useCertificates(supabase: any, enabled: boolean) {
   return { certificates, refresh: fetchCertificates };
 }
 
+
 /* ============================================================================
-   ROOT COMPONENT
+   SHARED PRIMITIVES
+============================================================================ */
+function SidebarBtn({ icon, label, active, onClick, color }: any) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-lg text-sm font-bold transition-all relative ${active ? "bg-white/[0.06] text-white" : `hover:bg-white/[0.04] ${color || "text-[#9C9788]"}`}`}>
+      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#B8862E] rounded-r" />}
+      {icon} <span>{label}</span>
+    </button>
+  );
+}
+
+function SectionHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex justify-between items-end flex-wrap gap-4 pb-5 border-b border-[#E6E0D2]">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#B8862E] mb-1">{eyebrow}</p>
+        <h2 className="text-3xl font-serif font-bold text-[#14161F] tracking-tight">{title}</h2>
+        {subtitle && <p className="text-[#857D6E] font-medium mt-1 text-sm">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
+
+function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  return (
+    <div className="relative w-full">
+      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B4AF9F]" size={17} />
+      <input type="text" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-11 pr-4 py-3.5 bg-white rounded-xl border border-[#E6E0D2] shadow-sm outline-none focus:border-[#B8862E] focus:ring-2 focus:ring-[#B8862E]/10 transition-all font-medium text-[#14161F] text-sm" />
+    </div>
+  );
+}
+
+function ToggleSwitch({ checked, onChange, label, activeColor = '#0E7C7B' }: { checked: boolean, onChange: () => void, label?: string, activeColor?: string }) {
+  return (
+    <div className="flex items-center gap-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); onChange(); }}>
+      <div className="w-10 h-6 flex items-center rounded-full p-1 transition-colors duration-300" style={{ backgroundColor: checked ? activeColor : '#D8D2C2' }}>
+        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
+      </div>
+      {label && <span className="text-xs font-bold whitespace-nowrap" style={{ color: checked ? activeColor : '#857D6E' }}>{label}</span>}
+    </div>
+  );
+}
+
+
+/* ============================================================================
+   ACCOUNTS / ERP MANAGER (Adapted from FinanceDashboard)
+============================================================================ */
+function AccountsManager({ supabase }: { supabase: any }) {
+  const [allRows, setAllRows] = useState<Transaction[]>([]);
+  const [syllabi, setSyllabi] = useState<Syllabus[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Filters State
+  const [dateRange, setDateRange] = useState<DateRangeOption>("ALL");
+  const [customRange, setCustomRange] = useState({ start: "", end: "" });
+  const [courseFilter, setCourseFilter] = useState<string>("ALL");
+  
+  // Reports Modal State
+  const [showReports, setShowReports] = useState(false);
+
+  useEffect(() => {
+    async function fetchData() {
+      setIsLoading(true);
+      
+      const [ledgerRes, syllabiRes] = await Promise.all([
+        supabase.from("gyanhub_accounting").select("*").order("transaction_date", { ascending: false }),
+        supabase.from("syllabi_v2").select("id, name") 
+      ]);
+
+      if (ledgerRes.data) setAllRows(ledgerRes.data.map((d: any) => ({ ...d, amount: Number(d.amount) })));
+      if (syllabiRes.data) setSyllabi(syllabiRes.data);
+      if (syllabiRes.error) console.error("Syllabi fetch error:", syllabiRes.error);
+      
+      setIsLoading(false);
+    }
+    fetchData();
+  }, [supabase]);
+
+  // Filter Rows based on selected filters
+  const filteredRows = useMemo(() => {
+    return allRows.filter((r) => {
+      // 1. Filter by Course
+      if (courseFilter !== "ALL" && String(r.syllabus_id) !== courseFilter) {
+        return false;
+      }
+      
+      // 2. Filter by Date Range
+      if (dateRange === "ALL") return true;
+      
+      const date = new Date(r.transaction_date);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      
+      const getPastDate = (days: number) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - days);
+        return d;
+      };
+
+      switch (dateRange) {
+        case "LAST_7_DAYS": return date >= getPastDate(7);
+        case "LAST_15_DAYS": return date >= getPastDate(15);
+        case "LAST_30_DAYS": return date >= getPastDate(30);
+        case "LAST_45_DAYS": return date >= getPastDate(45);
+        case "LAST_3_MONTHS": 
+          const m3 = new Date(now); m3.setMonth(m3.getMonth() - 3); return date >= m3;
+        case "LAST_6_MONTHS": 
+          const m6 = new Date(now); m6.setMonth(m6.getMonth() - 6); return date >= m6;
+        case "THIS_YEAR":
+          return date.getFullYear() === now.getFullYear();
+        case "CUSTOM":
+          if (customRange.start && date < new Date(customRange.start)) return false;
+          if (customRange.end && date > new Date(customRange.end)) return false;
+          return true;
+        default:
+          return true;
+      }
+    });
+  }, [allRows, dateRange, courseFilter, customRange]);
+
+  const globalAnalytics = useAnalytics(allRows, syllabi);
+  const analytics = useAnalytics(filteredRows, syllabi);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[500px] text-[#B8862E]">
+        <Loader2 className="animate-spin mr-2" size={32} /> Loading Financial Models...
+      </div>
+    );
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8 w-full pb-24">
+      <SectionHeader 
+        eyebrow="GyanHub Management" 
+        title="Executive ERP Dashboard" 
+        subtitle="Manage accounting ledgers, cash flow, and financial health."
+        action={
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowReports(true)}
+              className="flex items-center gap-2 bg-[#14161F] hover:bg-[#22242F] text-white px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm"
+            >
+              <FileBarChart size={16} />
+              Accounting Reports
+            </button>
+            <p className="font-mono text-xs text-[#857D6E] bg-white border border-[#E6E0D2] px-3 py-2 rounded-lg hidden sm:block">
+              {new Date().toLocaleDateString("en-NP", { year: "numeric", month: "long", day: "numeric" })}
+            </p>
+          </div>
+        } 
+      />
+
+      {/* Filters Section */}
+      <div className="bg-white border border-[#E6E0D2] rounded-xl p-4 flex flex-wrap items-start sm:items-center gap-6 shadow-sm">
+        <div className="flex items-start gap-2 text-[#857D6E]">
+          <Calendar size={16} className="mt-1" />
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wide font-bold">Date Range</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <select 
+                value={dateRange} 
+                onChange={(e) => setDateRange(e.target.value as DateRangeOption)}
+                className="text-sm bg-transparent border-b border-[#E6E0D2] focus:border-[#B8862E] focus:outline-none pb-1 pr-6 font-bold text-[#14161F]"
+              >
+                <option value="ALL">All Time</option>
+                <option value="LAST_7_DAYS">Last 7 Days</option>
+                <option value="LAST_15_DAYS">Last 15 Days</option>
+                <option value="LAST_30_DAYS">Last 30 Days</option>
+                <option value="LAST_45_DAYS">Last 45 Days</option>
+                <option value="LAST_3_MONTHS">Last 3 Months</option>
+                <option value="LAST_6_MONTHS">Last 6 Months</option>
+                <option value="THIS_YEAR">This Year</option>
+                <option value="CUSTOM">Custom Range</option>
+              </select>
+              {dateRange === "CUSTOM" && (
+                <div className="flex items-center gap-1 bg-[#FAF8F3] rounded border border-[#E6E0D2] px-2 py-0.5 mt-2 sm:mt-0">
+                  <input 
+                    type="date" 
+                    className="text-xs bg-transparent focus:outline-none font-mono text-[#14161F]" 
+                    value={customRange.start} 
+                    onChange={(e) => setCustomRange(c => ({...c, start: e.target.value}))} 
+                  />
+                  <span className="text-[#857D6E] text-[10px]">to</span>
+                  <input 
+                    type="date" 
+                    className="text-xs bg-transparent focus:outline-none font-mono text-[#14161F]" 
+                    value={customRange.end} 
+                    onChange={(e) => setCustomRange(c => ({...c, end: e.target.value}))} 
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="w-px h-8 bg-[#E6E0D2] hidden sm:block"></div>
+        <div className="flex items-start gap-2 text-[#857D6E]">
+          <BookOpen size={16} className="mt-1" />
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wide font-bold">Course</label>
+            <select 
+              value={courseFilter} 
+              onChange={(e) => setCourseFilter(e.target.value)}
+              className="text-sm bg-transparent border-b border-[#E6E0D2] focus:border-[#B8862E] focus:outline-none pb-1 pr-6 font-bold text-[#14161F]"
+            >
+              <option value="ALL">All Courses</option>
+              {syllabi.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <section>
+        <div className="mb-4">
+          <h2 className="font-serif text-xl text-[#14161F] font-bold">Business Health</h2>
+          <p className="text-sm text-[#857D6E]">Automated operational assessment (KPIs ignore filters & compute all-time)</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-1 rounded-xl border border-[#E6E0D2] bg-[#14161F] text-white p-6 flex flex-col justify-center items-center text-center shadow-sm">
+            <Activity className="mb-2 text-[#0E7C7B]" size={32} />
+            <div className="text-5xl font-serif mb-1 font-bold">{globalAnalytics.healthScore}</div>
+            <div className="text-sm text-[#9C9788] uppercase tracking-wide font-bold">Health Score / 100</div>
+            <div className="mt-4 text-xs bg-[#0E7C7B]/20 text-[#0E7C7B] px-3 py-1 rounded-full border border-[#0E7C7B]/30 font-bold">
+              {globalAnalytics.healthScore > 75 ? "Optimal" : globalAnalytics.healthScore > 50 ? "Stable" : "Requires Attention"}
+            </div>
+          </div>
+          <div className="md:col-span-3 grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <MetricCard title="Current Cash" value={money(globalAnalytics.currentCash)} icon={<Wallet />} />
+            <MetricCard title="Cash Runway" value={`${globalAnalytics.runwayMonths.toFixed(1)} Months`} icon={<Clock />} />
+            <MetricCard title="Overall Profit Margin" value={pct(globalAnalytics.overallMargin)} icon={<Target />} trend={globalAnalytics.overallMargin > 0 ? "up" : "down"} />
+            <MetricCard title="Expected Cash" value={money(globalAnalytics.expectedCash)} icon={<PiggyBank />} subtext="Current Cash minus Payables" />
+            <MetricCard title="Outstanding Receivable" value={money(globalAnalytics.outReceivable)} icon={<TrendingUp />} color="#8A6416" />
+            <MetricCard title="Outstanding Payable" value={money(globalAnalytics.outPayable)} icon={<TrendingDown />} color="#B23B3B" />
+            <MetricCard title="Net Profit (All Time)" value={money(globalAnalytics.netProfit)} icon={<Landmark />} color={globalAnalytics.netProfit >= 0 ? "#1E8F6F" : "#B23B3B"} />
+            <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm flex flex-col justify-center">
+              <p className="text-[11px] uppercase tracking-wide text-[#857D6E] font-bold mb-2">Top Course</p>
+              <p className="font-bold text-sm truncate text-[#14161F]">{globalAnalytics.courseStats[0]?.name || "None"}</p>
+              <p className="text-sm font-mono text-[#0E7C7B] font-bold">{money(globalAnalytics.courseStats[0]?.profit || 0)} profit</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <h2 className="font-serif text-xl text-[#14161F] font-bold">Course Analytics</h2>
+          <p className="text-sm text-[#857D6E]">Revenue vs Direct Costs (Filtered Data)</p>
+        </div>
+        <div className="rounded-xl border border-[#E6E0D2] bg-white overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[#FAF8F3] text-[#857D6E] text-[11px] uppercase tracking-wider font-bold">
+                <tr>
+                  <th className="px-6 py-4">Course</th>
+                  <th className="px-6 py-4 text-right">Revenue</th>
+                  <th className="px-6 py-4 text-right">Tutor Cost</th>
+                  <th className="px-6 py-4 text-right">Marketing</th>
+                  <th className="px-6 py-4 text-right">Net Profit</th>
+                  <th className="px-6 py-4 text-right">Mktg ROI</th>
+                  <th className="px-6 py-4 text-right">Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E6E0D2]">
+                {analytics.courseStats.map((c) => (
+                  <tr key={c.id} className="hover:bg-[#FAF8F3] transition-colors">
+                    <td className="px-6 py-4 font-bold text-[#14161F]">{c.name}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#4A4638]">{money(c.revenue)}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.tutor > 0 ? money(c.tutor) : "-"}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.marketing > 0 ? money(c.marketing) : "-"}</td>
+                    <td className={`px-6 py-4 text-right font-mono font-bold ${c.profit >= 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}`}>
+                      {money(c.profit)}
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-[#8A6416] font-bold">
+                      {c.roi > 0 ? `${c.roi.toFixed(1)}x` : "-"}
+                    </td>
+                    <td className="px-6 py-4 text-right text-[#8A6416] text-xs">
+                      {"★".repeat(c.score)}{"☆".repeat(5 - c.score)}
+                    </td>
+                  </tr>
+                ))}
+                {analytics.courseStats.length === 0 && (
+                  <tr><td colSpan={7} className="px-6 py-8 text-center text-[#857D6E] font-medium">No course data recorded yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="mb-4">
+          <h2 className="font-serif text-xl text-[#14161F] font-bold">Financial Trends</h2>
+          <p className="text-sm text-[#857D6E]">Cash flow and spending allocation (Filtered Data)</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
+            <h3 className="font-serif text-lg mb-4 font-bold text-[#14161F]">Monthly Revenue vs Expense</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={analytics.monthlyTrends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#E6E0D2" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#857D6E" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#857D6E" }} axisLine={false} tickLine={false} tickFormatter={(v) => `Rs ${v/1000}k`} />
+                  <Tooltip formatter={(v: any) => money(Number(v))} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend wrapperStyle={{ fontSize: 12, paddingTop: '10px' }} />
+                  <Bar dataKey="revenue" name="Revenue" fill="#1E8F6F" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expense" name="Expense" fill="#B23B3B" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
+            <h3 className="font-serif text-lg mb-4 font-bold text-[#14161F]">Expense Breakdown</h3>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <RechartsPieChart>
+                  <Pie data={analytics.expenseData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={2}>
+                    {analytics.expenseData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={(v: any) => money(Number(v))} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                </RechartsPieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <div className="mb-4">
+              <h2 className="font-serif text-xl text-[#14161F] font-bold">Top Performing Batches</h2>
+              <p className="text-sm text-[#857D6E]">Ranked by Net Profit (Filtered Data)</p>
+            </div>
+            <div className="rounded-xl border border-[#E6E0D2] bg-white shadow-sm flex flex-col gap-0 divide-y divide-[#E6E0D2] max-h-[400px] overflow-y-auto">
+              {analytics.batchStats.slice(0, 10).map((b) => (
+                <div key={`${b.courseName}-${b.batch}`} className="p-4 flex items-center justify-between hover:bg-[#FAF8F3]">
+                  <div>
+                    <p className="font-bold text-[#14161F]">{b.batch}</p>
+                    <p className="text-[11px] text-[#857D6E] mt-0.5">{b.courseName}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-mono font-bold ${b.profit >= 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}`}>{money(b.profit)}</p>
+                    <p className="text-[10px] font-bold text-[#857D6E] mt-0.5">Margin: {pct(b.revenue > 0 ? b.profit/b.revenue : 0)}</p>
+                  </div>
+                </div>
+              ))}
+              {analytics.batchStats.length === 0 && <div className="p-8 text-center text-sm font-medium text-[#857D6E]">No batch records found.</div>}
+            </div>
+          </div>
+
+          <div>
+            <div className="mb-4">
+              <h2 className="font-serif text-xl text-[#14161F] font-bold">Owner Capital & Withdrawals</h2>
+              <p className="text-sm text-[#857D6E]">Tracking investments and profit distribution (Filtered Data)</p>
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
+                <h4 className="font-serif font-bold text-lg text-[#14161F] mb-3 border-b border-[#E6E0D2] pb-2">Nischal</h4>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Investment</p>
+                    <p className="font-mono text-[#1E8F6F] font-bold text-sm mt-1">{money(analytics.nischal.inv)}</p>
+                  </div>
+                  <div className="border-l border-r border-[#E6E0D2]">
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Withdrawal</p>
+                    <p className="font-mono text-[#B23B3B] font-bold text-sm mt-1">{money(analytics.nischal.with)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Net Capital</p>
+                    <p className="font-mono font-bold text-sm mt-1 text-[#14161F]">{money(analytics.nischal.net)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
+                <h4 className="font-serif font-bold text-lg text-[#14161F] mb-3 border-b border-[#E6E0D2] pb-2">Dipesh</h4>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Investment</p>
+                    <p className="font-mono text-[#1E8F6F] font-bold text-sm mt-1">{money(analytics.dipesh.inv)}</p>
+                  </div>
+                  <div className="border-l border-r border-[#E6E0D2]">
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Withdrawal</p>
+                    <p className="font-mono text-[#B23B3B] font-bold text-sm mt-1">{money(analytics.dipesh.with)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Net Capital</p>
+                    <p className="font-mono font-bold text-sm mt-1 text-[#14161F]">{money(analytics.dipesh.net)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <hr className="border-[#E6E0D2]" />
+
+      <section>
+        <div className="mb-6">
+          <h2 className="font-serif text-xl text-[#14161F] font-bold">Accounting Ledger</h2>
+          <p className="text-sm text-[#857D6E]">Record or edit transactions directly to the database</p>
+        </div>
+        <LedgerSection rows={allRows} setRows={setAllRows} syllabi={syllabi} supabase={supabase} />
+      </section>
+
+      {/* Reports Modal */}
+      {showReports && (
+        <ReportsModal analytics={analytics} onClose={() => setShowReports(false)} />
+      )}
+    </motion.div>
+  );
+}
+
+// Support components for AccountsManager
+function MetricCard({ title, value, icon, subtext, color = "#14161F", trend }: { title: string, value: string, icon: React.ReactNode, subtext?: string, color?: string, trend?: "up" | "down" }) {
+  return (
+    <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+      <div className="flex justify-between items-start mb-2 text-[#857D6E]">
+        <span className="text-[11px] font-bold uppercase tracking-wider">{title}</span>
+        <span className="opacity-70" style={{ color }}>{icon}</span>
+      </div>
+      <div className="text-2xl font-mono font-bold flex items-center gap-2" style={{ color }}>
+        {value}
+        {trend === "up" && <TrendingUp size={16} className="text-[#1E8F6F]" />}
+        {trend === "down" && <TrendingDown size={16} className="text-[#B23B3B]" />}
+      </div>
+      {subtext && <div className="text-xs text-[#857D6E] font-medium mt-2">{subtext}</div>}
+    </div>
+  );
+}
+
+function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction[], setRows: React.Dispatch<React.SetStateAction<Transaction[]>>, syllabi: Syllabus[], supabase: any }) {
+  const formRef = useRef<HTMLDivElement>(null);
+
+  const emptyDraft = {
+    transaction_date: new Date().toISOString().slice(0, 10),
+    category: "COURSE_INCOME" as AccountingCategory,
+    accounting_status: "CURRENT" as AccountingStatus,
+    syllabus_id: "",
+    batch_name: "",
+    sub_type: "" as AccountingSubType | "",
+    amount: "",
+    description: "",
+    is_accounting: true,
+  };
+
+  const [draft, setDraft] = useState(emptyDraft);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<AccountingCategory | "ALL">("ALL");
+
+  const rule = CATEGORY_RULES[draft.category];
+  
+  const visibleRows = useMemo(() => 
+    (categoryFilter === "ALL" ? rows : rows.filter((r) => r.category === categoryFilter))
+      .slice().sort((a, b) => (a.transaction_date < b.transaction_date ? 1 : -1)),
+  [rows, categoryFilter]);
+
+  function handleEdit(tx: Transaction) {
+    setEditingId(tx.id);
+    setDraft({
+      transaction_date: tx.transaction_date,
+      category: tx.category,
+      accounting_status: tx.accounting_status,
+      syllabus_id: tx.syllabus_id ? String(tx.syllabus_id) : "",
+      batch_name: tx.batch_name || "",
+      sub_type: tx.sub_type || "",
+      amount: String(tx.amount),
+      description: tx.description || "",
+      is_accounting: tx.is_accounting
+    });
+    formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(emptyDraft);
+    setError(null);
+  }
+
+  function validateTransaction(d: typeof draft) {
+    if (rule.requiresSyllabus && !d.syllabus_id.trim()) return `${rule.label} requires selecting a course.`;
+    if (rule.requiresBatch && !d.batch_name.trim()) return `${rule.label} requires batch name.`;
+    if (rule.subTypeRequired && (!d.sub_type || !rule.subTypeOptions?.includes(d.sub_type as any))) return `${rule.label} requires specific sub-type.`;
+    const amt = Number(d.amount);
+    if (!d.amount.trim() || Number.isNaN(amt) || amt <= 0) return "Amount must be greater than 0.";
+    return null;
+  }
+
+  async function handleSubmit() {
+    const err = validateTransaction(draft);
+    if (err) return setError(err);
+    
+    setError(null);
+    setIsSubmitting(true);
+
+    const finalIsAccounting = draft.category === "MARKETING" ? draft.is_accounting : true;
+
+    const payload = {
+      transaction_date: draft.transaction_date,
+      category: draft.category,
+      accounting_status: draft.accounting_status,
+      syllabus_id: draft.syllabus_id ? Number(draft.syllabus_id) : null,
+      batch_name: draft.batch_name || null,
+      sub_type: draft.sub_type || null,
+      amount: Number(draft.amount),
+      description: draft.description || null,
+      is_accounting: finalIsAccounting,
+    };
+
+    if (editingId) {
+      const { data, error: updateError } = await supabase
+        .from("gyanhub_accounting")
+        .update(payload)
+        .eq("id", editingId)
+        .select()
+        .single();
+
+      if (updateError) {
+        setError(updateError.message);
+      } else {
+        const updatedRow = { ...data, amount: Number(data.amount) } as Transaction;
+        setRows((r) => r.map((prev) => prev.id === editingId ? updatedRow : prev));
+        cancelEdit();
+      }
+    } else {
+      const { data, error: insertError } = await supabase
+        .from("gyanhub_accounting")
+        .insert([payload])
+        .select()
+        .single();
+
+      if (insertError) {
+        setError(insertError.message);
+      } else {
+        setRows((r) => [{ ...data, amount: Number(data.amount) } as Transaction, ...r]);
+        setDraft({ ...emptyDraft, transaction_date: draft.transaction_date });
+      }
+    }
+    
+    setIsSubmitting(false);
+  }
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8">
+      <div ref={formRef} className="bg-white border border-[#E6E0D2] rounded-xl p-5 h-fit shadow-sm relative">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-serif font-bold text-lg text-[#14161F]">{editingId ? "Edit Entry" : "New Entry"}</h3>
+          {editingId && (
+            <button onClick={cancelEdit} className="text-[#857D6E] hover:bg-[#FAF8F3] p-1 rounded-full transition-colors" title="Cancel Edit">
+              <X size={18} />
+            </button>
+          )}
+        </div>
+        
+        <div className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Date</span>
+            <input type="date" value={draft.transaction_date} onChange={(e) => setDraft((d) => ({ ...d, transaction_date: e.target.value }))} className="font-mono text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40" />
+          </label>
+          
+          <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Category</span>
+            <select value={draft.category} onChange={(e) => setDraft(d => ({ ...d, category: e.target.value as AccountingCategory, sub_type: "", syllabus_id: CATEGORY_RULES[e.target.value as AccountingCategory].requiresSyllabus ? d.syllabus_id : "", batch_name: CATEGORY_RULES[e.target.value as AccountingCategory].requiresBatch ? d.batch_name : "" }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
+              {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_RULES[c].label}</option>)}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Status</span>
+            <select value={draft.accounting_status} onChange={(e) => setDraft((d) => ({ ...d, accounting_status: e.target.value as AccountingStatus }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
+              <option value="CURRENT">Current</option><option value="PREPAID">Prepaid</option><option value="OUTSTANDING">Outstanding</option>
+            </select>
+          </label>
+
+          {(rule.requiresSyllabus || draft.category === "MARKETING") && (
+            <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Course</span>
+              <select value={draft.syllabus_id} onChange={(e) => setDraft((d) => ({ ...d, syllabus_id: e.target.value }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
+                <option value="">Select a Course...</option>
+                {syllabi.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name || `Course #${s.id}`}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          {(rule.requiresBatch || draft.category === "MARKETING") && (
+            <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Batch Name</span>
+              <input type="text" value={draft.batch_name} onChange={(e) => setDraft((d) => ({ ...d, batch_name: e.target.value }))} placeholder="e.g. DSA-Batch-11" className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40" />
+            </label>
+          )}
+
+          {rule.subTypeOptions && (
+            <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Sub-type</span>
+              <select value={draft.sub_type} onChange={(e) => setDraft((d) => ({ ...d, sub_type: e.target.value as AccountingSubType }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
+                <option value="">Select…</option>{rule.subTypeOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </label>
+          )}
+
+          <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Amount (NPR)</span>
+            <input type="number" min={1} value={draft.amount} onChange={(e) => setDraft((d) => ({ ...d, amount: e.target.value }))} placeholder="0" className="font-mono text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40" />
+          </label>
+
+          <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Description</span>
+            <textarea value={draft.description} onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} rows={2} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40 resize-none" />
+          </label>
+
+          {draft.category === "MARKETING" && (
+            <label className="flex items-center gap-2 text-xs pt-1 font-bold">
+              <input
+                type="checkbox"
+                checked={draft.is_accounting}
+                onChange={(e) => setDraft((d) => ({ ...d, is_accounting: e.target.checked }))}
+                className="accent-[#0E7C7B]"
+              />
+              <span className="text-[#14161F]">
+                Counts toward global P&L
+                <span className="block text-[10px] text-[#857D6E] mt-0.5 font-medium">
+                  Uncheck if this is just tracking analytical marketing spend to calculate ROI on a course/batch.
+                </span>
+              </span>
+            </label>
+          )}
+
+          {error && <p className="text-xs text-[#B23B3B] bg-[#F3DAD6] border border-[#EAC2BC] rounded-lg px-3 py-2 flex items-center gap-1 font-bold"><AlertTriangle size={14}/> {error}</p>}
+
+          <div className="flex gap-2 mt-2">
+            {editingId && (
+              <button onClick={cancelEdit} disabled={isSubmitting} className="flex-1 bg-[#FAF8F3] text-[#14161F] text-sm font-bold rounded-lg py-2.5 transition-colors hover:bg-[#EFEBE1] border border-[#E6E0D2]">
+                Cancel
+              </button>
+            )}
+            <button onClick={handleSubmit} disabled={isSubmitting} className={`flex-[2] bg-[#14161F] text-white text-sm font-bold rounded-lg py-2.5 transition-colors ${isSubmitting ? "opacity-70" : "hover:bg-[#22242F]"}`}>
+              {isSubmitting ? "Saving..." : (editingId ? "Update Entry" : "Post to Ledger")}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-[#E6E0D2] rounded-xl overflow-hidden shadow-sm flex flex-col h-fit">
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-[#E6E0D2] bg-[#FAF8F3]">
+          <h3 className="font-serif font-bold text-lg text-[#14161F]">Recent Transactions</h3>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as AccountingCategory | "ALL")} className="text-xs font-bold border border-[#E6E0D2] rounded-md px-2 py-1.5 bg-white focus:outline-none">
+            <option value="ALL">All categories</option>
+            {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_RULES[c].label}</option>)}
+          </select>
+        </div>
+
+        <div className="overflow-x-auto max-h-[700px] overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-[#EFEBE1] z-10">
+              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#857D6E]">
+                <th className="text-left px-5 py-3">Date</th>
+                <th className="text-left px-4 py-3">Category</th>
+                <th className="text-left px-4 py-3">Course/Batch</th>
+                <th className="text-right px-5 py-3">Amount</th>
+                <th className="text-right px-4 py-3 w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E6E0D2]">
+              {visibleRows.map((r) => {
+                const type = deriveTransactionType(r.category);
+                const isOutflow = type === "EXPENSE" || type === "WITHDRAWAL";
+                
+                let courseName = "";
+                if (r.syllabus_id) {
+                  const s = syllabi.find(s => s.id === r.syllabus_id);
+                  courseName = s ? s.name : `Course #${r.syllabus_id}`;
+                }
+
+                return (
+                  <tr key={r.id} className="hover:bg-[#FAF8F3] transition-colors group">
+                    <td className="px-5 py-3 font-mono text-xs font-bold text-[#857D6E] whitespace-nowrap">{r.transaction_date}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-[#14161F] text-xs">
+                        {CATEGORY_RULES[r.category].label}
+                        {!r.is_accounting && <span className="ml-1.5 text-[9px] bg-[#EFEBE1] text-[#857D6E] px-1 py-0.5 rounded">NON-P&L</span>}
+                      </div>
+                      <div className="text-[10px] font-medium text-[#857D6E] mt-0.5 max-w-[200px] truncate">{r.description}</div>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-bold text-[#857D6E]">
+                      {courseName ? <div>{courseName}</div> : null}
+                      {r.batch_name ? <div className="font-medium">{r.batch_name}</div> : (r.sub_type ? <div className="font-medium">{r.sub_type}</div> : "—")}
+                    </td>
+                    <td className={`px-5 py-3 text-right font-mono font-bold ${isOutflow ? "text-[#B23B3B]" : "text-[#1E8F6F]"}`}>
+                      {isOutflow ? "−" : "+"}{money(r.amount)}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <button onClick={() => handleEdit(r)} className="p-1.5 text-[#B4AF9F] hover:bg-[#EFEBE1] hover:text-[#14161F] rounded transition-colors opacity-0 group-hover:opacity-100" title="Edit Entry">
+                        <Pencil size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {visibleRows.length === 0 && (
+                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm font-medium text-[#857D6E]">No transactions found.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof useAnalytics>, onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState(1);
+
+  const REPORT_LIST = [
+    { id: 1, title: "Operating Expense Ratio", question: "Are we spending efficiently?" },
+    { id: 2, title: "Collection Health", question: "Are we collecting our income?" },
+    { id: 3, title: "Profit per Expense Rupee", question: "How efficiently do we spend?" },
+    { id: 4, title: "Course Profit Contribution", question: "Which courses drive profit?" },
+    { id: 5, title: "Profit Concentration", question: "Are we dependent on a few courses?" },
+    { id: 6, title: "Break-Even Revenue", question: "How much must we earn to cover costs?" },
+    { id: 7, title: "Expense-to-Revenue Trend", question: "Is efficiency improving?" },
+    { id: 8, title: "Monthly Profit Growth", question: "Is profitability growing?" },
+    { id: 9, title: "Cash Safety / Runway", question: "How long can we operate?" },
+    { id: 10, title: "Outstanding Liability Risk", question: "Can outstanding money cover what we owe?" },
+  ];
+
+  const renderReportContent = () => {
+    const r = analytics.reports;
+
+    switch (activeTab) {
+      case 1:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Operating Expense Ratio</h3>
+            <p className="text-sm font-medium text-[#857D6E]">How much of our revenue are we consuming just to operate the business?</p>
+            <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+              <div className="text-5xl font-serif font-bold mb-2 text-[#B23B3B]">{pct(r.operatingExpenseRatio)}</div>
+              <p className="text-sm font-mono font-bold text-[#B4AF9F]">Formula: Total Expense / Total Income × 100</p>
+              <div className="mt-6 w-full bg-[#EFEBE1] rounded-full h-3">
+                <div className="bg-[#B23B3B] h-3 rounded-full" style={{ width: `${Math.min(100, r.operatingExpenseRatio * 100)}%` }}></div>
+              </div>
+            </div>
+          </div>
+        );
+      case 2:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Collection Health</h3>
+            <p className="text-sm font-medium text-[#857D6E]">How much of our earned money is actually in our hands?</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-2">Cash Collection Coverage</p>
+                <div className="text-4xl font-serif font-bold text-[#1E8F6F]">{pct(r.cashCollectionCoverage)}</div>
+                <p className="text-xs font-bold text-[#B4AF9F] mt-2">Cash / (Cash + Receivables)</p>
+              </div>
+              <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-2">Receivable Ratio</p>
+                <div className="text-4xl font-serif font-bold text-[#8A6416]">{pct(r.receivableRatio)}</div>
+                <p className="text-xs font-bold text-[#B4AF9F] mt-2">Outstanding / Total Income</p>
+              </div>
+            </div>
+          </div>
+        );
+      case 3:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Expense Efficiency</h3>
+            <p className="text-sm font-medium text-[#857D6E]">For every Rs 1 we spend, how much profit are we generating?</p>
+            <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+              <div className="text-5xl font-serif font-bold mb-2 text-[#1E8F6F]">{r.expenseEfficiency.toFixed(2)}x</div>
+              <p className="text-sm text-[#14161F] font-bold">Every Rs 1 of expense generates Rs {r.expenseEfficiency.toFixed(2)} in profit.</p>
+              <p className="text-xs font-mono font-bold text-[#B4AF9F] mt-4">Formula: Net Profit / Total Expense</p>
+            </div>
+          </div>
+        );
+      case 4:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Course Profit Contribution</h3>
+            <p className="text-sm font-medium text-[#857D6E]">Which courses are actually responsible for our total profit?</p>
+            <div className="bg-white rounded-xl border border-[#E6E0D2] overflow-hidden shadow-sm">
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAF8F3]">
+                  <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-[#857D6E]">
+                    <th className="px-4 py-3">Course</th>
+                    <th className="px-4 py-3 text-right">Net Profit</th>
+                    <th className="px-4 py-3 text-right">Contribution %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E0D2]">
+                  {analytics.courseStats.filter(c => c.profit > 0).map(c => (
+                    <tr key={c.id}>
+                      <td className="px-4 py-3 font-bold">{c.name}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1E8F6F]">{money(c.profit)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">{pct(c.profitContribution)}</td>
+                    </tr>
+                  ))}
+                  {analytics.courseStats.filter(c => c.profit > 0).length === 0 && (
+                    <tr><td colSpan={3} className="px-4 py-6 text-center font-medium text-[#857D6E]">No profitable courses in this period.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      case 5:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Profit Concentration</h3>
+            <p className="text-sm font-medium text-[#857D6E]">How dependent is GyanHub&apos;s profit on a small number of courses?</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm text-center">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-2">Top 1 Course Dependency</p>
+                <div className="text-4xl font-serif font-bold text-[#B23B3B]">{pct(r.top1Dependency)}</div>
+              </div>
+              <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm text-center">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-2">Top 3 Course Dependency</p>
+                <div className="text-4xl font-serif font-bold text-[#B23B3B]">{pct(r.top3Dependency)}</div>
+              </div>
+            </div>
+          </div>
+        );
+      case 6:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Break-Even Revenue</h3>
+            <p className="text-sm font-medium text-[#857D6E]">How much revenue do we need to cover our expenses?</p>
+            <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+              <div className="flex justify-between items-end border-b border-[#E6E0D2] pb-4 mb-4">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Break-even Revenue (Total Cost)</p>
+                  <div className="text-3xl font-mono font-bold text-[#B23B3B]">{money(r.breakEvenRevenue)}</div>
+                </div>
+                <div className="text-right">
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Actual Revenue</p>
+                  <div className="text-3xl font-mono font-bold text-[#1E8F6F]">{money(analytics.totalIncome)}</div>
+                </div>
+              </div>
+              <div className="text-sm font-bold text-[#14161F]">
+                {analytics.totalIncome >= r.breakEvenRevenue 
+                  ? `Comfortably above break-even by ${money(analytics.totalIncome - r.breakEvenRevenue)}` 
+                  : `Currently operating below break-even point by ${money(r.breakEvenRevenue - analytics.totalIncome)}`}
+              </div>
+            </div>
+          </div>
+        );
+      case 7:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Expense-to-Revenue Trend</h3>
+            <p className="text-sm font-medium text-[#857D6E]">Is our operational efficiency improving over time?</p>
+            <div className="bg-white rounded-xl border border-[#E6E0D2] overflow-hidden shadow-sm">
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAF8F3]">
+                  <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-[#857D6E]">
+                    <th className="px-4 py-3">Month</th>
+                    <th className="px-4 py-3 text-right">Revenue</th>
+                    <th className="px-4 py-3 text-right">Expense</th>
+                    <th className="px-4 py-3 text-right">Expense Ratio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E0D2]">
+                  {[...analytics.monthlyTrends].reverse().map(m => (
+                    <tr key={m.month}>
+                      <td className="px-4 py-3 font-bold">{m.month}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1E8F6F]">{money(m.revenue)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-[#B23B3B]">{money(m.expense)}</td>
+                      <td className={`px-4 py-3 text-right font-mono font-bold ${m.expenseRatio > 0.8 ? 'text-[#B23B3B]' : ''}`}>
+                        {pct(m.expenseRatio)}
+                      </td>
+                    </tr>
+                  ))}
+                  {analytics.monthlyTrends.length === 0 && (
+                    <tr><td colSpan={4} className="px-4 py-6 text-center font-medium text-[#857D6E]">No trends to show.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      case 8:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Monthly Profit Growth</h3>
+            <p className="text-sm font-medium text-[#857D6E]">Is profitability actually growing or shrinking?</p>
+            <div className="bg-white rounded-xl border border-[#E6E0D2] overflow-hidden shadow-sm">
+              <table className="w-full text-sm">
+                <thead className="bg-[#FAF8F3]">
+                  <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-[#857D6E]">
+                    <th className="px-4 py-3">Month</th>
+                    <th className="px-4 py-3 text-right">Net Profit</th>
+                    <th className="px-4 py-3 text-right">M-o-M Growth</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E0D2]">
+                  {[...analytics.monthlyTrends].reverse().map((m, idx) => (
+                    <tr key={m.month}>
+                      <td className="px-4 py-3 font-bold">{m.month}</td>
+                      <td className={`px-4 py-3 text-right font-mono font-bold ${m.profit >= 0 ? 'text-[#1E8F6F]' : 'text-[#B23B3B]'}`}>
+                        {money(m.profit)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">
+                        {m.profitGrowth === null ? "—" : (
+                          <span className={m.profitGrowth > 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}>
+                            {m.profitGrowth > 0 ? "+" : ""}{pct(m.profitGrowth)}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {analytics.monthlyTrends.length === 0 && (
+                    <tr><td colSpan={3} className="px-4 py-6 text-center font-medium text-[#857D6E]">No trends to show.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      case 9:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Cash Safety & Runway</h3>
+            <p className="text-sm font-medium text-[#857D6E]">How long can we operate with our current cash buffer?</p>
+            <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                  <div className="text-5xl font-serif font-bold text-[#14161F]">
+                    {r.cashSafety === 99 ? "∞" : r.cashSafety.toFixed(1)} <span className="text-xl">months</span>
+                  </div>
+                  <p className="text-sm font-mono font-bold text-[#B4AF9F] mt-2">Current Cash: {money(analytics.currentCash)} / Avg Mo Expense: {money(analytics.avgMonthlyExpense)}</p>
+                </div>
+                <div className={`px-6 py-3 rounded-xl border-2 font-bold text-lg
+                  ${r.cashSafety < 2 ? "bg-red-50 border-red-200 text-red-700" : 
+                    r.cashSafety < 4 ? "bg-orange-50 border-orange-200 text-orange-700" :
+                    r.cashSafety < 6 ? "bg-green-50 border-green-200 text-green-700" :
+                    "bg-blue-50 border-blue-200 text-blue-700"}
+                `}>
+                  {r.cashSafety < 2 ? "🔴 Critical" : 
+                   r.cashSafety < 4 ? "🟠 Watch" :
+                   r.cashSafety < 6 ? "🟢 Healthy" : "🔵 Strong"}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 10:
+        return (
+          <div className="space-y-4">
+            <h3 className="text-2xl font-serif font-bold text-[#14161F]">Outstanding Liability Risk</h3>
+            <p className="text-sm font-medium text-[#857D6E]">Can our outstanding expected money cover what we owe?</p>
+            <div className="bg-white p-6 rounded-xl border border-[#E6E0D2] shadow-sm">
+              <div className="grid grid-cols-2 gap-4 border-b border-[#E6E0D2] pb-6 mb-6">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Receivables (Inflow)</p>
+                  <div className="text-3xl font-mono font-bold text-[#8A6416]">{money(analytics.outReceivable)}</div>
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Payables (Outflow)</p>
+                  <div className="text-3xl font-mono font-bold text-[#B23B3B]">{money(analytics.outPayable)}</div>
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Receivable-to-Payable Ratio</p>
+                  <div className="text-2xl font-mono font-bold">{r.liabilityRisk === 999 ? "∞" : r.liabilityRisk.toFixed(2)}x</div>
+                </div>
+                <div className={`px-4 py-2 rounded-lg font-bold text-sm
+                  ${r.liabilityRisk > 1.2 || r.liabilityRisk === 999 ? "bg-[#DCEEE6] text-[#1E8F6F]" : 
+                    r.liabilityRisk > 0.8 ? "bg-orange-50 text-orange-700" : "bg-red-50 text-red-700"}
+                `}>
+                  {r.liabilityRisk > 1.2 || r.liabilityRisk === 999 ? "🟢 Comfortable" : 
+                   r.liabilityRisk > 0.8 ? "🟠 Monitor" : "🔴 Cash Pressure Potential"}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-[#14161F]/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden border border-[#E6E0D2]">
+        <div className="flex items-center justify-between p-5 border-b border-[#E6E0D2] shrink-0">
+          <div>
+            <h2 className="text-xl font-serif font-bold text-[#14161F]">Executive Accounting Reports</h2>
+            <p className="text-xs font-medium text-[#857D6E] mt-1">Deep financial insights derived from filtered real-time ledger data</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-[#FAF8F3] rounded-full transition-colors text-[#857D6E]">
+            <X size={20} />
+          </button>
+        </div>
+        
+        <div className="flex flex-1 overflow-hidden min-h-[400px]">
+          {/* Sidebar */}
+          <div className="w-1/3 border-r border-[#E6E0D2] overflow-y-auto bg-[#FAF8F3] shrink-0">
+            {REPORT_LIST.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => setActiveTab(r.id)}
+                className={`w-full text-left p-4 border-b border-[#E6E0D2] transition-colors
+                  ${activeTab === r.id ? 'bg-white border-l-4 border-l-[#14161F]' : 'hover:bg-white/50 border-l-4 border-l-transparent'}`}
+              >
+                <div className={`font-bold text-sm ${activeTab === r.id ? 'text-[#14161F]' : 'text-[#857D6E]'}`}>{r.title}</div>
+                <div className="text-[10px] font-medium text-[#B4AF9F] mt-1">{r.question}</div>
+              </button>
+            ))}
+          </div>
+          
+          {/* Content Area */}
+          <div className="w-2/3 bg-white overflow-y-auto p-8 relative">
+            {renderReportContent()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================================
+   ROOT COMPONENT (AdminDashboard)
 ============================================================================ */
 export default function AdminDashboard() {
   const supabase = useSupabase();
@@ -306,7 +1545,7 @@ export default function AdminDashboard() {
   const [loginPass, setLoginPass] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loadingAuth, setLoadingAuth] = useState(true);
-  const [activeTab, setActiveTab] = useState("Dashboard");
+  const [activeTab, setActiveTab] = useState("Accounts");
   
   const [chatOpen, setChatOpen] = useState(false);
   const [activeUser, setActiveUser] = useState<string | null>(null);
@@ -372,11 +1611,11 @@ export default function AdminDashboard() {
           <form onSubmit={handleLoginSubmit} className="space-y-4">
             <div>
               <label className="block text-[10px] font-bold text-[#857D6E] uppercase tracking-widest mb-2">Username</label>
-              <input type="text" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} className="w-full bg-white p-3.5 rounded-lg outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] transition-colors" placeholder="Username" />
+              <input type="text" value={loginUser} onChange={(e) => setLoginUser(e.target.value)} className="w-full bg-white p-3.5 rounded-lg outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] transition-colors" placeholder="Username" />
             </div>
             <div>
               <label className="block text-[10px] font-bold text-[#857D6E] uppercase tracking-widest mb-2">Password</label>
-              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full bg-white p-3.5 rounded-lg outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] transition-colors" placeholder="Password" />
+              <input type="password" value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full bg-white p-3.5 rounded-lg outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] transition-colors" placeholder="Password" />
             </div>
             {loginError && <p className="text-[#B23B3B] text-xs font-bold text-center mt-2">{loginError}</p>}
             <button type="submit" className="w-full bg-[#14161F] hover:bg-[#22242F] text-white font-bold py-3.5 rounded-lg shadow-lg transition-all mt-4 tracking-wide">Unlock Dashboard</button>
@@ -387,12 +1626,13 @@ export default function AdminDashboard() {
   }
 
   const navItems = [
-    { key: "Dashboard", label: "Inbox", icon: <LayoutDashboard size={18} /> },
-    { key: "Orders", label: "Orders", icon: <ShoppingCart size={18} /> },
-    { key: "Batch Management", label: "Batch Management", icon: <Layers size={18} /> },
-    { key: "Bookings", label: "Bookings & Leads", icon: <CalendarDays size={18} /> },
-    { key: "Certificates", label: "Certificates", icon: <Award size={18} /> },
-  ];
+  { key: "Accounts", label: "ERP & Accounts", icon: <Wallet size={18} /> },
+  { key: "Dashboard", label: "Inbox", icon: <LayoutDashboard size={18} /> },
+  { key: "Orders", label: "Orders", icon: <ShoppingCart size={18} /> },
+  { key: "Batch Management", label: "Batch Management", icon: <Layers size={18} /> },
+  { key: "Bookings", label: "Bookings & Leads", icon: <CalendarDays size={18} /> },
+  { key: "Certificates", label: "Certificates", icon: <Award size={18} /> },
+];
 
   return (
     <div className="fixed inset-0 z-[9999] bg-[#F6F3EC] text-[#14161F] font-sans flex overflow-hidden">
@@ -401,7 +1641,7 @@ export default function AdminDashboard() {
           <div className="h-11 w-11 rounded-lg bg-[#B8862E] flex items-center justify-center text-[#14161F] font-serif font-bold text-lg shadow-lg">GH</div>
           <div>
             <p className="text-lg font-serif font-bold text-white tracking-tight leading-tight">The Registrar</p>
-            <p className="text-[10px] uppercase tracking-[0.25em] text-[#B8862E]">Admin Ledger</p>
+            <p className="text-[10px] uppercase font-bold tracking-[0.25em] text-[#B8862E]">Admin Ledger</p>
           </div>
         </div>
         <nav className="flex-1 px-4 space-y-1 mt-4 pb-10">
@@ -418,6 +1658,7 @@ export default function AdminDashboard() {
         <AnimatePresence mode="wait">
           {activeTab === "Dashboard" && <DashboardView key="dash" conversations={conversations} loading={loadingConversations} onOpenChat={openChat} />}
           {activeTab === "Orders" && <OrdersManager key="ord" data={orders} refresh={refreshOrdersAndEnr} onOpenChat={openChat} />}
+          {activeTab === "Accounts" && <AccountsManager key="accounts" supabase={supabase} />}
           {activeTab === "Batch Management" && <BatchManager key="batch" data={courses} batches={batches} physicalCourses={physicalCourses} refresh={() => { refreshCoursesAndBatches(); refreshPhysical(); }} />}
           {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} syllabi={syllabi} physicalLeads={physicalLeads} physicalCourses={physicalCourses} orders={orders} refresh={() => { refreshOrdersAndEnr(); refreshPhysical(); refreshCoursesAndBatches(); }} onOpenChat={openChat} />}
           {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={refreshCertificates} onOpenChat={openChat} />}
@@ -437,50 +1678,6 @@ export default function AdminDashboard() {
   );
 }
 
-/* ============================================================================
-   SHARED PRIMITIVES
-============================================================================ */
-function SidebarBtn({ icon, label, active, onClick, color }: any) {
-  return (
-    <button onClick={onClick} className={`w-full flex items-center gap-4 px-5 py-3.5 rounded-lg text-sm font-bold transition-all relative ${active ? "bg-white/[0.06] text-white" : `hover:bg-white/[0.04] ${color || "text-[#9C9788]"}`}`}>
-      {active && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#B8862E] rounded-r" />}
-      {icon} <span>{label}</span>
-    </button>
-  );
-}
-
-function SectionHeader({ eyebrow, title, subtitle, action }: { eyebrow: string; title: string; subtitle?: string; action?: React.ReactNode }) {
-  return (
-    <div className="flex justify-between items-end flex-wrap gap-4 pb-5 border-b border-[#E6E0D2]">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-[#B8862E] mb-1">{eyebrow}</p>
-        <h2 className="text-3xl font-serif font-bold text-[#14161F] tracking-tight">{title}</h2>
-        {subtitle && <p className="text-[#857D6E] font-medium mt-1 text-sm">{subtitle}</p>}
-      </div>
-      {action}
-    </div>
-  );
-}
-
-function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
-  return (
-    <div className="relative w-full">
-      <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#B4AF9F]" size={17} />
-      <input type="text" placeholder={placeholder} value={value} onChange={(e) => onChange(e.target.value)} className="w-full pl-11 pr-4 py-3.5 bg-white rounded-xl border border-[#E6E0D2] shadow-sm outline-none focus:border-[#B8862E] focus:ring-2 focus:ring-[#B8862E]/10 transition-all font-medium text-[#14161F] text-sm" />
-    </div>
-  );
-}
-
-function ToggleSwitch({ checked, onChange, label, activeColor = '#0E7C7B' }: { checked: boolean, onChange: () => void, label?: string, activeColor?: string }) {
-  return (
-    <div className="flex items-center gap-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); onChange(); }}>
-      <div className="w-10 h-6 flex items-center rounded-full p-1 transition-colors duration-300" style={{ backgroundColor: checked ? activeColor : '#D8D2C2' }}>
-        <div className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform duration-300 ${checked ? 'translate-x-4' : 'translate-x-0'}`}></div>
-      </div>
-      {label && <span className="text-xs font-bold whitespace-nowrap" style={{ color: checked ? activeColor : '#857D6E' }}>{label}</span>}
-    </div>
-  );
-}
 
 /* ============================================================================
    DASHBOARD (INBOX)
@@ -505,7 +1702,7 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
           <div className="flex bg-white p-1 rounded-lg border border-[#E6E0D2]">
             <button onClick={() => setFilter('all')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${filter === 'all' ? 'bg-[#14161F] text-white' : 'text-[#857D6E] hover:text-[#14161F]'}`}>All</button>
             <button onClick={() => setFilter('unread')} className={`px-4 py-2 rounded-md text-sm font-bold transition-all flex items-center gap-1.5 ${filter === 'unread' ? 'bg-[#14161F] text-white' : 'text-[#857D6E] hover:text-[#14161F]'}`}>
-              Unread {unreadCount > 0 && <span className="bg-[#B23B3B] text-white text-[10px] px-1.5 py-0.5 rounded-full">{unreadCount}</span>}
+              Unread {unreadCount > 0 && <span className="bg-[#B23B3B] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{unreadCount}</span>}
             </button>
           </div>
         } />
@@ -532,10 +1729,10 @@ function DashboardView({ conversations, loading, onOpenChat }: any) {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-baseline mb-1">
                       <h4 className={`text-sm font-bold truncate ${isUnread ? 'text-[#14161F]' : 'text-[#4A4638]'}`}>{name}</h4>
-                      <span className="text-xs text-[#B4AF9F] whitespace-nowrap ml-4">{timeAgo(msg.created_at)}</span>
+                      <span className="text-xs font-bold text-[#B4AF9F] whitespace-nowrap ml-4">{timeAgo(msg.created_at)}</span>
                     </div>
-                    <p className={`text-sm truncate ${isUnread ? 'text-[#14161F] font-bold' : 'text-[#857D6E]'}`}>
-                      {msg.sender_role === 'admin' && <span className="mr-1 text-[#0E7C7B]">You:</span>}{msg.content}
+                    <p className={`text-sm truncate ${isUnread ? 'text-[#14161F] font-bold' : 'text-[#857D6E] font-medium'}`}>
+                      {msg.sender_role === 'admin' && <span className="mr-1 text-[#0E7C7B] font-bold">You:</span>}{msg.content}
                     </p>
                   </div>
                 </div>
@@ -652,7 +1849,7 @@ function OrderInsights({ data }: { data: Order[] }) {
       <div>
         <p className="text-[10px] font-bold uppercase text-[#857D6E] mb-2 flex items-center gap-1.5"><PieChart size={12} /> Verified Amount by Order Type</p>
         {Object.keys(byType).length === 0 ? (
-          <p className="text-xs text-[#B4AF9F] italic">No verified orders in this range.</p>
+          <p className="text-xs text-[#B4AF9F] font-bold italic">No verified orders in this range.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {Object.entries(byType).map(([type, v]) => (
@@ -719,7 +1916,6 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
 
     const newPaid = order.paid_amount + order.pending_amount;
 
-    // 1. Update the order status and amounts
     const { error: orderError } = await supabase
       .from('orders_v2')
       .update({ 
@@ -735,7 +1931,6 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
       return;
     }
 
-    // 2. Branch based on order type
     if (order.enrollment_id) {
       if (order.order_type === "Online Course") {
         await supabase
@@ -748,13 +1943,12 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
           .from("physical_leads")
           .update({
             is_confirmed: true,
-            status: "deposit_paid", // Updating to appropriate status
+            status: "deposit_paid",
           })
           .eq("id", order.enrollment_id);
       }
     }
 
-    // 3. Refresh UI
     refresh();
     setSelectedOrder(null);
   };
@@ -817,16 +2011,16 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                 <tr key={order.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3] cursor-pointer" onClick={() => setSelectedOrder(order)}>
                   <td className="p-5 text-sm text-[#857D6E] font-bold whitespace-nowrap align-top">
                     {new Date(order.updated_at || order.created_at).toLocaleDateString()}
-                    <p className="text-[10px] font-medium text-[#B4AF9F] mt-0.5">{timeAgo(order.updated_at || order.created_at)}</p>
+                    <p className="text-[10px] font-bold text-[#B4AF9F] mt-0.5">{timeAgo(order.updated_at || order.created_at)}</p>
                   </td>
                   <td className="p-5 align-top">
                     <p className="font-bold text-[#14161F] cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={(e) => { e.stopPropagation(); order.user_id ? onOpenChat(order.user_id) : alert('No linked user account found for this order.'); }}>{order.full_name}</p>
-                    <p className="text-xs text-[#857D6E] mt-1">{order.contact_number}</p>
-                    <p className="text-xs text-[#857D6E]">{order.email}</p>
+                    <p className="text-xs font-bold text-[#857D6E] mt-1">{order.contact_number}</p>
+                    <p className="text-xs font-bold text-[#857D6E]">{order.email}</p>
                   </td>
                   <td className="p-5 align-top">
                     <p className="font-bold text-[#4A4638] flex items-center gap-2 flex-wrap mb-2">
-                      <span className="uppercase text-[10px] tracking-widest bg-[#EFEBE1] px-2 py-1 rounded text-[#857D6E] whitespace-nowrap">{order.order_type}</span>
+                      <span className="uppercase text-[10px] font-bold tracking-widest bg-[#EFEBE1] px-2 py-1 rounded text-[#857D6E] whitespace-nowrap">{order.order_type}</span>
                     </p>
                     <div className="mt-2 mb-2">
                       {order.pending_amount > 0 && (
@@ -839,13 +2033,13 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                           Financial Details <ChevronDown size={13} className="group-open:rotate-180 transition-transform" />
                         </summary>
                         <div className="flex flex-col gap-1.5 mt-2 bg-[#FAF8F3] p-3 rounded-xl border border-[#E6E0D2] min-w-[220px]">
-                          <div className="flex justify-between items-center text-xs"><span className="font-bold text-[#857D6E]">Paid:</span><span className="font-bold text-[#1E8F6F]">Rs.{order.paid_amount} <span className="text-[#B4AF9F] font-medium">/ Rs.{order.locked_price}</span></span></div>
-                          <div className="flex justify-between items-center text-xs"><span className="font-bold text-[#857D6E]">Pending:</span><span className="font-bold text-[#C08A28]">Rs.{order.pending_amount} <span className="text-[#D8C58F] font-medium">/ Rs.{order.locked_price}</span></span></div>
-                          <div className="flex justify-between items-center text-xs border-t border-[#E6E0D2] pt-1.5 mt-0.5"><span className="font-bold text-[#857D6E]">Remaining:</span><span className="font-bold text-[#B23B3B]">Rs.{remainingAmount} <span className="text-[#D9A9A2] font-medium">/ Rs.{order.locked_price}</span></span></div>
+                          <div className="flex justify-between items-center text-xs"><span className="font-bold text-[#857D6E]">Paid:</span><span className="font-bold text-[#1E8F6F]">Rs.{order.paid_amount} <span className="text-[#B4AF9F] font-bold">/ Rs.{order.locked_price}</span></span></div>
+                          <div className="flex justify-between items-center text-xs"><span className="font-bold text-[#857D6E]">Pending:</span><span className="font-bold text-[#C08A28]">Rs.{order.pending_amount} <span className="text-[#D8C58F] font-bold">/ Rs.{order.locked_price}</span></span></div>
+                          <div className="flex justify-between items-center text-xs border-t border-[#E6E0D2] pt-1.5 mt-0.5"><span className="font-bold text-[#857D6E]">Remaining:</span><span className="font-bold text-[#B23B3B]">Rs.{remainingAmount} <span className="text-[#D9A9A2] font-bold">/ Rs.{order.locked_price}</span></span></div>
                         </div>
                       </details>
                     </div>
-                    <p className="text-xs font-medium text-[#857D6E] truncate max-w-[250px]" title={order.order_name}>Target: {order.order_name}</p>
+                    <p className="text-xs font-bold text-[#857D6E] truncate max-w-[250px]" title={order.order_name}>Target: {order.order_name}</p>
                   </td>
                   <td className="p-5 align-top" onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-col gap-3">
@@ -872,7 +2066,7 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                 </tr>
               );
             })}
-            {filteredData.length === 0 && <tr><td colSpan={5} className="p-6 text-center text-[#857D6E]">No orders found.</td></tr>}
+            {filteredData.length === 0 && <tr><td colSpan={5} className="p-6 text-center font-bold text-[#857D6E]">No orders found.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -881,34 +2075,34 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setSelectedOrder(null)}>
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-2xl w-full relative overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
             <button onClick={() => setSelectedOrder(null)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-2xl font-serif font-bold mb-6 flex items-center gap-2">Order Details <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border font-sans ${statusColors[selectedOrder.status] || 'bg-[#EFEBE1] text-[#4A4638]'}`}>{selectedOrder.status}</span></h3>
+            <h3 className="text-2xl font-serif font-bold mb-6 flex items-center gap-2">Order Details <span className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-full border font-sans font-bold ${statusColors[selectedOrder.status] || 'bg-[#EFEBE1] text-[#4A4638]'}`}>{selectedOrder.status}</span></h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 text-sm font-medium text-[#4A4638]">
               <div className="bg-[#FAF8F3] p-4 rounded-xl border border-[#E6E0D2] flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase text-[#B4AF9F] mb-2">Customer Info</p>
-                  <p><span className="font-bold text-[#14161F]">Name:</span> <span className="cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={() => selectedOrder.user_id ? onOpenChat(selectedOrder.user_id) : alert('No linked user account.')}>{selectedOrder.full_name}</span></p>
-                  <p className="break-all"><span className="font-bold text-[#14161F]">Email:</span> {selectedOrder.email}</p>
-                  <p><span className="font-bold text-[#14161F]">Phone:</span> {selectedOrder.contact_number}</p>
+                  <p><span className="font-bold text-[#14161F]">Name:</span> <span className="cursor-pointer font-bold hover:text-[#0E7C7B] hover:underline" onClick={() => selectedOrder.user_id ? onOpenChat(selectedOrder.user_id) : alert('No linked user account.')}>{selectedOrder.full_name}</span></p>
+                  <p className="break-all font-bold"><span className="font-bold text-[#14161F]">Email:</span> {selectedOrder.email}</p>
+                  <p className="font-bold"><span className="font-bold text-[#14161F]">Phone:</span> {selectedOrder.contact_number}</p>
                 </div>
                 <a href={`https://wa.me/${(selectedOrder.contact_number || '').replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 bg-[#25D366] hover:opacity-90 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition-colors w-full">
                   <MessageCircle size={16} /> Contact via WhatsApp
                 </a>
               </div>
-              <div className="bg-[#FAF8F3] p-4 rounded-xl border border-[#E6E0D2] space-y-2 relative">
+              <div className="bg-[#FAF8F3] p-4 rounded-xl border border-[#E6E0D2] space-y-2 relative font-bold">
                 {selectedOrder.pending_amount > 0 && <div className="absolute -top-3 -right-3 bg-[#C08A28] text-white rounded-full p-2 shadow-lg"><AlertCircle size={16} /></div>}
                 <p className="text-[10px] font-bold uppercase text-[#B4AF9F] mb-2">Order Info</p>
                 <p><span className="font-bold text-[#14161F]">Type:</span> <span className="uppercase">{selectedOrder.order_type}</span></p>
                 <p><span className="font-bold text-[#14161F]">Order Name:</span> {selectedOrder.order_name}</p>
-                <p><span className="font-bold text-[#14161F] text-[#1E8F6F]">Verified Paid:</span> Rs. {selectedOrder.paid_amount} / Rs. {selectedOrder.locked_price}</p>
-                <p><span className="font-bold text-[#14161F] text-[#C08A28]">Pending Review:</span> Rs. {selectedOrder.pending_amount} / Rs. {selectedOrder.locked_price}</p>
-                <p><span className="font-bold text-[#14161F] text-[#B23B3B]">Remaining Due:</span> Rs. {Math.max(0, selectedOrder.locked_price - selectedOrder.paid_amount - selectedOrder.pending_amount)}</p>
+                <p><span className="font-bold text-[#14161F]">Verified Paid:</span> <span className="text-[#1E8F6F]">Rs. {selectedOrder.paid_amount}</span> / Rs. {selectedOrder.locked_price}</p>
+                <p><span className="font-bold text-[#14161F]">Pending Review:</span> <span className="text-[#C08A28]">Rs. {selectedOrder.pending_amount}</span> / Rs. {selectedOrder.locked_price}</p>
+                <p><span className="font-bold text-[#14161F]">Remaining Due:</span> <span className="text-[#B23B3B]">Rs. {Math.max(0, selectedOrder.locked_price - selectedOrder.paid_amount - selectedOrder.pending_amount)}</span></p>
                 <p className="pt-2 border-t border-[#E6E0D2] mt-2"><span className="font-bold text-[#14161F]">Created:</span> {new Date(selectedOrder.created_at).toLocaleString()}</p>
                 <p><span className="font-bold text-[#14161F]">Last Updated:</span> {new Date(selectedOrder.updated_at || selectedOrder.created_at).toLocaleString()}</p>
               </div>
             </div>
             {selectedOrder.pending_amount > 0 && (
               <div className="bg-[#F5E7C8] p-4 rounded-xl border border-[#E9D6A2] flex items-center justify-between gap-4 mb-6">
-                <div><p className="text-[#8A6416] font-bold text-sm">Action Required</p><p className="text-[#8A6416]/80 text-xs font-medium">Verify the screenshot below to approve Rs. {selectedOrder.pending_amount}.</p></div>
+                <div><p className="text-[#8A6416] font-bold text-sm">Action Required</p><p className="text-[#8A6416]/80 text-xs font-bold">Verify the screenshot below to approve Rs. {selectedOrder.pending_amount}.</p></div>
                 <div className="flex gap-2 shrink-0">
                   <button onClick={() => handleVerifyPayment(selectedOrder)} className="px-4 py-2 bg-[#1E8F6F] text-white text-xs font-bold rounded-lg shadow hover:opacity-90 flex items-center gap-1"><CheckSquare size={14} /> Verify</button>
                   <button onClick={() => handleRejectPayment(selectedOrder)} className="px-4 py-2 bg-[#F3DAD6] text-[#B23B3B] text-xs font-bold rounded-lg shadow hover:opacity-90">Reject</button>
@@ -930,7 +2124,7 @@ function OrdersManager({ data, refresh, onOpenChat }: { data: Order[], refresh: 
                 <a href={getImageUrl(selectedOrder.screenshot_url)} target="_blank" rel="noreferrer" className="block max-w-full">
                   <img src={getImageUrl(selectedOrder.screenshot_url)} alt="Payment Receipt" className="rounded-lg shadow-sm border border-[#E6E0D2] max-h-96 object-contain cursor-zoom-in" />
                 </a>
-              ) : <p className="text-[#B4AF9F] italic py-4">No screenshot provided.</p>}
+              ) : <p className="text-[#B4AF9F] font-bold italic py-4">No screenshot provided.</p>}
             </div>
           </div>
         </div>
@@ -1061,18 +2255,18 @@ function OnlineBatchManager({ data, batches, refresh }: { data: OnlineCourse[], 
                   <td className="p-5 text-center"><span className="w-10 h-10 mx-auto bg-[#0E7C7B]/10 text-[#0E7C7B] rounded-xl flex items-center justify-center font-bold text-lg">{batch.batch_no}</span></td>
                   <td className="p-5">
                     <p className="font-bold text-[#14161F] flex items-center gap-2"><Clock size={13} className="text-[#B4AF9F]" /> {batch.start_datetime ? new Date(batch.start_datetime).toLocaleString() : 'No Start Date Set'}</p>
-                    <p className="text-sm text-[#857D6E] mt-1">Timing: {batch.timing || 'TBD'}</p>
+                    <p className="text-sm font-bold text-[#857D6E] mt-1">Timing: {batch.timing || 'TBD'}</p>
                   </td>
                   <td className="p-5 space-y-1">
-                    {batch.online_class_link ? <a href={batch.online_class_link} target="_blank" className="text-sm font-bold text-[#0E7C7B] hover:underline flex items-center gap-1"><Monitor size={12} /> Class Link</a> : <p className="text-xs text-[#B4AF9F]">No Class Link</p>}
-                    {batch.google_classroom_link ? <a href={batch.google_classroom_link} target="_blank" className="text-sm font-bold text-[#1E8F6F] hover:underline flex items-center gap-1"><GraduationCap size={12} /> Classroom</a> : <p className="text-xs text-[#B4AF9F]">No Classroom Link</p>}
-                    {batch.whatsapp_group_link ? <a href={batch.whatsapp_group_link} target="_blank" className="text-sm font-bold text-[#25D366] hover:underline flex items-center gap-1"><MessageCircle size={12} /> WhatsApp Group</a> : <p className="text-xs text-[#B4AF9F]">No WA Link</p>}
+                    {batch.online_class_link ? <a href={batch.online_class_link} target="_blank" className="text-sm font-bold text-[#0E7C7B] hover:underline flex items-center gap-1"><Monitor size={12} /> Class Link</a> : <p className="text-xs font-bold text-[#B4AF9F]">No Class Link</p>}
+                    {batch.google_classroom_link ? <a href={batch.google_classroom_link} target="_blank" className="text-sm font-bold text-[#1E8F6F] hover:underline flex items-center gap-1"><GraduationCap size={12} /> Classroom</a> : <p className="text-xs font-bold text-[#B4AF9F]">No Classroom Link</p>}
+                    {batch.whatsapp_group_link ? <a href={batch.whatsapp_group_link} target="_blank" className="text-sm font-bold text-[#25D366] hover:underline flex items-center gap-1"><MessageCircle size={12} /> WhatsApp Group</a> : <p className="text-xs font-bold text-[#B4AF9F]">No WA Link</p>}
                   </td>
                   <td className="p-5"><ToggleSwitch checked={batch.is_active} onChange={() => toggleBatchStatus(batch)} label={batch.is_active ? 'Active' : 'Archived'} /></td>
                   <td className="p-5 text-right"><button onClick={() => openBatchEdit(batch, selectedCourse.id, selectedCourse.title)} className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20" title="Edit Batch"><Edit2 size={15} /></button></td>
                 </tr>
               ))}
-              {courseBatches.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-[#857D6E]">No batches created for this course yet.</td></tr>}
+              {courseBatches.length === 0 && <tr><td colSpan={5} className="p-10 text-center font-bold text-[#857D6E]">No batches created for this course yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1083,7 +2277,7 @@ function OnlineBatchManager({ data, batches, refresh }: { data: OnlineCourse[], 
               <button onClick={() => setBatchModalOpen(false)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
               <div className="p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-4">
                 <h3 className="text-2xl font-serif font-bold text-[#14161F]">{editingBatch.id ? `Edit Batch ${editingBatch.batch_no}` : 'Create New Batch'}</h3>
-                <p className="text-sm text-[#857D6E] font-medium mt-1">{selectedCourse.title}</p>
+                <p className="text-sm text-[#857D6E] font-bold mt-1">{selectedCourse.title}</p>
               </div>
               <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto no-scrollbar">
                 <div className="grid grid-cols-2 gap-4">
@@ -1093,9 +2287,9 @@ function OnlineBatchManager({ data, batches, refresh }: { data: OnlineCourse[], 
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Start Date & Time</label><input type="datetime-local" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editingBatch.start_datetime ? new Date(new Date(editingBatch.start_datetime).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''} onChange={e => setEditingBatch({ ...editingBatch, start_datetime: new Date(e.target.value).toISOString() })} /></div>
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Timing Description</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editingBatch.timing || ''} onChange={e => setEditingBatch({ ...editingBatch, timing: e.target.value })} placeholder='e.g., 8:00 PM to 9:30 PM' /></div>
                 <hr className="border-[#E6E0D2] my-2" />
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Online Class Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] text-sm" value={editingBatch.online_class_link || ''} onChange={e => setEditingBatch({ ...editingBatch, online_class_link: e.target.value })} placeholder="https://meet.google.com/..." /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Google Classroom Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] text-sm" value={editingBatch.google_classroom_link || ''} onChange={e => setEditingBatch({ ...editingBatch, google_classroom_link: e.target.value })} placeholder="https://classroom.google.com/..." /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp Group Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] text-sm" value={editingBatch.whatsapp_group_link || ''} onChange={e => setEditingBatch({ ...editingBatch, whatsapp_group_link: e.target.value })} placeholder="https://chat.whatsapp.com/..." /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Online Class Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editingBatch.online_class_link || ''} onChange={e => setEditingBatch({ ...editingBatch, online_class_link: e.target.value })} placeholder="https://meet.google.com/..." /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Google Classroom Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editingBatch.google_classroom_link || ''} onChange={e => setEditingBatch({ ...editingBatch, google_classroom_link: e.target.value })} placeholder="https://classroom.google.com/..." /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp Group Link</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editingBatch.whatsapp_group_link || ''} onChange={e => setEditingBatch({ ...editingBatch, whatsapp_group_link: e.target.value })} placeholder="https://chat.whatsapp.com/..." /></div>
               </div>
               <div className="p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] flex justify-end gap-3 shrink-0">
                 <button onClick={() => setBatchModalOpen(false)} className="px-6 py-3 font-bold text-[#857D6E] hover:text-[#14161F]">Cancel</button>
@@ -1120,8 +2314,8 @@ function OnlineBatchManager({ data, batches, refresh }: { data: OnlineCourse[], 
           <tbody>
             {data.map(course => (
               <tr key={course.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3] cursor-pointer" onClick={() => openCourseEdit(course)}>
-                <td className="p-5"><p className="font-bold text-[#14161F] text-base">{course.title}</p><p className="text-xs text-[#B4AF9F] font-mono mt-1">ID: {course.id}</p></td>
-                <td className="p-5 whitespace-nowrap"><p className="font-bold text-[#4A4638]">Rs. {course.fee}</p>{course.discount > 0 ? <p className="text-xs text-[#1E8F6F] font-bold bg-[#DCEEE6] px-2 py-0.5 rounded inline-block mt-1">{course.discount}% Discount</p> : <p className="text-xs text-[#B4AF9F] mt-1">No Discount</p>}</td>
+                <td className="p-5"><p className="font-bold text-[#14161F] text-base">{course.title}</p><p className="text-xs text-[#B4AF9F] font-mono font-bold mt-1">ID: {course.id}</p></td>
+                <td className="p-5 whitespace-nowrap"><p className="font-bold text-[#4A4638]">Rs. {course.fee}</p>{course.discount > 0 ? <p className="text-xs text-[#1E8F6F] font-bold bg-[#DCEEE6] px-2 py-0.5 rounded inline-block mt-1">{course.discount}% Discount</p> : <p className="text-xs font-bold text-[#B4AF9F] mt-1">No Discount</p>}</td>
                 <td className="p-5 text-center"><span className="inline-block bg-[#0E7C7B]/10 text-[#0E7C7B] font-bold px-3 py-1.5 rounded-xl border border-[#0E7C7B]/20 text-lg">{course.active_batch_no || '-'}</span></td>
                 <td className="p-5 flex justify-center" onClick={e => e.stopPropagation()}><ToggleSwitch checked={course.is_active} onChange={() => toggleCourseStatus(course)} label={course.is_active ? 'Active' : 'Inactive'} /></td>
                 <td className="p-5 text-right" onClick={e => e.stopPropagation()}>
@@ -1136,7 +2330,7 @@ function OnlineBatchManager({ data, batches, refresh }: { data: OnlineCourse[], 
       {courseModalOpen && editingCourse && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setCourseModalOpen(false)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <p className="font-mono text-[10px] text-[#B4AF9F] absolute top-4 left-6">ID: {editingCourse.id}</p>
+            <p className="font-mono text-[10px] font-bold text-[#B4AF9F] absolute top-4 left-6">ID: {editingCourse.id}</p>
             <button onClick={() => setCourseModalOpen(false)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
             <div className="p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-4"><h3 className="text-2xl font-serif font-bold text-[#14161F]">Edit Config</h3></div>
             <div className="p-6 space-y-4">
@@ -1221,9 +2415,9 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
     ? rawOutcomes
     : typeof rawOutcomes === 'string'
       ? rawOutcomes
-          .replace(/^\{|\}$/g, '') // Removes Postgres array brackets {} if they exist
+          .replace(/^\{|\}$/g, '')
           .split(',')
-          .map(s => s.replace(/^"|"$/g, '').trim()) // Removes quotes and whitespace
+          .map(s => s.replace(/^"|"$/g, '').trim())
           .filter(Boolean)
       : [];
 
@@ -1248,13 +2442,13 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
               <tr key={course.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3] cursor-pointer" onClick={() => openEdit(course)}>
                 <td className="p-5">
                   <p className="font-bold text-[#14161F] text-base">{course.title}</p>
-                  <p className="text-xs text-[#B4AF9F] font-mono mt-1">{course.course_code || 'No Code'} {course.batch_no ? `· Batch ${course.batch_no}` : ''}</p>
-                  <p className="text-xs text-[#857D6E] mt-1 flex items-center gap-1"><MapPin size={11} /> {course.location}</p>
+                  <p className="text-xs font-bold text-[#B4AF9F] font-mono mt-1">{course.course_code || 'No Code'} {course.batch_no ? `· Batch ${course.batch_no}` : ''}</p>
+                  <p className="text-xs font-bold text-[#857D6E] mt-1 flex items-center gap-1"><MapPin size={11} /> {course.location}</p>
                 </td>
                 <td className="p-5"><span className="uppercase text-[10px] tracking-widest bg-[#B8543D]/10 text-[#B8543D] px-2 py-1 rounded font-bold">{course.category}</span></td>
                 <td className="p-5 whitespace-nowrap">
                   <p className="font-bold text-[#4A4638]">Rs. {course.price}</p>
-                  {course.discount_price ? <p className="text-xs text-[#1E8F6F] font-bold bg-[#DCEEE6] px-2 py-0.5 rounded inline-block mt-1">Now Rs. {course.discount_price}</p> : <p className="text-xs text-[#B4AF9F] mt-1">No Discount</p>}
+                  {course.discount_price ? <p className="text-xs text-[#1E8F6F] font-bold bg-[#DCEEE6] px-2 py-0.5 rounded inline-block mt-1">Now Rs. {course.discount_price}</p> : <p className="text-xs font-bold text-[#B4AF9F] mt-1">No Discount</p>}
                 </td>
                 <td className="p-5 text-center"><span className="inline-block bg-[#B8543D]/10 text-[#B8543D] font-bold px-3 py-1.5 rounded-xl border border-[#B8543D]/20">{course.enrolled_count ?? 0} / {course.max_seats ?? '-'}</span></td>
                 <td className="p-5 flex justify-center" onClick={e => e.stopPropagation()}><ToggleSwitch checked={course.is_active} onChange={() => toggleActive(course)} label={course.is_active ? 'Active' : 'Inactive'} activeColor="#B8543D" /></td>
@@ -1263,7 +2457,7 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-[#857D6E]">No physical courses found.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={6} className="p-10 text-center font-bold text-[#857D6E]">No physical courses found.</td></tr>}
           </tbody>
         </table>
       </div>
@@ -1291,7 +2485,7 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Instructor Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.instructor_name || ''} onChange={e => setEditing({ ...editing, instructor_name: e.target.value })} /></div>
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Batch No.</label><input type="number" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.batch_no ?? ''} onChange={e => setEditing({ ...editing, batch_no: Number(e.target.value) })} /></div>
               </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Location / Branch</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] text-sm" value={editing.location || ''} onChange={e => setEditing({ ...editing, location: e.target.value })} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Location / Branch</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.location || ''} onChange={e => setEditing({ ...editing, location: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Start Date</label><input type="date" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.start_date || ''} onChange={e => setEditing({ ...editing, start_date: e.target.value })} /></div>
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Timing</label><input type="text" placeholder="e.g., 5:00 PM - 7:00 PM" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.timing || ''} onChange={e => setEditing({ ...editing, timing: e.target.value })} /></div>
@@ -1305,11 +2499,11 @@ function PhysicalCoursesManager({ data, refresh }: { data: PhysicalCourse[], ref
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Price (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.price ?? ''} onChange={e => setEditing({ ...editing, price: Number(e.target.value) })} /></div>
                 <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Discount Price (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.discount_price ?? ''} onChange={e => setEditing({ ...editing, discount_price: e.target.value === '' ? undefined : Number(e.target.value) })} /></div>
               </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Learning Outcomes (one per line)</label><textarea rows={4} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] text-sm resize-none" value={outcomesText} onChange={e => setEditing({ ...editing, learning_outcomes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Tutor Bio</label><textarea rows={3} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] text-sm resize-none" value={editing.tutor_bio || ''} onChange={e => setEditing({ ...editing, tutor_bio: e.target.value })} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Learning Outcomes (one per line)</label><textarea rows={4} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm resize-none" value={outcomesText} onChange={e => setEditing({ ...editing, learning_outcomes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) })} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Tutor Bio</label><textarea rows={3} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm resize-none" value={editing.tutor_bio || ''} onChange={e => setEditing({ ...editing, tutor_bio: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Course Image URL</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] text-sm" value={editing.course_image_url || ''} onChange={e => setEditing({ ...editing, course_image_url: e.target.value })} /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Instructor Image URL</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] text-sm" value={editing.instructor_image_url || ''} onChange={e => setEditing({ ...editing, instructor_image_url: e.target.value })} /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Course Image URL</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.course_image_url || ''} onChange={e => setEditing({ ...editing, course_image_url: e.target.value })} /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Instructor Image URL</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-sm" value={editing.instructor_image_url || ''} onChange={e => setEditing({ ...editing, instructor_image_url: e.target.value })} /></div>
               </div>
               <div className="pt-2"><ToggleSwitch checked={!!editing.is_active} onChange={() => setEditing({ ...editing, is_active: !editing.is_active })} label={editing.is_active ? 'Active (visible to public)' : 'Inactive (hidden)'} activeColor="#B8543D" /></div>
             </div>
@@ -1398,7 +2592,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
 
   const savePayment = async () => {
     if (!editingPayment) return;
-    const newPending = 0; // Fix: We explicitly set pending to 0 since we are manually confirming funds here.
+    const newPending = 0;
 
     if (!editingPayment.order_id) {
       const course = courses.find((c: any) => c.id === editingPayment.course_id);
@@ -1446,8 +2640,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     const ordPayload = {
       enrollment_id: enrData.id, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa,
       order_type: 'Online Course', order_name: selectedCourse.title, paid_amount: newBooking.paid_amount, 
-      pending_amount: 0, // Fix: Do not calculate pending_amount as remaining balance. Pending is for unverified screenshots.
-      locked_price: newBooking.locked_price, status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
+      pending_amount: 0, locked_price: newBooking.locked_price, status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
     };
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
     if (ordErr) alert("Enrollment added, but auto-order creation failed: " + ordErr.message);
@@ -1593,9 +2786,9 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
                 return (
                   <tr key={enr.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
                     <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#14161F] cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={(e) => { e.stopPropagation(); enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.'); }}>{enr.full_name}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{enr.email}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{enr.whatsapp_number}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">Rs. {lockedFee}</td>
+                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">{enr.email}</td>
+                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">{enr.whatsapp_number}</td>
+                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">Rs. {lockedFee}</td>
                     <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {paidAmt}</td>
                     <td className={`p-3 border-r border-[#E6E0D2] font-bold ${pendingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>
                       Rs. {pendingAmt}
@@ -1612,7 +2805,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
                   </tr>
                 );
               })}
-              {paginatedEnrollments.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-[#857D6E] font-medium">No matching enrollments found.</td></tr>}
+              {paginatedEnrollments.length === 0 && <tr><td colSpan={8} className="p-8 text-center font-bold text-[#857D6E]">No matching enrollments found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1655,7 +2848,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setEditingPayment(null)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
             <h3 className="text-xl font-serif font-bold mb-1">Edit Payment Details</h3>
-            <p className="text-xs font-medium text-[#857D6E] mb-6">{editingPayment.full_name}</p>
+            <p className="text-xs font-bold text-[#857D6E] mb-6">{editingPayment.full_name}</p>
             <div className="space-y-4">
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416]" /></div>
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F]" /></div>
@@ -1695,7 +2888,6 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 
   useEffect(() => { setCurrentPage(1); }, [selectedCourse, selectedBatch, searchQuery, confirmedFilter]);
 
-  // Join leads (lead info) with their linked order (payment info) via orders_v2.leads_id.
   const leadsWithOrders: PhysicalLead[] = useMemo(() => {
     const physicalOrders = orders.filter(o => !!o.leads_id);
     return data.map(lead => {
@@ -1772,7 +2964,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
     const { error } = await supabase.from('orders_v2').update({
       locked_price: editLocked,
       paid_amount: editPaid,
-      pending_amount: 0, // Fix: Admin is explicitly confirming payments here. Zero out pending amount.
+      pending_amount: 0, 
       updated_at: new Date().toISOString(),
     }).eq('leads_id', leadId);
     if (error) { alert("Failed to update payment: " + error.message); return false; }
@@ -1894,7 +3086,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
                 <Building2 size={26} />
               </div>
               <h3 className="font-bold text-[#14161F] text-base px-2 leading-snug">{course.title}</h3>
-              <p className="text-xs text-[#B4AF9F] font-mono mt-1">{course.course_code || 'No Code'}</p>
+              <p className="text-xs font-bold text-[#B4AF9F] font-mono mt-1">{course.course_code || 'No Code'}</p>
             </div>
           );
         })}
@@ -1991,8 +3183,8 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
           <span className="text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Remaining: <span className="font-black">Rs. {pendingVolume}</span></span>
         </div>
         <div className="flex gap-2">
-          <button onClick={handleCopyContactsCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Contact Details</button>
-          <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Copy CSV List</button>
+          <button onClick={handleCopyContactsCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Copy Contacts</button>
+          <button onClick={handleCopyCSV} className="flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Full CSV</button>
         </div>
       </div>
 
@@ -2002,50 +3194,43 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
             <thead>
               <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[#4A4638] uppercase font-bold tracking-wider sticky top-0 z-10">
                 <th className="p-3 border-r border-[#E6E0D2]">Full Name</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Email</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Contact Number</th>
+                <th className="p-3 border-r border-[#E6E0D2]">Phone</th>
+                <th className="p-3 border-r border-[#E6E0D2]">Status</th>
                 <th className="p-3 border-r border-[#E6E0D2]">Locked Fee</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Paid Amount</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Remaining Amount</th>
+                <th className="p-3 border-r border-[#E6E0D2]">Paid</th>
+                <th className="p-3 border-r border-[#E6E0D2]">Remaining</th>
                 <th className="p-3 border-r border-[#E6E0D2] text-center">Confirmed</th>
                 <th className="p-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedLeads.map(lead => {
-                const hasOrder = !!lead.order_id;
-                const lockedFee = lead.locked_price ?? 0;
-                const paidAmt = lead.paid_amount ?? 0;
-                const remainingAmt = lead.remaining_amount ?? 0;
-                return (
-                  <tr key={lead.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
-                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#14161F]">{lead.full_name}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{lead.email || '-'}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">{lead.phone}</td>
-                    {hasOrder ? (
-                      <>
-                        <td className="p-3 border-r border-[#E6E0D2] text-[#4A4638]">Rs. {lockedFee}</td>
-                        <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {paidAmt}</td>
-                        <td className={`p-3 border-r border-[#E6E0D2] font-bold ${remainingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>Rs. {remainingAmt}</td>
-                      </>
-                    ) : (
-                      <td colSpan={3} className="p-3 border-r border-[#E6E0D2] text-[#8A6416] font-bold">
-                        <span className="inline-flex items-center gap-1 bg-[#F5E7C8] px-2 py-1 rounded text-[10px] uppercase"><AlertCircle size={11} /> No Order Linked</span>
-                      </td>
-                    )}
-                    <td className="p-3 border-r border-[#E6E0D2] text-center">
-                      <input type="checkbox" checked={!!lead.is_confirmed} onChange={() => toggleConfirmation(lead.id, !!lead.is_confirmed)} className="w-5 h-5 cursor-pointer accent-[#1E8F6F] rounded" />
-                    </td>
-                    <td className="p-3 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button onClick={() => openEditLead(lead)} className="text-[10px] font-bold bg-[#FAF8F3] border border-[#E6E0D2] px-3 py-1.5 rounded hover:bg-[#EFEBE1] transition-colors shadow-sm flex items-center gap-1"><Edit2 size={12} />Edit</button>
-                        <button onClick={() => deleteLead(lead.id)} className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-3 py-1.5 rounded hover:opacity-80 transition-colors flex items-center gap-1"><Trash2 size={12} />Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {paginatedLeads.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-[#857D6E] font-medium">No matching pipeline records found.</td></tr>}
+              {paginatedLeads.map(lead => (
+                <tr key={lead.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
+                  <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#14161F]">
+                    {lead.full_name}
+                    <p className="text-[10px] text-[#857D6E] font-medium">{lead.email || 'No email'}</p>
+                  </td>
+                  <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">{lead.phone}</td>
+                  <td className="p-3 border-r border-[#E6E0D2]">
+                    <span className={`uppercase text-[9px] font-bold tracking-widest px-2 py-1 rounded-full border ${lead.status === 'enrolled' ? 'bg-[#DCEEE6] text-[#1E8F6F] border-[#C3E3D5]' : lead.status === 'cancelled' ? 'bg-[#F3DAD6] text-[#B23B3B] border-[#EAC2BC]' : 'bg-[#F5E7C8] text-[#8A6416] border-[#E9D6A2]'}`}>{lead.status}</span>
+                  </td>
+                  <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">Rs. {lead.locked_price || 0}</td>
+                  <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {lead.paid_amount || 0}</td>
+                  <td className={`p-3 border-r border-[#E6E0D2] font-bold ${(lead.remaining_amount || 0) > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>
+                    Rs. {lead.remaining_amount || 0}
+                  </td>
+                  <td className="p-3 border-r border-[#E6E0D2] text-center">
+                    <input type="checkbox" checked={!!lead.is_confirmed} onChange={() => toggleConfirmation(lead.id, !!lead.is_confirmed)} className="w-5 h-5 cursor-pointer accent-[#B8543D] rounded" />
+                  </td>
+                  <td className="p-3 text-center">
+                    <div className="flex justify-center gap-2">
+                      <button onClick={() => openEditLead(lead)} className="text-[10px] font-bold bg-[#FAF8F3] border border-[#E6E0D2] px-3 py-1.5 rounded hover:bg-[#EFEBE1] transition-colors flex items-center gap-1"><Edit2 size={12} />Edit</button>
+                      <button onClick={() => deleteLead(lead.id)} className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-3 py-1.5 rounded hover:opacity-80 transition-colors flex items-center gap-1"><Trash2 size={12} />Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {paginatedLeads.length === 0 && <tr><td colSpan={8} className="p-8 text-center font-bold text-[#857D6E]">No matching leads found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -2064,18 +3249,15 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setIsAddingLead(false)}>
           <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
             <button onClick={() => setIsAddingLead(false)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-2xl font-serif font-bold mb-1">Add Walk-in Lead</h3>
-            <p className="text-xs font-medium text-[#857D6E] mb-6">Create a physical lead directly in the ledger. A linked order is created automatically.</p>
+            <h3 className="text-2xl font-serif font-bold mb-1">Add Lead</h3>
+            <p className="text-xs font-medium text-[#857D6E] mb-6">Create physical enrollment manually.</p>
             <div className="space-y-4">
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={newLead.full_name} onChange={(e) => setNewLead({ ...newLead, full_name: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="John Doe" /></div>
               <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Phone Number</label><input type="text" value={newLead.phone} onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="98XXXXXXXX" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email Address (Optional)</label><input type="email" value={newLead.email} onChange={(e) => setNewLead({ ...newLead, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="john@example.com" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={newLead.locked_price} onChange={(e) => setNewLead({ ...newLead, locked_price: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={newLead.paid_amount} onChange={(e) => setNewLead({ ...newLead, paid_amount: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-              </div>
-              <div className="bg-[#B8543D]/10 p-3 rounded-xl border border-[#B8543D]/20 mt-2">
-                <p className="text-xs font-bold text-[#B8543D]">Note: This lead will be saved permanently into the currently active Batch {selectedCourse?.batch_no || '(Unassigned)'}.</p>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email (Optional)</label><input type="email" value={newLead.email} onChange={(e) => setNewLead({ ...newLead, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" placeholder="john@example.com" /></div>
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-[#E6E0D2]">
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Price (Rs)</label><input type="number" value={newLead.locked_price} onChange={(e) => setNewLead({ ...newLead, locked_price: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={newLead.paid_amount} onChange={(e) => setNewLead({ ...newLead, paid_amount: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-bold text-[#1E8F6F]" /></div>
               </div>
             </div>
             <div className="mt-8 flex justify-end gap-3">
@@ -2088,59 +3270,50 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 
       {editingLead && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setEditingLead(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-lg w-full relative overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-2xl w-full relative max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <button onClick={() => setEditingLead(null)} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
             <h3 className="text-xl font-serif font-bold mb-1">Edit Lead</h3>
-            <p className="text-xs font-medium text-[#857D6E] mb-6">{editingLead.full_name}</p>
-            <div className="space-y-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#857D6E]">Lead Information</p>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={editForm.full_name} onChange={e => setEditForm({ ...editForm, full_name: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Phone</label><input type="text" value={editForm.phone} onChange={e => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-              </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email</label><input type="email" value={editForm.email} onChange={e => setEditForm({ ...editForm, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Status</label>
-                  <select value={editForm.status} onChange={e => setEditForm({ ...editForm, status: e.target.value as any })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]">
+            <p className="text-xs font-bold text-[#857D6E] mb-6">{editingLead.full_name}</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-[#14161F] border-b border-[#E6E0D2] pb-2">Lead Information</h4>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Status</label>
+                  <select value={editForm.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value as any })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-xs">
                     <option value="new">New</option><option value="contacted">Contacted</option><option value="interested">Interested</option>
                     <option value="follow_up">Follow Up</option><option value="booked">Booked</option><option value="deposit_paid">Deposit Paid</option>
                     <option value="enrolled">Enrolled</option><option value="cancelled">Cancelled</option>
                   </select>
                 </div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Batch No.</label><input type="number" value={editForm.batch_no ?? ''} onChange={e => setEditForm({ ...editForm, batch_no: e.target.value === '' ? undefined : Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={editForm.full_name} onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-xs" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Phone</label><input type="text" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-xs" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email</label><input type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-xs" /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Counselor Notes</label><textarea value={editForm.counselor_notes} onChange={(e) => setEditForm({ ...editForm, counselor_notes: e.target.value })} rows={3} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F] text-xs resize-none" /></div>
               </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Office / Branch</label><input type="text" value={editForm.office_location} onChange={e => setEditForm({ ...editForm, office_location: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Follow-up Date</label><input type="date" value={editForm.follow_up_date} onChange={e => setEditForm({ ...editForm, follow_up_date: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Assigned To</label><input type="text" value={editForm.assigned_to} onChange={e => setEditForm({ ...editForm, assigned_to: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-bold text-[#14161F]" /></div>
+
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-[#14161F] border-b border-[#E6E0D2] pb-2">Financials</h4>
+                {editingLead.order_id ? (
+                  <>
+                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416] text-xs" /></div>
+                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F] text-xs" /></div>
+                    <div className="p-3 bg-[#EFEBE1] rounded-xl flex justify-between items-center border border-[#E6E0D2]">
+                      <label className="block text-[10px] font-bold text-[#857D6E] uppercase">Remaining</label>
+                      <span className={`font-black text-sm ${editLocked - editPaid > 0 ? 'text-[#B23B3B]' : 'text-[#1E8F6F]'}`}>Rs. {Math.max(0, editLocked - editPaid)}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="bg-[#F3DAD6] p-4 rounded-xl border border-[#EAC2BC] text-[#B23B3B] text-xs font-bold flex gap-2">
+                    <Ban size={16} className="shrink-0" />
+                    <p>No associated order found. Payment values cannot be edited until an order is created by the student checking out, or created manually.</p>
+                  </div>
+                )}
               </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Counselor Notes</label><textarea rows={2} value={editForm.counselor_notes} onChange={e => setEditForm({ ...editForm, counselor_notes: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] resize-none" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Remarks</label><textarea rows={2} value={editForm.remarks} onChange={e => setEditForm({ ...editForm, remarks: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8543D] font-medium text-[#14161F] resize-none" /></div>
             </div>
-            <div className="mt-6 pt-6 border-t border-[#E6E0D2] space-y-4">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#857D6E]">Payment Information (orders_v2)</p>
-              {editingLead.order_id ? (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416]" /></div>
-                    <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F]" /></div>
-                  </div>
-                  <div className="p-3 bg-[#EFEBE1] rounded-xl flex justify-between items-center border border-[#E6E0D2]">
-                    <label className="block text-[10px] font-bold text-[#857D6E] uppercase">Remaining Amount (auto-calculated)</label>
-                    <span className={`font-black ${editLocked - editPaid > 0 ? 'text-[#B23B3B]' : 'text-[#1E8F6F]'}`}>Rs. {Math.max(0, editLocked - editPaid)}</span>
-                  </div>
-                  {editingLead.bill_no && <p className="text-[10px] font-bold text-[#B4AF9F]">Bill No: {editingLead.bill_no}</p>}
-                </>
-              ) : (
-                <div className="flex items-center gap-2 bg-[#F5E7C8] border border-[#E9D6A2] text-[#8A6416] px-4 py-3 rounded-xl text-xs font-bold">
-                  <AlertCircle size={15} /> No linked order found for this lead. Payment editing is disabled.
-                </div>
-              )}
-            </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setEditingLead(null)} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors">Cancel</button>
-              <button onClick={handleSaveEdit} className="px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg hover:opacity-90 transition-colors">Save Changes</button>
+
+            <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-[#E6E0D2]">
+              <button onClick={() => setEditingLead(null)} className="px-5 py-2 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
+              <button onClick={handleSaveEdit} className="px-6 py-2 rounded-xl font-bold bg-[#B8543D] text-white shadow-lg hover:opacity-90 transition-colors text-sm">Save Changes</button>
             </div>
           </div>
         </div>
@@ -2152,171 +3325,60 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 /* ============================================================================
    CERTIFICATES
 ============================================================================ */
-function CertificatesManager({ data, syllabi, refresh, onOpenChat }: { data: Certificate[], syllabi: any[], refresh: () => void, onOpenChat: (id: string) => void }) {
+function CertificatesManager({ data, syllabi, refresh, onOpenChat }: any) {
   const supabase = useSupabase();
-  const router = useRouter();
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-
-  const getImageUrl = (path: string) => {
-    if (!path) return '';
-    if (path.startsWith('http')) return path;
-    const { data } = supabase.storage.from('certificates').getPublicUrl(path);
-    return data.publicUrl;
-  };
-
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10;
-
-  const [form, setForm] = useState({
-    id: null as string | null, name: '', email: '', syllabus_name: '',
-    issue_date: new Date().toISOString().split('T')[0], certificate_code: '', existing_image: '', file: null as File | null
-  });
-
-  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
-
-  const generateCode = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let result = 'Gyan-';
-    for (let i = 0; i < 6; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-    return result;
-  };
-
-  const openEditModal = (cert: Certificate) => {
-    setForm({ id: cert.id, name: cert.name || '', email: cert.email || '', syllabus_name: cert.syllabus_name || '', issue_date: cert.issue_date || new Date().toISOString().split('T')[0], certificate_code: cert.certificate_code || '', existing_image: cert.certificate_image || '', file: null });
-    setEditModalOpen(true);
-  };
-
-  const handleSave = async () => {
-    if (!form.name || !form.email || !form.syllabus_name) { alert('Please fill out all text fields.'); return; }
-    if (!form.id && !form.file) { alert('You must upload an image when creating a new certificate.'); return; }
-    setUploading(true);
-    let finalImageUrl = form.existing_image;
-    if (form.file) {
-      const fileExt = form.file.name.split('.').pop();
-      const fileName = `${Date.now()}_${form.name.replace(/\s+/g, '_')}.${fileExt}`;
-      const { data: uploadData, error: uploadError } = await supabase.storage.from('certificates').upload(fileName, form.file);
-      if (uploadError) { alert('Error uploading image: ' + uploadError.message); setUploading(false); return; }
-      const { data: { publicUrl } } = supabase.storage.from('certificates').getPublicUrl(uploadData.path);
-      finalImageUrl = publicUrl;
-    }
-    const matchingSyllabus = syllabi.find(s => s.name === form.syllabus_name);
-    const resolvedSyllabusId = matchingSyllabus ? matchingSyllabus.id : null;
-    const certCode = form.id ? form.certificate_code : generateCode();
-    const payload = { name: form.name, email: form.email, syllabus_name: form.syllabus_name, syllabus_id: resolvedSyllabusId, issue_date: form.issue_date, certificate_code: certCode, certificate_image: finalImageUrl };
-    let error;
-    if (form.id) { const { error: updateError } = await supabase.from('certificates').update(payload).eq('id', form.id); error = updateError; }
-    else { const { error: insertError } = await supabase.from('certificates').insert([payload]); error = insertError; }
-    setUploading(false);
-    if (!error) { setEditModalOpen(false); refresh(); }
-    else alert('Database error: ' + error.message);
-  };
 
   const handleDelete = async (id: string) => {
-    if (confirm("Archive this certificate? It will be removed from the registry but not permanently erased.")) {
-      const { error } = await supabase.from("certificates").update({ deleted: true }).eq("id", id);
-      if (error) alert(error.message); else refresh();
+    if (confirm("Are you sure you want to delete this certificate? This action cannot be undone.")) {
+      const { error } = await supabase.from('certificates').update({ deleted: true }).eq('id', id);
+      if (error) alert("Failed to delete certificate: " + error.message); else refresh();
     }
   };
 
-  const filteredData = data.filter((cert) => {
+  const filtered = data.filter((c: any) => {
     const s = searchQuery.toLowerCase();
-    return (cert.name && cert.name.toLowerCase().includes(s)) || (cert.email && cert.email.toLowerCase().includes(s)) || (cert.syllabus_name && cert.syllabus_name.toLowerCase().includes(s)) || (cert.certificate_code && cert.certificate_code.toLowerCase().includes(s));
+    return c.name.toLowerCase().includes(s) || c.email.toLowerCase().includes(s) || c.certificate_code.toLowerCase().includes(s);
   });
-
-  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentData = filteredData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
-      <SectionHeader eyebrow="Records" title="Certificate Registry" subtitle="The permanent record of every completion."
-        action={<button onClick={() => router.push('/admin/bulk-upload')} className="bg-[#14161F] text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-[#22242F] transition-all whitespace-nowrap"><Plus size={17} /> Generate New</button>} />
+      <SectionHeader eyebrow="Credentials" title="Certificates Issued" subtitle="Track and manage generated certificates." />
+      <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, email, or certificate code..." />
 
-      <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, email, course, or certificate code..." />
-
-      <div className="bg-white rounded-2xl shadow-sm border border-[#E6E0D2] overflow-x-auto w-full flex flex-col">
-        <div className="overflow-y-auto max-h-[600px] w-full">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
-                <th className="p-5">Student</th><th className="p-5">Course</th><th className="p-5">Issue Date & Code</th><th className="p-5 text-right">Actions</th>
+      <div className="bg-white rounded-2xl shadow-sm border border-[#E6E0D2] overflow-x-auto w-full">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
+              <th className="p-5">Student</th>
+              <th className="p-5">Course</th>
+              <th className="p-5 text-center">Issue Date</th>
+              <th className="p-5 text-center">Certificate Code</th>
+              <th className="p-5 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((cert: any) => (
+              <tr key={cert.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3] transition-colors">
+                <td className="p-5">
+                  <p className="font-bold text-[#14161F] cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={() => cert.user_id ? onOpenChat(cert.user_id) : alert('No user linked.')}>{cert.name}</p>
+                  <p className="text-xs font-bold text-[#857D6E]">{cert.email}</p>
+                </td>
+                <td className="p-5 font-bold text-[#4A4638]">{cert.syllabus_name || `Course #${cert.syllabus_id}`}</td>
+                <td className="p-5 text-center font-bold text-[#857D6E]">{new Date(cert.issue_date).toLocaleDateString()}</td>
+                <td className="p-5 text-center"><span className="bg-[#EFEBE1] text-[#4A4638] px-3 py-1 rounded-lg font-mono text-xs font-bold border border-[#E6E0D2]">{cert.certificate_code}</span></td>
+                <td className="p-5 text-right">
+                  <div className="flex justify-end gap-2">
+                    <a href={cert.certificate_image} target="_blank" rel="noopener noreferrer" className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors" title="View Certificate"><ExternalLink size={15} /></a>
+                    <button onClick={() => handleDelete(cert.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:bg-[#EAC2BC] transition-colors" title="Revoke Certificate"><Trash2 size={15} /></button>
+                  </div>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {currentData.map(cert => (
-                <tr key={cert.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3] cursor-pointer" onClick={() => cert.certificate_image && setPreviewImage(cert.certificate_image)}>
-                  <td className="p-5">
-                    <p className="font-bold text-[#14161F] cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={(e) => { e.stopPropagation(); cert.user_id ? onOpenChat(cert.user_id) : alert('No linked user account.'); }}>{cert.name}</p>
-                    <p className="text-sm text-[#857D6E] mt-1 break-all">{cert.email}</p>
-                  </td>
-                  <td className="p-5"><p className="font-bold text-[#4A4638]">{cert.syllabus_name}</p></td>
-                  <td className="p-5"><p className="text-sm font-bold text-[#14161F]">{cert.issue_date ? new Date(cert.issue_date).toLocaleDateString() : 'N/A'}</p><p className="text-xs font-mono text-[#857D6E] mt-1">{cert.certificate_code || '-'}</p></td>
-                  <td className="p-5 text-right" onClick={e => e.stopPropagation()}>
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => openEditModal(cert)} className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors" title="Edit"><Edit2 size={15} /></button>
-                      <button onClick={() => handleDelete(cert.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:opacity-80" title="Archive"><Archive size={15} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {filteredData.length === 0 && <tr><td colSpan={4} className="p-10 text-center text-[#857D6E]">No matching certificates found.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        {filteredData.length > 0 && (
-          <div className="flex flex-wrap items-center justify-between p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] shrink-0 gap-4">
-            <span className="text-sm font-medium text-[#857D6E]">Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, filteredData.length)} of {filteredData.length} entries</span>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-[#E6E0D2] text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Previous</button>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-4 py-2 rounded-xl text-sm font-bold bg-white border border-[#E6E0D2] text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Next</button>
-            </div>
-          </div>
-        )}
+            ))}
+            {filtered.length === 0 && <tr><td colSpan={5} className="p-10 text-center font-bold text-[#857D6E]">No certificates found.</td></tr>}
+          </tbody>
+        </table>
       </div>
-
-      {previewImage && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-[#14161F]/80 p-4 backdrop-blur-sm" onClick={() => setPreviewImage(null)}>
-          <div className="relative max-w-4xl w-full" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setPreviewImage(null)} className="absolute -top-10 right-0 text-white/70 hover:text-white p-2 transition-colors"><X size={26} /></button>
-            <img src={getImageUrl(previewImage)} alt="Certificate Preview" className="w-full rounded-2xl shadow-2xl border border-white/10" />
-            <a href={getImageUrl(previewImage)} target="_blank" rel="noreferrer" className="mt-4 flex items-center justify-center gap-2 text-white/70 hover:text-white text-sm font-bold transition-colors" onClick={e => e.stopPropagation()}><ExternalLink size={16} /> Open Full Size</a>
-          </div>
-        </div>
-      )}
-
-      {editModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => !uploading && setEditModalOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setEditModalOpen(false)} disabled={uploading} className="absolute top-6 right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
-            <div className="p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-4"><h3 className="text-2xl font-serif font-bold text-[#14161F]">Edit Certificate Record</h3><p className="text-sm text-[#857D6E] font-medium mt-1">Updates the verified registry directly.</p></div>
-            <div className="p-6 space-y-4">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Student Full Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Student Email Address</label><input type="email" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} /></div>
-              <div>
-                <label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Course Name</label>
-                <input list="syllabi-options" type="text" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={form.syllabus_name} onChange={e => setForm({ ...form, syllabus_name: e.target.value })} placeholder="e.g. Graphic Design Masterclass" />
-                <datalist id="syllabi-options">{syllabi.map(s => <option key={s.id} value={s.name} />)}</datalist>
-              </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Issue Date</label><input type="date" className="w-full bg-[#FAF8F3] p-3.5 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={form.issue_date} onChange={e => setForm({ ...form, issue_date: e.target.value })} /></div>
-              <div>
-                <label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Upload Certificate (PNG/JPG)</label>
-                <label className="w-full flex items-center justify-center gap-2 bg-[#0E7C7B]/10 text-[#0E7C7B] p-4 rounded-xl border border-dashed border-[#0E7C7B]/30 cursor-pointer hover:bg-[#0E7C7B]/20 transition-colors">
-                  <Upload size={17} />
-                  {form.file ? form.file.name : form.existing_image ? 'Image Exists (Click to Replace)' : 'Select Image File'}
-                  <input type="file" accept="image/png, image/jpeg" className="hidden" onChange={e => { if (e.target.files && e.target.files[0]) setForm({ ...form, file: e.target.files[0] }); }} />
-                </label>
-              </div>
-            </div>
-            <div className="p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] flex justify-end gap-3 shrink-0">
-              <button onClick={() => setEditModalOpen(false)} disabled={uploading} className="px-6 py-3 font-bold text-[#857D6E] hover:text-[#14161F] disabled:opacity-50">Cancel</button>
-              <button onClick={handleSave} disabled={uploading} className="px-8 py-3 rounded-xl font-bold bg-[#14161F] text-white shadow-lg hover:bg-[#22242F] transition-colors disabled:opacity-50 flex items-center gap-2">{uploading ? <Loader2 size={16} className="animate-spin" /> : 'Save Changes'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -2324,74 +3386,97 @@ function CertificatesManager({ data, syllabi, refresh, onOpenChat }: { data: Cer
 /* ============================================================================
    CHAT MODAL
 ============================================================================ */
-function ChatModal({ userId, onClose, profilesMap }: any) {
+function ChatModal({ userId, onClose, profilesMap }: { userId: string, onClose: () => void, profilesMap: any }) {
   const supabase = useSupabase();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchMessages = useCallback(async () => {
+    const { data, error } = await supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: true });
+    if (error) console.error("Chat fetch error:", error);
+    else {
+      setMessages(data || []);
+      const unread = data?.filter((m: any) => m.sender_role === 'user' && !m.is_read).map((m: any) => m.id) || [];
+      if (unread.length > 0) {
+        await supabase.from('messages').update({ is_read: true }).in('id', unread);
+      }
+    }
+    setLoading(false);
+  }, [supabase, userId]);
 
   useEffect(() => {
-    const fetchMessages = async () => {
-      const { data } = await supabase.from("messages").select("*").eq("user_id", userId).order("created_at", { ascending: true });
-      if (data) setMessages(data);
-    };
     fetchMessages();
-    const channel = supabase.channel(`chat_updates_${userId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
-        setMessages(prev => prev.some(msg => msg.id === payload.new.id) ? prev : [...prev, payload.new as Message]);
-      }).subscribe();
+    const channel = supabase.channel(`chat_${userId}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
+      setMessages(prev => [...prev, payload.new as Message]);
+      if (payload.new.sender_role === 'user') {
+        supabase.from('messages').update({ is_read: true }).eq('id', payload.new.id).then();
+      }
+    }).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [userId, supabase]);
+  }, [fetchMessages, supabase, userId]);
 
-  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
-    const msgPayload = { user_id: userId, sender_role: 'admin', content: newMessage.trim() };
-    const { data, error } = await supabase.from("messages").insert([msgPayload]).select().single();
-    if (!error && data) { setNewMessage(""); setMessages(prev => [...prev, data as Message]); }
-    else alert("Failed to send message: " + error?.message);
+    const msgData = { user_id: userId, sender_role: 'admin', content: newMessage.trim(), is_read: true };
+    setNewMessage("");
+    const { error } = await supabase.from('messages').insert([msgData]);
+    if (error) { alert("Failed to send: " + error.message); setNewMessage(msgData.content); }
   };
 
-  const userName = profilesMap?.full_name || "User";
-
   return (
-    <div className="fixed inset-0 z-[120] flex justify-end bg-[#14161F]/20 backdrop-blur-sm" onClick={onClose}>
-      <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="p-4 border-b border-[#E6E0D2] flex justify-between items-center bg-white shrink-0">
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-[#F6F3EC] rounded-2xl shadow-2xl w-full max-w-lg flex flex-col h-[600px] max-h-[90vh] overflow-hidden border border-[#E6E0D2] relative" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-[#E6E0D2] bg-white flex items-center justify-between shadow-sm z-10 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#EFEBE1] flex items-center justify-center font-bold text-[#857D6E] overflow-hidden">
-              {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" /> : userName.charAt(0)}
+            <div className="w-10 h-10 rounded-full bg-[#EFEBE1] overflow-hidden flex items-center justify-center text-[#857D6E] font-bold">
+              {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} alt="" className="w-full h-full object-cover" /> : <Users size={20} />}
             </div>
-            <div><h3 className="font-bold text-[#14161F]">{userName}</h3><span className="text-[10px] uppercase font-bold text-[#1E8F6F] tracking-wider">Online</span></div>
+            <div>
+              <h3 className="font-bold text-[#14161F] leading-tight">{profilesMap?.full_name || 'Unknown User'}</h3>
+              <p className="text-[10px] font-bold text-[#857D6E] uppercase tracking-wider">{userId.substring(0, 8)}...</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 text-[#B4AF9F] hover:text-[#14161F] transition-colors bg-[#FAF8F3] hover:bg-[#EFEBE1] rounded-full"><X size={18} /></button>
+          <button onClick={onClose} className="p-2 text-[#857D6E] hover:bg-[#FAF8F3] hover:text-[#14161F] rounded-full transition-colors"><X size={20} /></button>
         </div>
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#FAF8F3]">
-          {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-[#B4AF9F] space-y-2"><MessageSquare size={38} className="opacity-30" /><p className="text-sm font-medium">No messages yet. Say hello!</p></div>
+          {loading ? (
+            <div className="flex justify-center items-center h-full text-[#B4AF9F]"><Loader2 className="animate-spin" /></div>
+          ) : messages.length === 0 ? (
+            <div className="flex flex-col justify-center items-center h-full text-[#B4AF9F]">
+              <MessageSquare size={32} className="mb-2 opacity-50" />
+              <p className="text-sm font-bold">No messages yet.</p>
+            </div>
           ) : (
-            messages.map((msg, idx) => {
+            messages.map((msg, i) => {
               const isAdmin = msg.sender_role === 'admin';
               return (
-                <div key={idx} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
-                  <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${isAdmin ? 'bg-[#14161F] text-white rounded-tr-sm' : 'bg-white border border-[#E6E0D2] text-[#14161F] rounded-tl-sm shadow-sm'}`}>{msg.content}</div>
-                  <span className="text-[10px] text-[#B4AF9F] mt-1 font-medium px-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <div key={msg.id || i} className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-sm font-medium ${isAdmin ? 'bg-[#14161F] text-white rounded-br-sm shadow-md' : 'bg-white text-[#14161F] rounded-bl-sm border border-[#E6E0D2] shadow-sm'}`}>
+                    {msg.content}
+                    <p className={`text-[9px] font-bold mt-1 text-right ${isAdmin ? 'text-[#857D6E]' : 'text-[#B4AF9F]'}`}>{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
                 </div>
               );
             })
           )}
           <div ref={messagesEndRef} />
         </div>
+
         <div className="p-4 bg-white border-t border-[#E6E0D2] shrink-0">
-          <form onSubmit={handleSend} className="relative flex items-center">
-            <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type your message..." className="w-full bg-[#FAF8F3] pl-4 pr-12 py-3.5 rounded-full outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-medium text-[#14161F] text-sm transition-all" />
-            <button type="submit" disabled={!newMessage.trim()} className="absolute right-2 p-2 bg-[#14161F] text-white rounded-full hover:bg-[#22242F] disabled:opacity-50 transition-colors shadow-sm"><Send size={16} /></button>
+          <form onSubmit={handleSend} className="flex gap-2">
+            <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-[#FAF8F3] border border-[#E6E0D2] rounded-xl px-4 py-3 outline-none focus:border-[#B8862E] font-medium text-sm text-[#14161F]" />
+            <button type="submit" disabled={!newMessage.trim()} className="bg-[#B8862E] hover:bg-[#C08A28] text-white p-3 rounded-xl disabled:opacity-50 transition-colors shadow-md flex items-center justify-center shrink-0">
+              <Send size={18} />
+            </button>
           </form>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
