@@ -12,7 +12,7 @@ export default function LayoutWrapper({
   const pathname = usePathname();
 
   const hideLayout =
-    pathname.startsWith("/company") || pathname.startsWith("/admin");
+    pathname.startsWith("/company") || pathname.startsWith("/admin") || pathname.startsWith("/certificate") || pathname.startsWith("/e-GP-Sample");
 
   return (
     <>

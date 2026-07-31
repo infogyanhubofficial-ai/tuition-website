@@ -37,8 +37,7 @@ const DEFAULTS = {
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/STAMP.png",
   directorSignatureUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/DIRECTOR_SIGN-removebg-preview%20(1).png",
-  fallbackInstructorSignatureUrl:
-    "https://placehold.co/253x80/png?text=Instructor+Signature",
+  fallbackInstructorSignatureUrl: "", // Removed placeholder to allow manual signing after printing
 };
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -350,8 +349,7 @@ async function buildTemplateData(
     formattedDate: formatDate(issueDate),
     instructorName: tutor?.name || "",
     instructorTitle: tutor?.designation || DEFAULTS.instructorTitle,
-    instructorSignatureUrl:
-      tutor?.signature_url || DEFAULTS.fallbackInstructorSignatureUrl,
+    instructorSignatureUrl: tutor?.signature_url || DEFAULTS.fallbackInstructorSignatureUrl,
     directorName: DEFAULTS.directorName,
     directorTitle: DEFAULTS.directorTitle,
     directorSignatureUrl: DEFAULTS.directorSignatureUrl,
@@ -726,12 +724,16 @@ function CertificateTemplate(data: CertificateTemplateData) {
                   alignItems: "center", justifyContent: "flex-end", height: "100%",
                 }}
               >
-                <img
-                  src={data.instructorSignatureUrl}
-                  alt="Instructor Signature"
-                  width={160} height={50}
-                  style={{ objectFit: "contain", opacity: 0.85 }}
-                />
+                {data.instructorSignatureUrl ? (
+                  <img
+                    src={data.instructorSignatureUrl}
+                    alt="Instructor Signature"
+                    width={160} height={50}
+                    style={{ objectFit: "contain", opacity: 0.85 }}
+                  />
+                ) : (
+                  <div style={{ display: "flex", width: "160px", height: "50px" }} />
+                )}
                 <div style={{ display: "flex", width: "200px", borderTop: `1px solid ${COLORS.navySoft}`, marginTop: "8px" }} />
                 <div
                   style={{
