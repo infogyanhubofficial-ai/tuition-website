@@ -39,6 +39,7 @@ import {
   UserPlus,
   Lock,
   Download,
+  Trash, // <-- Added Trash icon
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -625,6 +626,20 @@ export default function CrmLeadsDashboard() {
     navigator.clipboard.writeText(digits);
   };
 
+  const deleteLead = async (id: number) => {
+    if (!window.confirm("Are you sure you want to delete this lead? This action cannot be undone.")) return;
+    markPending(id, true);
+    const { error } = await supabase.from("crm_leads").delete().eq("id", id);
+    if (!error) {
+      setLeads((cur) => cur.filter((l) => l.id !== id));
+      setTotalCount((prev) => prev - 1);
+      fetchStats();
+    } else {
+      alert("Failed to delete lead: " + error.message);
+    }
+    markPending(id, false);
+  };
+
   const handleDownloadNumbers = async () => {
     setIsDownloadingNumbers(true);
     try {
@@ -871,6 +886,7 @@ export default function CrmLeadsDashboard() {
                                     <span className="truncate">{formatPhone(lead.phone_number)}</span>
                                   </button>
                                   <button title="Copy phone number" onClick={(e) => handleCopyPhone(e, lead.phone_number)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-colors duration-150 hover:bg-slate-200 hover:text-slate-700"><Copy size={10} /></button>
+                                  <button title="Delete lead" onClick={(e) => { e.stopPropagation(); deleteLead(lead.id); }} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-rose-50 text-rose-500 transition-colors duration-150 hover:bg-rose-100 hover:text-rose-700"><Trash size={10} /></button>
                                 </div>
                                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
                                   {lead.name && <button onClick={() => setDrawerLeadId(lead.id)} title="Open lead timeline" className={cn(TX.micro, "truncate italic text-slate-400 transition-colors duration-150 hover:text-slate-600")}>{lead.name}</button>}
