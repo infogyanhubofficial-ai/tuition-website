@@ -442,7 +442,7 @@ export default function SingleInvoicePage({ params }: { params: Promise<{ id: st
                   <div className="space-y-1 text-sm text-gray-600 z-10 w-1/2">
                     <h3 className="text-sm font-extrabold text-[#F26522] uppercase tracking-widest mb-3">Company Details</h3>
                     <p className="font-bold text-[#0A2A66] text-base">PAN No: <span className="font-medium text-gray-700">622327826</span></p>
-                    <p className="pt-2 font-medium text-gray-700">Gatthaghar, Bhaktapur</p>
+                    <p className="pt-2 font-medium text-gray-700">New Baneshwor, Kathmandu</p>
                     <p className="font-medium text-gray-700">Bagmati, Nepal</p>
                     <p className="pt-2 text-gray-500 font-medium">admin@gyanhub.com.np | +977-9763695665</p>
                   </div>

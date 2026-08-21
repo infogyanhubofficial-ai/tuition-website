@@ -112,6 +112,7 @@ interface DashboardStats {
 }
 
 const PAGE_SIZE = 50;
+const INACTIVE_DAYS_THRESHOLD = 15;
 
 // ---------------------------------------------------------------------------
 // Dictionaries
@@ -210,6 +211,14 @@ function toDateInputValue(iso: string | null | undefined): string {
 
 function todayInputValue(): string { return toDateInputValue(new Date().toISOString()); }
 function startOfTodayIso(): string { const d = new Date(); d.setHours(0, 0, 0, 0); return d.toISOString(); }
+
+// Dynamically computes the ISO cutoff timestamp for the "old & inactive" rule.
+// A lead counts as inactive when last_contacted_at is older than this cutoff.
+function getActivityCutoffIso(days: number = INACTIVE_DAYS_THRESHOLD): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
+}
 
 function formatFollowUp(iso: string | null | undefined): { label: string; overdue: boolean } {
   if (!iso) return { label: "Not set", overdue: false };
@@ -509,6 +518,9 @@ export default function CrmLeadsDashboard() {
   const [statusFilter, setStatusFilter] = useState<LeadStatus | "all">("all");
   const [hideContacted, setHideContacted] = useState(false);
   const [showPaid, setShowPaid] = useState(false);
+  // Default OFF: leads whose last_contacted_at is older than INACTIVE_DAYS_THRESHOLD
+  // days are hidden unless the user opts in to see them.
+  const [showOldInactive, setShowOldInactive] = useState(false);
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(null);
 
@@ -532,41 +544,69 @@ export default function CrmLeadsDashboard() {
     if (!error && data) setCourses(data as unknown as SyllabusRef[]);
   }, []);
 
+  // ---------------------------------------------------------------------
+  // Centralized filter application — the table (fetchLeads), the KPI/count
+  // (buildFilteredCountQuery), and the CSV export (handleDownloadNumbers)
+  // all funnel through this so the three never disagree on what "matches
+  // the current filters" means.
+  // ---------------------------------------------------------------------
+  const applySharedFilters = useCallback(
+    <T extends { or: (s: string) => T; eq: (c: string, v: unknown) => T; is: (c: string, v: null) => T }>(
+      query: T,
+      opts: { applyHideContacted: boolean }
+    ): T => {
+      let q = query;
+      if (courseFilter.length > 0) { const idList = courseFilter.join(","); q = q.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
+      if (priorityFilter !== "all") q = q.eq("priority", priorityFilter);
+      if (modeFilter !== "all") q = q.eq("learning_mode", modeFilter);
+      if (statusFilter !== "all") q = q.eq("lead_status", statusFilter);
+      if (opts.applyHideContacted && hideContacted) q = q.is("last_contacted_at", null);
+      if (!showPaid) q = q.or("payment_status.neq.paid,payment_status.is.null");
+      // 15-day (or configured) inactivity rule: never-contacted leads always pass.
+      if (!showOldInactive) {
+        const cutoffIso = getActivityCutoffIso();
+        q = q.or(`last_contacted_at.is.null,last_contacted_at.gte.${cutoffIso}`);
+      }
+      return q;
+    },
+    [courseFilter, priorityFilter, modeFilter, statusFilter, hideContacted, showPaid, showOldInactive]
+  );
+
+  const applyQuickFilter = useCallback(
+    <T extends { eq: (c: string, v: unknown) => T; gte: (c: string, v: unknown) => T; lt: (c: string, v: unknown) => T }>(
+      query: T
+    ): T => {
+      let q = query;
+      const startToday = startOfTodayIso(); const todayStr = todayInputValue();
+      if (quickFilter === "new") q = q.eq("lead_status", "new");
+      if (quickFilter === "contactedToday") q = q.gte("last_contacted_at", startToday);
+      if (quickFilter === "followupsToday") q = q.eq("follow_up_date", todayStr);
+      if (quickFilter === "overdue") q = q.lt("follow_up_date", todayStr);
+      if (quickFilter === "enrolledToday") q = q.eq("lead_status", "enrolled").gte("updated_at", startToday);
+      return q;
+    },
+    [quickFilter]
+  );
+
   const fetchLeads = useCallback(async () => {
     setLoading(true); setError(null);
     const from = (page - 1) * PAGE_SIZE; const to = from + PAGE_SIZE - 1;
 
     let query = supabase.from("crm_leads").select("*, syllabi_v2(id, name, description, online_tutors(name))", { count: "exact" }).order("last_contacted_at", { ascending: sortDir === "asc", nullsFirst: sortDir === "asc" }).range(from, to);
 
-    if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
-    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
-    if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
-    if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
-    if (hideContacted) query = query.is("last_contacted_at", null);
-    if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
-
-    const startToday = startOfTodayIso(); const todayStr = todayInputValue();
-    if (quickFilter === "new") query = query.eq("lead_status", "new");
-    if (quickFilter === "contactedToday") query = query.gte("last_contacted_at", startToday);
-    if (quickFilter === "followupsToday") query = query.eq("follow_up_date", todayStr);
-    if (quickFilter === "overdue") query = query.lt("follow_up_date", todayStr);
-    if (quickFilter === "enrolledToday") query = query.eq("lead_status", "enrolled").gte("updated_at", startToday);
+    query = applySharedFilters(query as any, { applyHideContacted: true }) as any;
+    query = applyQuickFilter(query as any) as any;
 
     const { data, error, count } = await query;
     if (error) { setError(error.message); setLeads([]); setTotalCount(0); } else { setLeads((data ?? []) as unknown as CrmLead[]); setTotalCount(count ?? 0); }
     setLoading(false);
-  }, [sortDir, courseFilter, priorityFilter, showPaid, modeFilter, statusFilter, hideContacted, quickFilter, page]);
+  }, [sortDir, page, applySharedFilters, applyQuickFilter]);
 
   const buildFilteredCountQuery = useCallback((ignoreHideContacted = false) => {
     let query = supabase.from("crm_leads").select("id", { count: "exact", head: true });
-    if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
-    if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
-    if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
-    if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
-    if (!ignoreHideContacted && hideContacted) query = query.is("last_contacted_at", null);
-    if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
+    query = applySharedFilters(query as any, { applyHideContacted: !ignoreHideContacted }) as any;
     return query;
-  }, [courseFilter, priorityFilter, modeFilter, statusFilter, hideContacted, showPaid]);
+  }, [applySharedFilters]);
 
   const fetchStats = useCallback(async () => {
     const startToday = startOfTodayIso(); const todayStr = todayInputValue();
@@ -590,7 +630,7 @@ export default function CrmLeadsDashboard() {
     window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const filterSignature = JSON.stringify([sortDir, courseFilter, showPaid, priorityFilter, modeFilter, statusFilter, hideContacted, quickFilter]);
+  const filterSignature = JSON.stringify([sortDir, courseFilter, showPaid, priorityFilter, modeFilter, statusFilter, hideContacted, showOldInactive, quickFilter]);
   const prevFilterSignature = useRef(filterSignature);
   useEffect(() => { if (prevFilterSignature.current !== filterSignature) { prevFilterSignature.current = filterSignature; setPage(1); } }, [filterSignature]);
 
@@ -640,31 +680,23 @@ export default function CrmLeadsDashboard() {
     markPending(id, false);
   };
 
+  // Downloads exactly the leads that match the current filters + the
+  // active/inactive visibility rule — i.e. the same set the KPI/table show.
+  // Output is a single-column "Phone" CSV of plain digit strings.
   const handleDownloadNumbers = async () => {
     setIsDownloadingNumbers(true);
     try {
       let query = supabase.from("crm_leads").select("name, phone_number, syllabi_v2(name)");
 
-      if (courseFilter.length > 0) { const idList = courseFilter.join(","); query = query.or(`course_id.in.(${idList}),interested_course_ids.ov.{${idList}}`); }
-      if (priorityFilter !== "all") query = query.eq("priority", priorityFilter);
-      if (modeFilter !== "all") query = query.eq("learning_mode", modeFilter);
-      if (statusFilter !== "all") query = query.eq("lead_status", statusFilter);
-      if (hideContacted) query = query.is("last_contacted_at", null);
-      if (!showPaid) query = query.or("payment_status.neq.paid,payment_status.is.null");
-
-      const startToday = startOfTodayIso(); const todayStr = todayInputValue();
-      if (quickFilter === "new") query = query.eq("lead_status", "new");
-      if (quickFilter === "contactedToday") query = query.gte("last_contacted_at", startToday);
-      if (quickFilter === "followupsToday") query = query.eq("follow_up_date", todayStr);
-      if (quickFilter === "overdue") query = query.lt("follow_up_date", todayStr);
-      if (quickFilter === "enrolledToday") query = query.eq("lead_status", "enrolled").gte("updated_at", startToday);
+      query = applySharedFilters(query as any, { applyHideContacted: true }) as any;
+      query = applyQuickFilter(query as any) as any;
 
       const { data, error } = await query;
       if (error) throw error;
 
       // FIX: typed as any[] to safely map the untyped relation without throwing an error
       let results: any[] = data || [];
-      
+
       if (search.trim()) {
         const q = search.trim().toLowerCase();
         results = results.filter((l: any) => {
@@ -677,14 +709,20 @@ export default function CrmLeadsDashboard() {
         });
       }
 
-      const csvContent = "Name,Phone\n" + results.map((l: any) => {
-        let digits = (l.phone_number || "").replace(/\D/g, "");
-        if (digits.startsWith("977") && digits.length > 10) {
-          digits = digits.substring(3);
-        }
-        const name = (l.name || "Unknown").replace(/,/g, ""); 
-        return `${name},${digits}`;
-      }).join("\n");
+      const phoneNumbers = results
+        .map((l: any) => {
+          let digits = (l.phone_number || "").replace(/\D/g, "");
+          if (digits.startsWith("977") && digits.length > 10) {
+            digits = digits.substring(3);
+          }
+          return digits;
+        })
+        .filter((digits: string) => digits.length > 0);
+
+      // Single-column CSV: header "Phone" followed by one plain digit string
+      // per line. No name/course columns, no index column, no quoting that
+      // would alter the raw digit output.
+      const csvContent = "Phone\n" + phoneNumbers.join("\n");
 
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -711,13 +749,13 @@ export default function CrmLeadsDashboard() {
     });
   }, [leads, search]);
 
-  const activeFilterCount = (courseFilter.length > 0 ? 1 : 0) + (priorityFilter !== "all" ? 1 : 0) + (showPaid ? 1 : 0) + (modeFilter !== "all" ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (hideContacted ? 1 : 0);
-  const clearFilters = () => { setCourseFilter([]); setPriorityFilter("all"); setShowPaid(false); setModeFilter("all"); setStatusFilter("all"); setHideContacted(false); setQuickFilter(null); };
+  const activeFilterCount = (courseFilter.length > 0 ? 1 : 0) + (priorityFilter !== "all" ? 1 : 0) + (showPaid ? 1 : 0) + (modeFilter !== "all" ? 1 : 0) + (statusFilter !== "all" ? 1 : 0) + (hideContacted ? 1 : 0) + (showOldInactive ? 1 : 0);
+  const clearFilters = () => { setCourseFilter([]); setPriorityFilter("all"); setShowPaid(false); setModeFilter("all"); setStatusFilter("all"); setHideContacted(false); setShowOldInactive(false); setQuickFilter(null); };
 
   const QUICK_FILTER_LABELS: Record<Exclude<QuickFilter, null>, string> = { new: "New leads", contactedToday: "Contacted today", followupsToday: "Follow-ups today", overdue: "Overdue", enrolledToday: "Enrolled today" };
   const toggleQuickFilter = (qf: Exclude<QuickFilter, null>) => setQuickFilter((cur) => (cur === qf ? null : qf));
   const getFilterSummary = () => {
-    const hasFilters = activeFilterCount > 0 || quickFilter || search.trim(); if (!hasFilters) return "You are viewing all leads.";
+    const hasFilters = activeFilterCount > 0 || quickFilter || search.trim(); if (!hasFilters) return `You are viewing all leads contacted within the last ${INACTIVE_DAYS_THRESHOLD} days (plus never-contacted leads).`;
     let text = "You are viewing ";
     if (quickFilter) { text += QUICK_FILTER_LABELS[quickFilter].toLowerCase() + " "; } else { if (statusFilter !== "all") text += STATUS_META.find((o) => o.value === statusFilter)?.label.toLowerCase() + " status "; if (hideContacted) text += "uncontacted "; text += "leads "; }
     const conditions: string[] = [];
@@ -725,6 +763,7 @@ export default function CrmLeadsDashboard() {
     if (priorityFilter !== "all") conditions.push(`${PRIORITY_META.find((o) => o.value === priorityFilter)?.label.toLowerCase()} priority`);
     if (modeFilter !== "all") conditions.push(`in ${MODE_META.find((o) => o.value === modeFilter)?.label.toLowerCase()} mode`);
     if (showPaid) conditions.push(`including paid numbers`);
+    if (showOldInactive) conditions.push(`including old & inactive (>${INACTIVE_DAYS_THRESHOLD}d)`);
     if (conditions.length > 0) text += conditions.join(", "); if (search.trim()) text += ` matching "${search.trim()}"`;
     return text + ".";
   };
@@ -804,6 +843,10 @@ export default function CrmLeadsDashboard() {
 
               <button onClick={() => setShowPaid((p) => !p)} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3", showPaid && "border-[var(--c-blue)] bg-[var(--c-blue-soft)] text-[var(--c-blue)] hover:border-[var(--c-blue)]")}>
                 <span className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors duration-150", showPaid ? "border-[var(--c-blue)] bg-[var(--c-blue)]" : "border-slate-300")}>{showPaid && <Check size={10} className="text-white" strokeWidth={3} />}</span> Show paid numbers
+              </button>
+
+              <button onClick={() => setShowOldInactive((v) => !v)} title={`Leads not contacted in over ${INACTIVE_DAYS_THRESHOLD} days are hidden by default`} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3", showOldInactive && "border-[var(--c-blue)] bg-[var(--c-blue-soft)] text-[var(--c-blue)] hover:border-[var(--c-blue)]")}>
+                <span className={cn("flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border transition-colors duration-150", showOldInactive ? "border-[var(--c-blue)] bg-[var(--c-blue)]" : "border-slate-300")}>{showOldInactive && <Check size={10} className="text-white" strokeWidth={3} />}</span> Show old &amp; inactive
               </button>
 
               <button onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))} className={cn(BTN_GHOST_CLS, TX.body, "h-9 px-3")}>{sortDir === "desc" ? <ArrowDown size={ICON.sm} /> : <ArrowUp size={ICON.sm} />} Last contacted</button>
