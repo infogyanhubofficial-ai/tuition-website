@@ -4,6 +4,10 @@ import QRCode from "qrcode";
 
 export const runtime = "nodejs";
 
+// ─── Canvas Dimensions (Exact ISO A4 Landscape @ 300 DPI) ────────────────────
+const CERT_WIDTH = 3508;
+const CERT_HEIGHT = 2480;
+
 // ─── Design Token System ────────────────────────────────────────────────────
 const COLORS = {
   pageBg: "#f9fcff",
@@ -34,7 +38,7 @@ const DEFAULTS = {
   logoUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/LOGO_BG_REMOVED.png",
   sealUrl:
-    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/STAMP.png",
+    "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/others/SEAL_FINAL-removebg-preview.png",
   directorSignatureUrl:
     "https://zuktarghyexwodqnnxlu.supabase.co/storage/v1/object/public/syllabi/DIRECTOR_SIGN-removebg-preview%20(1).png",
   fallbackInstructorSignatureUrl: "", // Removed placeholder to allow manual signing after printing
@@ -335,7 +339,7 @@ async function buildTemplateData(
 
   const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
     margin: 1,
-    width: 300,
+    width: 600, // Higher resolution QR matrix for HD print
     color: { dark: COLORS.navy, light: "#ffffff" },
   });
 
@@ -363,44 +367,44 @@ async function buildTemplateData(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CERTIFICATE TEMPLATE
+// CERTIFICATE TEMPLATE (A4 Landscape HD Scaled — 3508 x 2480 px)
 // ─────────────────────────────────────────────────────────────────────────────
 function CertificateTemplate(data: CertificateTemplateData) {
-  const FOOTER_H = 140;
+  const FOOTER_H = 380; // Scaled footer height
 
-  // 1. Adaptive Name Scaling (softer, allows wrapping for extreme lengths)
+  // 1. Adaptive Name Scaling (Scaled for 3508px width)
   const nameLength = data.studentName.length;
-  let nameFontSize = 76; // Luxury default size
-  if (nameLength > 20) nameFontSize = 64;
-  if (nameLength > 28) nameFontSize = 54;
+  let nameFontSize = 210; // Luxury default size for HD A4
+  if (nameLength > 20) nameFontSize = 175;
+  if (nameLength > 28) nameFontSize = 145;
 
-  // 2. Course Size Scaling
+  // 2. Course Size Scaling (Scaled for 3508px width)
   const courseLength = data.courseName.length;
-  let courseFontSize = 40; 
-  if (courseLength > 40) courseFontSize = 32;
+  let courseFontSize = 110; 
+  if (courseLength > 40) courseFontSize = 88;
 
   return (
     <div
       style={{
-        width: "1200px",
-        height: "960px", 
+        width: `${CERT_WIDTH}px`,
+        height: `${CERT_HEIGHT}px`, 
         display: "flex",
         position: "relative",
         backgroundColor: COLORS.pageBg,
-        padding: "16px",
+        padding: "44px",
         fontFamily: "Arial, Helvetica, sans-serif",
         color: COLORS.navy,
       }}
     >
-      {/* Background Central Logo Watermark - Opacity reduced for better readability */}
+      {/* Background Central Logo Watermark */}
       <img
         src={data.logoUrl}
         style={{
           position: "absolute",
           top: "50%",
           left: "50%",
-          width: "700px",
-          height: "700px",
+          width: "1800px",
+          height: "1800px",
           transform: "translate(-50%, -50%)",
           opacity: 0.01,
           objectFit: "contain",
@@ -414,8 +418,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
           display: "flex",
           width: "100%",
           height: "100%",
-          border: `1.5px solid ${COLORS.borderBlue}`,
-          padding: "10px",
+          border: `4px solid ${COLORS.borderBlue}`,
+          padding: "26px",
           boxSizing: "border-box",
           position: "relative",
           backgroundColor: "transparent",
@@ -426,20 +430,20 @@ function CertificateTemplate(data: CertificateTemplateData) {
             display: "flex",
             width: "100%",
             height: "100%",
-            border: `1px solid rgba(26, 59, 92, 0.2)`,
-            padding: "4px",
+            border: `3px solid rgba(26, 59, 92, 0.2)`,
+            padding: "10px",
             boxSizing: "border-box",
           }}
         >
-          {/* Inner premium gold frame - Gold border thickness increased to 2.5px */}
+          {/* Inner premium gold frame */}
           <div
             style={{
               display: "flex",
               width: "100%",
               height: "100%",
-              border: `2.5px solid ${COLORS.gold}`,
+              border: `7px solid ${COLORS.gold}`,
               boxSizing: "border-box",
-              padding: "48px 64px 48px 64px", 
+              padding: "115px 160px 115px 160px", 
               flexDirection: "column",
               position: "relative",
               backgroundColor: "transparent",
@@ -452,8 +456,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 position: "absolute",
                 inset: "0",
                 opacity: 0.03,
-                backgroundImage: "radial-gradient(circle at center, rgba(17,38,60,0.8) 0.5px, transparent 1px)",
-                backgroundSize: "14px 14px",
+                backgroundImage: "radial-gradient(circle at center, rgba(17,38,60,0.8) 1.5px, transparent 3px)",
+                backgroundSize: "36px 36px",
                 zIndex: 0,
               }}
             />
@@ -463,8 +467,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
               style={{
                 display: "flex",
                 position: "absolute",
-                inset: "6px",
-                border: `1px solid rgba(205, 166, 81, 0.4)`,
+                inset: "16px",
+                border: `3px solid rgba(205, 166, 81, 0.4)`,
                 zIndex: 0,
               }}
             />
@@ -474,41 +478,41 @@ function CertificateTemplate(data: CertificateTemplateData) {
               style={{
                 display: "flex",
                 position: "absolute",
-                left: "24px",
+                left: "60px",
                 top: "10%",
                 bottom: "10%",
-                width: "4px",
+                width: "10px",
                 background: `linear-gradient(to bottom, transparent, rgba(205, 166, 81, 0.3), rgba(17, 38, 60, 0.1), rgba(205, 166, 81, 0.3), transparent)`,
                 zIndex: 1,
               }}
             />
 
-            {/* Premium Gold Corner Accents - Border thickness increased to 2.5px */}
+            {/* Premium Gold Corner Accents */}
             {(
               [
-                { t: "12px", l: "12px", dot: { top: "16px", left: "16px" }, type: "tl" },
-                { t: "12px", r: "12px", dot: { top: "16px", right: "16px" }, type: "tr" },
-                { b: "12px", l: "12px", dot: { bottom: "16px", left: "16px" }, type: "bl" },
-                { b: "12px", r: "12px", dot: { bottom: "16px", right: "16px" }, type: "br" },
+                { t: "30px", l: "30px", dot: { top: "40px", left: "40px" }, type: "tl" },
+                { t: "30px", r: "30px", dot: { top: "40px", right: "40px" }, type: "tr" },
+                { b: "30px", l: "30px", dot: { bottom: "40px", left: "40px" }, type: "bl" },
+                { b: "30px", r: "30px", dot: { bottom: "40px", right: "40px" }, type: "br" },
               ] as Array<Record<string, any>>
             ).map((c, i) => {
               const s: Record<string, string | number> = {
-                display: "flex", position: "absolute", width: "32px", height: "32px", zIndex: 1
+                display: "flex", position: "absolute", width: "80px", height: "80px", zIndex: 1
               };
               if (c.t) s.top = c.t; if (c.r) s.right = c.r; if (c.b) s.bottom = c.b; if (c.l) s.left = c.l;
               
               const isTop = c.type.includes('t'); const isBottom = c.type.includes('b');
               const isLeft = c.type.includes('l'); const isRight = c.type.includes('r');
 
-              if (isTop) s.borderTop = `2.5px solid ${COLORS.gold}`;
-              if (isBottom) s.borderBottom = `2.5px solid ${COLORS.gold}`;
-              if (isLeft) s.borderLeft = `2.5px solid ${COLORS.gold}`;
-              if (isRight) s.borderRight = `2.5px solid ${COLORS.gold}`;
+              if (isTop) s.borderTop = `7px solid ${COLORS.gold}`;
+              if (isBottom) s.borderBottom = `7px solid ${COLORS.gold}`;
+              if (isLeft) s.borderLeft = `7px solid ${COLORS.gold}`;
+              if (isRight) s.borderRight = `7px solid ${COLORS.gold}`;
 
               return (
                 <div key={i} style={s}>
                   <div style={{
-                    display: "flex", position: 'absolute', width: '5px', height: '5px',
+                    display: "flex", position: 'absolute', width: '13px', height: '13px',
                     backgroundColor: COLORS.gold, ...c.dot
                   }} />
                 </div>
@@ -532,16 +536,16 @@ function CertificateTemplate(data: CertificateTemplateData) {
               <img
                 src={data.logoUrl}
                 alt="Issuer Logo"
-                width={550}
-                height={110}
+                width={1450}
+                height={290}
                 style={{ objectFit: "contain" }}
               />
               <div
                 style={{
                   display: "flex",
-                  marginTop: "8px",
-                  fontSize: "12px",
-                  letterSpacing: "4px",
+                  marginTop: "20px",
+                  fontSize: "30px",
+                  letterSpacing: "10px",
                   textTransform: "uppercase",
                   color: COLORS.navySoft,
                   fontWeight: 600,
@@ -571,9 +575,9 @@ function CertificateTemplate(data: CertificateTemplateData) {
               <div
                 style={{
                   display: "flex",
-                  fontSize: "26px",
+                  fontSize: "70px",
                   textTransform: "uppercase",
-                  letterSpacing: "3px",
+                  letterSpacing: "8px",
                   color: COLORS.navy,
                   fontWeight: 400,
                   lineHeight: 1.0,
@@ -586,21 +590,21 @@ function CertificateTemplate(data: CertificateTemplateData) {
               {/* Elegant formal dividers */}
               <div
                 style={{
-                  display: "flex", width: "80px", height: "2px",
-                  backgroundColor: COLORS.gold, marginTop: "16px",
+                  display: "flex", width: "220px", height: "5px",
+                  backgroundColor: COLORS.gold, marginTop: "40px",
                 }}
               />
               <div
                 style={{
-                  display: "flex", width: "240px", height: "1px",
-                  backgroundColor: COLORS.goldLine, marginTop: "6px", opacity: 0.5,
+                  display: "flex", width: "650px", height: "3px",
+                  backgroundColor: COLORS.goldLine, marginTop: "15px", opacity: 0.5,
                 }}
               />
 
               <div
                 style={{
-                  display: "flex", marginTop: "24px", fontSize: "15px",
-                  color: COLORS.navySoft, letterSpacing: "1px",
+                  display: "flex", marginTop: "55px", fontSize: "40px",
+                  color: COLORS.navySoft, letterSpacing: "2.5px",
                 }}
               >
                 This is to certify that
@@ -610,15 +614,15 @@ function CertificateTemplate(data: CertificateTemplateData) {
               <div
                 style={{
                   display: "flex",
-                  marginTop: "20px",
-                  padding: "0 24px",
+                  marginTop: "45px",
+                  padding: "0 60px",
                   fontSize: `${nameFontSize}px`,
                   lineHeight: 1.1,
                   color: COLORS.navy,
-                  fontWeight: 800, // Slightly bolder for premium weight
+                  fontWeight: 800,
                   fontStyle: "normal",
                   textAlign: "center",
-                  maxWidth: "1000px",
+                  maxWidth: "2800px",
                   flexWrap: "wrap", 
                   justifyContent: "center",
                   letterSpacing: "0px",
@@ -631,15 +635,15 @@ function CertificateTemplate(data: CertificateTemplateData) {
               {/* Separator below name */}
               <div
                 style={{
-                  display: "flex", width: "320px", height: "1px",
-                  backgroundColor: "rgba(26, 59, 92, 0.15)", marginTop: "20px",
+                  display: "flex", width: "850px", height: "3px",
+                  backgroundColor: "rgba(26, 59, 92, 0.15)", marginTop: "45px",
                 }}
               />
 
               <div
                 style={{
-                  display: "flex", marginTop: "20px", fontSize: "15px",
-                  color: COLORS.navySoft, letterSpacing: "1px",
+                  display: "flex", marginTop: "45px", fontSize: "40px",
+                  color: COLORS.navySoft, letterSpacing: "2.5px",
                 }}
               >
                 has successfully completed
@@ -651,7 +655,7 @@ function CertificateTemplate(data: CertificateTemplateData) {
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  marginTop: "16px",
+                  marginTop: "35px",
                 }}
               >
                 <div
@@ -661,9 +665,9 @@ function CertificateTemplate(data: CertificateTemplateData) {
                     color: COLORS.courseBlue,
                     fontWeight: 600,
                     textAlign: "center",
-                    maxWidth: "900px",
+                    maxWidth: "2600px",
                     lineHeight: 1.2,
-                    letterSpacing: "0.5px",
+                    letterSpacing: "1.5px",
                     fontFamily: "'Cormorant Garamond', 'Times New Roman', Georgia, serif",
                   }}
                 >
@@ -671,17 +675,17 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 </div>
 
                 {/* Formal Underline Accent */}
-                <div style={{ display: "flex", width: "180px", height: "2px", backgroundColor: COLORS.accentOrange, marginTop: "14px" }} />
+                <div style={{ display: "flex", width: "480px", height: "5px", backgroundColor: COLORS.accentOrange, marginTop: "32px" }} />
               </div>
 
-              {/* Course Description - Increased line-height for editorial elegance */}
+              {/* Course Description */}
               <div
                 style={{
                   display: "flex",
-                  marginTop: "20px",
-                  maxWidth: "700px", 
+                  marginTop: "45px",
+                  maxWidth: "2000px", 
                   textAlign: "center",
-                  fontSize: "14px",
+                  fontSize: "36px",
                   color: COLORS.navySoft,
                   lineHeight: 1.8,
                 }}
@@ -691,8 +695,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
 
               <div
                 style={{
-                  display: "flex", marginTop: "18px", fontSize: "11px",
-                  textTransform: "uppercase", letterSpacing: "2.5px",
+                  display: "flex", marginTop: "40px", fontSize: "28px",
+                  textTransform: "uppercase", letterSpacing: "6px",
                   color: COLORS.navy, fontWeight: 600,
                 }}
               >
@@ -714,10 +718,10 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 flexShrink: 0,
                 height: `${FOOTER_H}px`,
                 minHeight: `${FOOTER_H}px`,
-                paddingBottom: "16px",
+                paddingBottom: "35px",
               }}
             >
-              {/* ── Left: Instructor Signature (Flat, Engraved style) ── */}
+              {/* ── Left: Instructor Signature ── */}
               <div
                 style={{
                   display: "flex", width: "33.3%", flexDirection: "column",
@@ -728,31 +732,31 @@ function CertificateTemplate(data: CertificateTemplateData) {
                   <img
                     src={data.instructorSignatureUrl}
                     alt="Instructor Signature"
-                    width={160} height={50}
+                    width={400} height={130}
                     style={{ objectFit: "contain", opacity: 0.85 }}
                   />
                 ) : (
-                  <div style={{ display: "flex", width: "160px", height: "50px" }} />
+                  <div style={{ display: "flex", width: "400px", height: "130px" }} />
                 )}
-                <div style={{ display: "flex", width: "200px", borderTop: `1px solid ${COLORS.navySoft}`, marginTop: "8px" }} />
+                <div style={{ display: "flex", width: "500px", borderTop: `3px solid ${COLORS.navySoft}`, marginTop: "20px" }} />
                 <div
                   style={{
-                    display: "flex", marginTop: "8px", fontSize: "14px",
-                    color: COLORS.navy, fontWeight: 600, letterSpacing: "0.5px",
+                    display: "flex", marginTop: "20px", fontSize: "36px",
+                    color: COLORS.navy, fontWeight: 600, letterSpacing: "1px",
                   }}
                 >
                   {data.instructorName}
                 </div>
                 <div
                   style={{
-                    display: "flex", alignItems: "center", marginTop: "4px", fontSize: "9px",
+                    display: "flex", alignItems: "center", marginTop: "10px", fontSize: "24px",
                     color: COLORS.navyLight, textTransform: "uppercase",
-                    letterSpacing: "1.5px", fontWeight: 600,
+                    letterSpacing: "4px", fontWeight: 600,
                   }}
                 >
-                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginRight: 6 }}></div>
+                  <div style={{ display: "flex", width: 10, height: 10, backgroundColor: COLORS.accentOrange, borderRadius: 5, marginRight: 14 }}></div>
                   {data.instructorTitle}
-                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginLeft: 6 }}></div>
+                  <div style={{ display: "flex", width: 10, height: 10, backgroundColor: COLORS.accentOrange, borderRadius: 5, marginLeft: 14 }}></div>
                 </div>
               </div>
 
@@ -763,41 +767,40 @@ function CertificateTemplate(data: CertificateTemplateData) {
                   alignItems: "center", justifyContent: "flex-end", height: "100%",
                 }}
               >
-                {/* Improved Foil Stamp Effect */}
                 <div
                   style={{
-                    display: "flex", width: "120px", height: "120px",
+                    display: "flex", width: "310px", height: "310px",
                     alignItems: "center", justifyContent: "center",
                     borderRadius: "999px",
                     background: `radial-gradient(circle, #ffffff 0%, ${COLORS.pageBg} 60%, ${COLORS.goldLight} 100%)`,
-                    border: `2.5px solid ${COLORS.gold}`,
-                    boxShadow: "inset 0 2px 8px rgba(205,166,81,0.4), 0 2px 4px rgba(0,0,0,0.05)",
+                    border: `7px solid ${COLORS.gold}`,
+                    boxShadow: "inset 0 4px 20px rgba(205,166,81,0.4), 0 4px 10px rgba(0,0,0,0.05)",
                     position: "relative",
                   }}
                 >
                   {/* Micro-text simulated rings */}
-                  <div style={{ display: "flex", position: "absolute", inset: "4px", border: `1px dashed ${COLORS.gold}`, borderRadius: "999px", opacity: 0.5 }} />
-                  <div style={{ display: "flex", position: "absolute", inset: "7px", border: `1px solid rgba(26,59,92,0.1)`, borderRadius: "999px" }} />
+                  <div style={{ display: "flex", position: "absolute", inset: "10px", border: `3px dashed ${COLORS.gold}`, borderRadius: "999px", opacity: 0.5 }} />
+                  <div style={{ display: "flex", position: "absolute", inset: "18px", border: `3px solid rgba(26,59,92,0.1)`, borderRadius: "999px" }} />
                   <img
                     src={data.sealUrl}
                     alt="Official Seal"
-                    width={92} height={92} 
+                    width={240} height={240} 
                     style={{ objectFit: "contain", zIndex: 2 }}
                   />
                 </div>
 
                 <div
                   style={{
-                    display: "flex", marginTop: "16px", fontSize: "9px",
+                    display: "flex", marginTop: "35px", fontSize: "24px",
                     color: COLORS.navySoft, textTransform: "uppercase",
-                    letterSpacing: "2px", fontWeight: 600,
+                    letterSpacing: "5px", fontWeight: 600,
                   }}
                 >
                   {`Issued • ${data.formattedDate}`}
                 </div>
               </div>
 
-              {/* ── Right: Director Signature (Flat, Engraved style) ── */}
+              {/* ── Right: Director Signature ── */}
               <div
                 style={{
                   display: "flex", width: "33.3%", flexDirection: "column",
@@ -807,44 +810,44 @@ function CertificateTemplate(data: CertificateTemplateData) {
                 <img
                   src={data.directorSignatureUrl}
                   alt="Director Signature"
-                  width={160} height={50}
+                  width={400} height={130}
                   style={{ objectFit: "contain", opacity: 0.85 }}
                 />
-                <div style={{ display: "flex", width: "200px", borderTop: `1px solid ${COLORS.navySoft}`, marginTop: "8px" }} />
+                <div style={{ display: "flex", width: "500px", borderTop: `3px solid ${COLORS.navySoft}`, marginTop: "20px" }} />
                 <div
                   style={{
-                    display: "flex", marginTop: "8px", fontSize: "14px",
-                    color: COLORS.navy, fontWeight: 600, letterSpacing: "0.5px",
+                    display: "flex", marginTop: "20px", fontSize: "36px",
+                    color: COLORS.navy, fontWeight: 600, letterSpacing: "1px",
                   }}
                 >
                   {data.directorName}
                 </div>
                 <div
                   style={{
-                    display: "flex", alignItems: "center", marginTop: "4px", fontSize: "9px",
+                    display: "flex", alignItems: "center", marginTop: "10px", fontSize: "24px",
                     color: COLORS.navyLight, textTransform: "uppercase",
-                    letterSpacing: "1.5px", fontWeight: 600,
+                    letterSpacing: "4px", fontWeight: 600,
                   }}
                 >
-                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginRight: 6 }}></div>
+                  <div style={{ display: "flex", width: 10, height: 10, backgroundColor: COLORS.accentOrange, borderRadius: 5, marginRight: 14 }}></div>
                   {data.directorTitle}
-                  <div style={{ display: "flex", width: 4, height: 4, backgroundColor: COLORS.accentOrange, borderRadius: 2, marginLeft: 6 }}></div>
+                  <div style={{ display: "flex", width: 10, height: 10, backgroundColor: COLORS.accentOrange, borderRadius: 5, marginLeft: 14 }}></div>
                 </div>
               </div>
             </div>
             
-            {/* Absolute Micro-text Authenticity Footer - Slightly enhanced legibility */}
+            {/* Absolute Micro-text Authenticity Footer */}
             <div style={{
-              display: "flex", position: "absolute", bottom: "16px", left: "64px", right: "64px",
+              display: "flex", position: "absolute", bottom: "35px", left: "160px", right: "160px",
               justifyContent: "space-between", alignItems: "center", zIndex: 2,
             }}>
-              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+              <div style={{ display: "flex", fontSize: "16px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "3.5px", textTransform: "uppercase" }}>
                 {`HASH: ${generateHashSimulation(data.certCode)}`}
               </div>
-              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "2px", textTransform: "uppercase" }}>
+              <div style={{ display: "flex", fontSize: "16px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "5px", textTransform: "uppercase" }}>
                 GYANHUB PVT LTD // AUTHENTIC DOCUMENT
               </div>
-              <div style={{ display: "flex", fontSize: "6px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "1.5px", textTransform: "uppercase" }}>
+              <div style={{ display: "flex", fontSize: "16px", color: COLORS.navySoft, opacity: 0.85, letterSpacing: "3.5px", textTransform: "uppercase" }}>
                 VER: GH-2026-X1
               </div>
             </div>
@@ -856,22 +859,22 @@ function CertificateTemplate(data: CertificateTemplateData) {
           ══════════════════════════════════════════ */}
           <div
             style={{
-              display: "flex", position: "absolute", left: "48px", top: "48px",
+              display: "flex", position: "absolute", left: "115px", top: "115px",
               flexDirection: "column", alignItems: "center", zIndex: 3,
             }}
           >
-            <div style={{ display: "flex", padding: "6px", backgroundColor: "#fff", border: `1px solid rgba(26,59,92,0.15)` }}>
+            <div style={{ display: "flex", padding: "14px", backgroundColor: "#fff", border: `3px solid rgba(26,59,92,0.15)` }}>
               <img
                 src={data.qrCodeDataUri}
                 alt="Verification QR"
-                width={104} height={104} 
+                width={260} height={260} 
                 style={{ objectFit: "contain" }}
               />
             </div>
             <div
               style={{
-                display: "flex", marginTop: "8px", fontSize: "7px",
-                letterSpacing: "1px", color: COLORS.navySoft,
+                display: "flex", marginTop: "20px", fontSize: "18px",
+                letterSpacing: "2.5px", color: COLORS.navySoft,
                 fontWeight: 600, textTransform: "uppercase",
               }}
             >
@@ -884,31 +887,31 @@ function CertificateTemplate(data: CertificateTemplateData) {
           ══════════════════════════════════════════ */}
           <div
             style={{
-              display: "flex", position: "absolute", right: "48px", top: "48px",
+              display: "flex", position: "absolute", right: "115px", top: "115px",
               flexDirection: "column", alignItems: "flex-end", zIndex: 3,
-              height: "116px", // Anchors exactly to the height of the QR Box bounds
+              height: "290px", // Anchors exactly to the height of the QR Box bounds
               justifyContent: "flex-end", // Aligns content exactly on the lower baseline
             }}
           >
             <div
               style={{
-                display: "flex", fontSize: "8px", textTransform: "uppercase",
-                letterSpacing: "2px", color: COLORS.navySoft, fontWeight: 600,
+                display: "flex", fontSize: "20px", textTransform: "uppercase",
+                letterSpacing: "5px", color: COLORS.navySoft, fontWeight: 600,
               }}
             >
               {DEFAULTS.credentialLabel}
             </div>
             <div
               style={{
-                display: "flex", marginTop: "4px", fontSize: "16px",
-                color: COLORS.navy, fontWeight: 600, letterSpacing: "1px",
+                display: "flex", marginTop: "10px", fontSize: "40px",
+                color: COLORS.navy, fontWeight: 600, letterSpacing: "2.5px",
                 fontFamily: "monospace" 
               }}
             >
               {data.certCode}
             </div>
-            {/* Subtle gold underline to anchor the floating text */}
-            <div style={{ display: "flex", width: "40px", height: "1.5px", backgroundColor: COLORS.gold, marginTop: "4px", opacity: 0.8 }} />
+            {/* Subtle gold underline to anchor floating text */}
+            <div style={{ display: "flex", width: "100px", height: "4px", backgroundColor: COLORS.gold, marginTop: "10px", opacity: 0.8 }} />
           </div>
 
         </div>
@@ -920,8 +923,8 @@ function CertificateTemplate(data: CertificateTemplateData) {
 // ─── Render & Upload ─────────────────────────────────────────────────────────
 async function renderCertificatePng(data: CertificateTemplateData) {
   const image = new ImageResponse(CertificateTemplate(data), {
-    width: 1200,
-    height: 960, 
+    width: CERT_WIDTH,
+    height: CERT_HEIGHT, 
   });
   const arrayBuffer = await image.arrayBuffer();
   return new Uint8Array(arrayBuffer);
@@ -978,7 +981,7 @@ export async function GET(req: Request) {
 
     const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
       margin: 1,
-      width: 300,
+      width: 600, // Higher resolution QR matrix for HD print
       color: { dark: COLORS.navy, light: "#ffffff" },
     });
 
@@ -1008,8 +1011,8 @@ export async function GET(req: Request) {
     };
 
     return new ImageResponse(CertificateTemplate(data), {
-      width: 1200,
-      height: 960, 
+      width: CERT_WIDTH,
+      height: CERT_HEIGHT, 
     });
   } catch (error) {
     console.error("GET /api/certificate error:", error);

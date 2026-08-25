@@ -17,6 +17,7 @@ import {
   ResponsiveContainer, BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend
 } from "recharts";
+import NepaliDate from "nepali-date-converter";
 
 /* ============================================================================
    INTERFACES & HELPERS
@@ -95,7 +96,7 @@ type AccountingCategory =
 
 type AccountingStatus = "CURRENT" | "PREPAID" | "OUTSTANDING";
 type AccountingSubType = "PHYSICAL" | "ONLINE" | "HYBRID" | "BOTH" | "MONTHLY" | "BONUS" | "NISCHAL" | "DIPESH";
-type TransactionType = "INCOME" | "EXPENSE" | "INVESTMENT" | "WITHDRAWAL";
+type TransactionType = "INCOME" | "EXPENSE" | "INVESTMENT" | "WITHDRAWAL" | "ALL";
 type DateRangeOption = "ALL" | "LAST_7_DAYS" | "LAST_15_DAYS" | "LAST_30_DAYS" | "LAST_45_DAYS" | "LAST_3_MONTHS" | "LAST_6_MONTHS" | "THIS_YEAR" | "CUSTOM";
 
 interface Transaction {
@@ -155,6 +156,33 @@ function timeAgo(dateString: string) {
 
 function isoDateOnly(d: Date) { return d.toISOString().slice(0, 10); }
 
+function toBsMonthLabel(dateString: string): { key: string, label: string } {
+  try {
+    const d = new Date(dateString);
+    const nd = new NepaliDate(d);
+    const bsYear = nd.getYear();
+    const bsMonth = nd.getMonth();
+    const months = ["Baisakh", "Jestha", "Ashadh", "Shrawan", "Bhadra", "Ashoj", "Kartik", "Mangsir", "Poush", "Magh", "Falgun", "Chaitra"];
+    return {
+      key: `${bsYear}-${String(bsMonth + 1).padStart(2, '0')}`,
+      label: `${months[bsMonth]} ${bsYear}`
+    };
+  } catch (e) {
+    const d = new Date(dateString);
+    return { key: dateString.slice(0, 7), label: d.toLocaleString('en', { month: 'short', year: 'numeric' }) };
+  }
+}
+
+function toBsDateLabel(dateString: string): string {
+  try {
+    const d = new Date(dateString);
+    const nd = new NepaliDate(d);
+    return nd.format('YYYY-MM-DD');
+  } catch (e) {
+    return dateString;
+  }
+}
+
 /* ============================================================================
    CUSTOM HOOKS (Finance Analytics)
 ============================================================================ */
@@ -174,13 +202,13 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
     const cashInvestment = current.filter((r) => r.category === "OWNER_INVESTMENT").reduce((s, r) => s + r.amount, 0);
     const cashWithdrawal = current.filter((r) => r.category === "OWNER_WITHDRAWAL").reduce((s, r) => s + r.amount, 0);
     const cashExpense = current.filter((r) => PNL_EXPENSE.includes(r.category)).reduce((s, r) => s + r.amount, 0);
-    
+
     const currentCash = cashIncome + cashInvestment - cashWithdrawal - cashExpense;
-    
+
     const outstanding = acct.filter((r) => r.accounting_status === "OUTSTANDING");
     const outReceivable = outstanding.filter((r) => INCOME_CATEGORIES.includes(r.category)).reduce((s, r) => s + r.amount, 0);
     const outPayable = outstanding.filter((r) => PNL_EXPENSE.includes(r.category)).reduce((s, r) => s + r.amount, 0);
-    
+
     const expectedCash = currentCash - outPayable;
 
     const courseMap = new Map<string, { id: string, name: string, revenue: number, tutor: number, marketing: number }>();
@@ -192,10 +220,10 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
 
       if (!isAllocatedMarketing && !isDirectCoursePnl) return;
       if (!t.syllabus_id) return;
-      
+
       const syllabus = syllabi.find(s => s.id === t.syllabus_id);
       const cName = syllabus ? syllabus.name : `Course #${t.syllabus_id}`;
-      
+
       if (!courseMap.has(cName)) courseMap.set(cName, { id: String(t.syllabus_id), name: cName, revenue: 0, tutor: 0, marketing: 0 });
       const cRow = courseMap.get(cName)!;
 
@@ -218,13 +246,13 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
       const margin = c.revenue > 0 ? profit / c.revenue : 0;
       const roi = c.marketing > 0 ? c.revenue / c.marketing : 0;
       const profitContribution = netProfit > 0 ? profit / netProfit : 0;
-      
+
       let score = 1;
       if (margin > 0.4) score++;
       if (margin > 0.2) score++;
       if (roi > 5) score++;
       if (profit > 50000) score++;
-      
+
       return { ...c, profit, margin, roi, profitContribution, score: Math.min(5, Math.max(1, score)) };
     }).sort((a, b) => b.profit - a.profit);
 
@@ -245,14 +273,14 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
     acct.forEach(t => {
       if (!PNL_INCOME.includes(t.category) && !PNL_EXPENSE.includes(t.category)) return;
 
-      const d = new Date(t.transaction_date);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      if (!monthMap.has(key)) monthMap.set(key, { month: d.toLocaleString('en', { month: 'short', year: '2-digit' }), revenue: 0, expense: 0, profit: 0 });
-      
+      const bsInfo = toBsMonthLabel(t.transaction_date);
+      const key = bsInfo.key;
+      if (!monthMap.has(key)) monthMap.set(key, { month: bsInfo.label, revenue: 0, expense: 0, profit: 0 });
+
       const m = monthMap.get(key)!;
       if (PNL_INCOME.includes(t.category)) m.revenue += t.amount;
       else if (PNL_EXPENSE.includes(t.category)) m.expense += t.amount;
-      
+
       m.profit = m.revenue - m.expense;
     });
     const monthlyTrends = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0])).map((x, i, arr) => {
@@ -270,7 +298,7 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
 
     let healthScore = 50;
     const overallMargin = totalIncome > 0 ? netProfit / totalIncome : 0;
-    
+
     if (overallMargin > 0.3) healthScore += 20;
     else if (overallMargin > 0.1) healthScore += 10;
     else if (overallMargin < 0) healthScore -= 20;
@@ -310,7 +338,8 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
       healthScore: Math.min(100, Math.max(0, healthScore)),
       runwayMonths, avgMonthlyExpense, reports,
       nischal: { inv: nischalInv, with: nischalWith, net: nischalInv - nischalWith },
-      dipesh: { inv: dipeshInv, with: dipeshWith, net: dipeshInv - dipeshWith }
+      dipesh: { inv: dipeshInv, with: dipeshWith, net: dipeshInv - dipeshWith },
+      rows: acct
     };
   }, [rows, syllabi]);
 }
@@ -557,7 +586,7 @@ function ToggleSwitch({ checked, onChange, label, activeColor = '#0E7C7B' }: { c
 
 
 /* ============================================================================
-   ACCOUNTS / ERP MANAGER (Adapted from FinanceDashboard)
+   ACCOUNTS / ERP MANAGER
 ============================================================================ */
 function AccountsManager({ supabase }: { supabase: any }) {
   const [allRows, setAllRows] = useState<Transaction[]>([]);
@@ -568,14 +597,36 @@ function AccountsManager({ supabase }: { supabase: any }) {
   const [dateRange, setDateRange] = useState<DateRangeOption>("ALL");
   const [customRange, setCustomRange] = useState({ start: "", end: "" });
   const [courseFilter, setCourseFilter] = useState<string>("ALL");
+
+  // Ledger Filter States for redirect functionality
+  const [ledgerCategoryFilter, setLedgerCategoryFilter] = useState<AccountingCategory | "ALL">("ALL");
+  const [ledgerStatusFilter, setLedgerStatusFilter] = useState<AccountingStatus | "ALL">("ALL");
+  const [ledgerTypeFilter, setLedgerTypeFilter] = useState<TransactionType | "ALL">("ALL");
   
+  const ledgerRef = useRef<HTMLDivElement>(null);
+
   // Reports Modal State
   const [showReports, setShowReports] = useState(false);
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+
+  const scrollToLedger = (
+    category: AccountingCategory | "ALL", 
+    status: AccountingStatus | "ALL",
+    type: TransactionType | "ALL"
+  ) => {
+    setLedgerCategoryFilter(category);
+    setLedgerStatusFilter(status);
+    setLedgerTypeFilter(type);
+    
+    setTimeout(() => {
+        ledgerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
 
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true);
-      
+
       const [ledgerRes, syllabiRes] = await Promise.all([
         supabase.from("gyanhub_accounting").select("*").order("transaction_date", { ascending: false }),
         supabase.from("syllabi_v2").select("id, name") 
@@ -584,27 +635,26 @@ function AccountsManager({ supabase }: { supabase: any }) {
       if (ledgerRes.data) setAllRows(ledgerRes.data.map((d: any) => ({ ...d, amount: Number(d.amount) })));
       if (syllabiRes.data) setSyllabi(syllabiRes.data);
       if (syllabiRes.error) console.error("Syllabi fetch error:", syllabiRes.error);
-      
+
       setIsLoading(false);
     }
     fetchData();
   }, [supabase]);
 
-  // Filter Rows based on selected filters
+  const fetchDataRef = useCallback(async () => {
+    const { data } = await supabase.from("gyanhub_accounting").select("*").order("transaction_date", { ascending: false });
+    if (data) setAllRows(data.map((d: any) => ({ ...d, amount: Number(d.amount) })));
+  }, [supabase]);
+
   const filteredRows = useMemo(() => {
     return allRows.filter((r) => {
-      // 1. Filter by Course
-      if (courseFilter !== "ALL" && String(r.syllabus_id) !== courseFilter) {
-        return false;
-      }
-      
-      // 2. Filter by Date Range
+      if (courseFilter !== "ALL" && String(r.syllabus_id) !== courseFilter) return false;
       if (dateRange === "ALL") return true;
-      
+
       const date = new Date(r.transaction_date);
       const now = new Date();
       now.setHours(0, 0, 0, 0);
-      
+
       const getPastDate = (days: number) => {
         const d = new Date(now);
         d.setDate(d.getDate() - days);
@@ -634,6 +684,49 @@ function AccountsManager({ supabase }: { supabase: any }) {
 
   const globalAnalytics = useAnalytics(allRows, syllabi);
   const analytics = useAnalytics(filteredRows, syllabi);
+
+  const handleBatchInlineEdit = async (
+    courseId: string,
+    batchName: string,
+    category: AccountingCategory,
+    newValue: number,
+    isMarketing: boolean
+  ) => {
+    const matching = allRows.filter(r => String(r.syllabus_id) === courseId && r.batch_name === batchName && r.category === category);
+    
+    if (matching.length > 1) {
+      alert("Multiple entries found for this category and batch. Please edit them individually in the Ledger.");
+      return;
+    }
+
+    if (matching.length === 1) {
+      const tx = matching[0];
+      const { error } = await supabase.from("gyanhub_accounting").update({ amount: newValue }).eq('id', tx.id);
+      if (error) alert("Error updating: " + error.message);
+      else fetchDataRef();
+    } else {
+      let subType = null;
+      if (category === "COURSE_INCOME" || category === "TUTOR_PAYMENT") {
+         const typeStr = prompt("Enter sub_type (PHYSICAL / ONLINE / HYBRID / BOTH):", "ONLINE");
+         if (!typeStr) return;
+         subType = typeStr.toUpperCase();
+      }
+      
+      const payload = {
+        transaction_date: new Date().toISOString().slice(0, 10),
+        category: category,
+        accounting_status: "CURRENT",
+        syllabus_id: Number(courseId),
+        batch_name: batchName,
+        sub_type: subType,
+        amount: newValue,
+        is_accounting: category === "MARKETING" ? isMarketing : true
+      };
+      const { error } = await supabase.from("gyanhub_accounting").insert([payload]);
+      if (error) alert("Error creating: " + error.message);
+      else fetchDataRef();
+    }
+  };
 
   if (isLoading) {
     return (
@@ -665,7 +758,6 @@ function AccountsManager({ supabase }: { supabase: any }) {
         } 
       />
 
-      {/* Filters Section */}
       <div className="bg-white border border-[#E6E0D2] rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center gap-6 shadow-sm">
         <div className="flex items-start gap-2 text-[#857D6E] w-full sm:w-auto">
           <Calendar size={16} className="mt-1 shrink-0" />
@@ -743,8 +835,25 @@ function AccountsManager({ supabase }: { supabase: any }) {
             <MetricCard title="Cash Runway" value={`${globalAnalytics.runwayMonths.toFixed(1)} Months`} icon={<Clock />} />
             <MetricCard title="Overall Profit Margin" value={pct(globalAnalytics.overallMargin)} icon={<Target />} trend={globalAnalytics.overallMargin > 0 ? "up" : "down"} />
             <MetricCard title="Expected Cash" value={money(globalAnalytics.expectedCash)} icon={<PiggyBank />} subtext="Current Cash minus Payables" />
-            <MetricCard title="Outstanding Receivable" value={money(globalAnalytics.outReceivable)} icon={<TrendingUp />} color="#8A6416" />
-            <MetricCard title="Outstanding Payable" value={money(globalAnalytics.outPayable)} icon={<TrendingDown />} color="#B23B3B" />
+            
+            {/* Clickable Outstanding KPI Cards */}
+            <MetricCard 
+              title="Outstanding Receivable" 
+              value={money(globalAnalytics.outReceivable)} 
+              icon={<TrendingUp />} 
+              color="#8A6416" 
+              subtext="Money owed TO GyanHub" 
+              onClick={() => scrollToLedger("ALL", "OUTSTANDING", "INCOME")}
+            />
+            <MetricCard 
+              title="Outstanding Payable" 
+              value={money(globalAnalytics.outPayable)} 
+              icon={<TrendingDown />} 
+              color="#B23B3B" 
+              subtext="Money owed BY GyanHub" 
+              onClick={() => scrollToLedger("ALL", "OUTSTANDING", "EXPENSE")}
+            />
+            
             <MetricCard title="Net Profit (All Time)" value={money(globalAnalytics.netProfit)} icon={<Landmark />} color={globalAnalytics.netProfit >= 0 ? "#1E8F6F" : "#B23B3B"} />
             <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm flex flex-col justify-center">
               <p className="text-[11px] uppercase tracking-wide text-[#857D6E] font-bold mb-2">Top Course</p>
@@ -756,47 +865,105 @@ function AccountsManager({ supabase }: { supabase: any }) {
       </section>
 
       <section>
-        <div className="mb-4">
-          <h2 className="font-serif text-xl text-[#14161F] font-bold">Course Analytics</h2>
-          <p className="text-sm text-[#857D6E]">Revenue vs Direct Costs (Filtered Data)</p>
+        <div className="mb-4 flex items-center gap-4">
+          <div>
+            <h2 className="font-serif text-xl text-[#14161F] font-bold">Course Analytics</h2>
+            <p className="text-sm text-[#857D6E]">Revenue vs Direct Costs (Filtered Data)</p>
+          </div>
+          {expandedCourseId && (
+             <button onClick={() => setExpandedCourseId(null)} className="flex items-center gap-1 text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded text-xs font-bold hover:bg-[#0E7C7B]/20">
+               <ArrowLeft size={14} /> Back to Courses
+             </button>
+          )}
         </div>
-        <div className="rounded-xl border border-[#E6E0D2] bg-white overflow-x-auto shadow-sm w-full">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-[#FAF8F3] text-[#857D6E] text-[11px] uppercase tracking-wider font-bold whitespace-nowrap">
-              <tr>
-                <th className="px-6 py-4">Course</th>
-                <th className="px-6 py-4 text-right">Revenue</th>
-                <th className="px-6 py-4 text-right">Tutor Cost</th>
-                <th className="px-6 py-4 text-right">Marketing</th>
-                <th className="px-6 py-4 text-right">Net Profit</th>
-                <th className="px-6 py-4 text-right">Mktg ROI</th>
-                <th className="px-6 py-4 text-right">Score</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E6E0D2] whitespace-nowrap">
-              {analytics.courseStats.map((c) => (
-                <tr key={c.id} className="hover:bg-[#FAF8F3] transition-colors">
-                  <td className="px-6 py-4 font-bold text-[#14161F]">{c.name}</td>
-                  <td className="px-6 py-4 text-right font-mono text-[#4A4638]">{money(c.revenue)}</td>
-                  <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.tutor > 0 ? money(c.tutor) : "-"}</td>
-                  <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.marketing > 0 ? money(c.marketing) : "-"}</td>
-                  <td className={`px-6 py-4 text-right font-mono font-bold ${c.profit >= 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}`}>
-                    {money(c.profit)}
-                  </td>
-                  <td className="px-6 py-4 text-right font-mono text-[#8A6416] font-bold">
-                    {c.roi > 0 ? `${c.roi.toFixed(1)}x` : "-"}
-                  </td>
-                  <td className="px-6 py-4 text-right text-[#8A6416] text-xs">
-                    {"★".repeat(c.score)}{"☆".repeat(5 - c.score)}
-                  </td>
+        
+        {!expandedCourseId ? (
+          <div className="rounded-xl border border-[#E6E0D2] bg-white overflow-x-auto shadow-sm w-full">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[#FAF8F3] text-[#857D6E] text-[11px] uppercase tracking-wider font-bold whitespace-nowrap">
+                <tr>
+                  <th className="px-6 py-4">Course</th>
+                  <th className="px-6 py-4 text-right">Revenue</th>
+                  <th className="px-6 py-4 text-right">Tutor Cost</th>
+                  <th className="px-6 py-4 text-right">Marketing</th>
+                  <th className="px-6 py-4 text-right">Net Profit</th>
+                  <th className="px-6 py-4 text-right">Mktg ROI</th>
+                  <th className="px-6 py-4 text-right">Score</th>
                 </tr>
-              ))}
-              {analytics.courseStats.length === 0 && (
-                <tr><td colSpan={7} className="px-6 py-8 text-center text-[#857D6E] font-medium">No course data recorded yet.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-[#E6E0D2] whitespace-nowrap">
+                {analytics.courseStats.map((c) => (
+                  <tr key={c.id} className="hover:bg-[#FAF8F3] transition-colors cursor-pointer" onClick={() => setExpandedCourseId(c.id)}>
+                    <td className="px-6 py-4 font-bold text-[#14161F]">{c.name}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#4A4638]">{money(c.revenue)}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.tutor > 0 ? money(c.tutor) : "-"}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">{c.marketing > 0 ? money(c.marketing) : "-"}</td>
+                    <td className={`px-6 py-4 text-right font-mono font-bold ${c.profit >= 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}`}>
+                      {money(c.profit)}
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-[#8A6416] font-bold">
+                      {c.roi > 0 ? `${c.roi.toFixed(1)}x` : "-"}
+                    </td>
+                    <td className="px-6 py-4 text-right text-[#8A6416] text-xs">
+                      {"★".repeat(c.score)}{"☆".repeat(5 - c.score)}
+                    </td>
+                  </tr>
+                ))}
+                {analytics.courseStats.length === 0 && (
+                  <tr><td colSpan={7} className="px-6 py-8 text-center text-[#857D6E] font-medium">No course data recorded yet.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-[#E6E0D2] bg-white overflow-x-auto shadow-sm w-full">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-[#FAF8F3] text-[#857D6E] text-[11px] uppercase tracking-wider font-bold whitespace-nowrap">
+                <tr>
+                  <th className="px-6 py-4">Batch Name</th>
+                  <th className="px-6 py-4 text-right">Revenue (Course Income)</th>
+                  <th className="px-6 py-4 text-right">Tutor Cost</th>
+                  <th className="px-6 py-4 text-right">Marketing</th>
+                  <th className="px-6 py-4 text-right">Net Profit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E6E0D2] whitespace-nowrap">
+                {analytics.batchStats.filter(b => b.courseName === (syllabi.find(s => String(s.id) === expandedCourseId)?.name || '')).map((b) => (
+                  <tr key={b.batch} className="hover:bg-[#FAF8F3] transition-colors">
+                    <td className="px-6 py-4 font-bold text-[#14161F]">{b.batch}</td>
+                    <td className="px-6 py-4 text-right font-mono text-[#4A4638]">
+                      <input 
+                        type="number" 
+                        defaultValue={b.revenue}
+                        onBlur={(e) => { if(Number(e.target.value) !== b.revenue) handleBatchInlineEdit(expandedCourseId, b.batch, "COURSE_INCOME", Number(e.target.value), true); }}
+                        className="bg-transparent border-b border-transparent focus:border-[#B8862E] focus:outline-none text-right font-mono w-24"
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">
+                      <input 
+                        type="number" 
+                        defaultValue={b.tutor}
+                        onBlur={(e) => { if(Number(e.target.value) !== b.tutor) handleBatchInlineEdit(expandedCourseId, b.batch, "TUTOR_PAYMENT", Number(e.target.value), true); }}
+                        className="bg-transparent border-b border-transparent focus:border-[#B8862E] focus:outline-none text-right font-mono text-[#B23B3B] w-24"
+                      />
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono text-[#B23B3B]">
+                       <input 
+                        type="number" 
+                        defaultValue={b.marketing}
+                        onBlur={(e) => { if(Number(e.target.value) !== b.marketing) { const m = confirm("Count towards global P&L?"); handleBatchInlineEdit(expandedCourseId, b.batch, "MARKETING", Number(e.target.value), m); } }}
+                        className="bg-transparent border-b border-transparent focus:border-[#B8862E] focus:outline-none text-right font-mono text-[#B23B3B] w-24"
+                      />
+                    </td>
+                    <td className={`px-6 py-4 text-right font-mono font-bold ${b.profit >= 0 ? "text-[#1E8F6F]" : "text-[#B23B3B]"}`}>
+                      {money(b.profit)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section>
@@ -869,40 +1036,41 @@ function AccountsManager({ supabase }: { supabase: any }) {
               <p className="text-sm text-[#857D6E]">Tracking investments and profit distribution (Filtered Data)</p>
             </div>
             <div className="grid grid-cols-1 gap-4">
-              <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
-                <h4 className="font-serif font-bold text-lg text-[#14161F] mb-3 border-b border-[#E6E0D2] pb-2">Nischal</h4>
-                <div className="grid grid-cols-3 gap-2 text-center overflow-x-auto pb-2">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Investment</p>
-                    <p className="font-mono text-[#1E8F6F] font-bold text-sm mt-1">{money(analytics.nischal.inv)}</p>
-                  </div>
-                  <div className="border-l border-r border-[#E6E0D2]">
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Withdrawal</p>
-                    <p className="font-mono text-[#B23B3B] font-bold text-sm mt-1">{money(analytics.nischal.with)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Net Capital</p>
-                    <p className="font-mono font-bold text-sm mt-1 text-[#14161F]">{money(analytics.nischal.net)}</p>
-                  </div>
+              {/* Refactored to Pie Chart instead of Text breakdown */}
+              <div 
+                className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm cursor-pointer hover:shadow-md transition-all" 
+                onClick={() => scrollToLedger("OWNER_WITHDRAWAL", "ALL", "ALL")}
+              >
+                <h4 className="font-serif font-bold text-lg text-[#14161F] mb-3 border-b border-[#E6E0D2] pb-2">
+                  Total Withdrawals
+                </h4>
+                <div className="h-60 w-full flex justify-center items-center">
+                  {analytics.nischal.with > 0 || analytics.dipesh.with > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RechartsPieChart>
+                        <Pie 
+                          data={[
+                            { name: "Nischal", value: analytics.nischal.with },
+                            { name: "Dipesh", value: analytics.dipesh.with }
+                          ].filter(d => d.value > 0)} 
+                          dataKey="value" 
+                          nameKey="name" 
+                          innerRadius={50} 
+                          outerRadius={80} 
+                          paddingAngle={2}
+                        >
+                          <Cell fill="#B23B3B" /> {/* Nischal Color */}
+                          <Cell fill="#1E8F6F" /> {/* Dipesh Color */}
+                        </Pie>
+                        <Tooltip formatter={(v: any) => money(Number(v))} contentStyle={{ borderRadius: '8px' }} />
+                        <Legend verticalAlign="bottom" height={36} />
+                      </RechartsPieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <p className="text-sm font-medium text-[#857D6E] italic">No withdrawals logged in this period.</p>
+                  )}
                 </div>
-              </div>
-
-              <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm">
-                <h4 className="font-serif font-bold text-lg text-[#14161F] mb-3 border-b border-[#E6E0D2] pb-2">Dipesh</h4>
-                <div className="grid grid-cols-3 gap-2 text-center overflow-x-auto pb-2">
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Investment</p>
-                    <p className="font-mono text-[#1E8F6F] font-bold text-sm mt-1">{money(analytics.dipesh.inv)}</p>
-                  </div>
-                  <div className="border-l border-r border-[#E6E0D2]">
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Withdrawal</p>
-                    <p className="font-mono text-[#B23B3B] font-bold text-sm mt-1">{money(analytics.dipesh.with)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold tracking-wide text-[#857D6E]">Net Capital</p>
-                    <p className="font-mono font-bold text-sm mt-1 text-[#14161F]">{money(analytics.dipesh.net)}</p>
-                  </div>
-                </div>
+                <p className="text-[10px] text-center text-[#857D6E] mt-2">Click to view owner withdrawal ledger items.</p>
               </div>
             </div>
           </div>
@@ -912,11 +1080,22 @@ function AccountsManager({ supabase }: { supabase: any }) {
       <hr className="border-[#E6E0D2]" />
 
       <section>
-        <div className="mb-6">
+        <div className="mb-6" ref={ledgerRef}>
           <h2 className="font-serif text-xl text-[#14161F] font-bold">Accounting Ledger</h2>
           <p className="text-sm text-[#857D6E]">Record or edit transactions directly to the database</p>
         </div>
-        <LedgerSection rows={allRows} setRows={setAllRows} syllabi={syllabi} supabase={supabase} />
+        <LedgerSection 
+          rows={allRows} 
+          setRows={setAllRows} 
+          syllabi={syllabi} 
+          supabase={supabase} 
+          externalCategory={ledgerCategoryFilter}
+          setExternalCategory={setLedgerCategoryFilter}
+          externalStatus={ledgerStatusFilter}
+          setExternalStatus={setLedgerStatusFilter}
+          externalType={ledgerTypeFilter}
+          setExternalType={setLedgerTypeFilter}
+        />
       </section>
 
       {/* Reports Modal */}
@@ -928,9 +1107,12 @@ function AccountsManager({ supabase }: { supabase: any }) {
 }
 
 // Support components for AccountsManager
-function MetricCard({ title, value, icon, subtext, color = "#14161F", trend }: { title: string, value: string, icon: React.ReactNode, subtext?: string, color?: string, trend?: "up" | "down" }) {
+function MetricCard({ title, value, icon, subtext, color = "#14161F", trend, onClick }: { title: string, value: string, icon: React.ReactNode, subtext?: string, color?: string, trend?: "up" | "down", onClick?: () => void }) {
   return (
-    <div className="rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm flex flex-col justify-center transition-transform hover:-translate-y-1">
+    <div 
+      className={`rounded-xl border border-[#E6E0D2] bg-white p-5 shadow-sm flex flex-col justify-center transition-all duration-300 ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-1 ring-1 ring-transparent hover:ring-[#E6E0D2]' : 'hover:-translate-y-1'}`}
+      onClick={onClick}
+    >
       <div className="flex justify-between items-start mb-2 text-[#857D6E]">
         <span className="text-[11px] font-bold uppercase tracking-wider">{title}</span>
         <span className="opacity-70" style={{ color }}>{icon}</span>
@@ -945,7 +1127,7 @@ function MetricCard({ title, value, icon, subtext, color = "#14161F", trend }: {
   );
 }
 
-function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction[], setRows: React.Dispatch<React.SetStateAction<Transaction[]>>, syllabi: Syllabus[], supabase: any }) {
+function LedgerSection({ rows, setRows, syllabi, supabase, externalCategory, setExternalCategory, externalStatus, setExternalStatus, externalType, setExternalType }: any) {
   const formRef = useRef<HTMLDivElement>(null);
 
   const emptyDraft = {
@@ -964,14 +1146,30 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState<AccountingCategory | "ALL">("ALL");
+  const [showAllTime, setShowAllTime] = useState(false);
 
   const rule = CATEGORY_RULES[draft.category];
-  
-  const visibleRows = useMemo(() => 
-    (categoryFilter === "ALL" ? rows : rows.filter((r) => r.category === categoryFilter))
-      .slice().sort((a, b) => (a.transaction_date < b.transaction_date ? 1 : -1)),
-  [rows, categoryFilter]);
+
+  const visibleRows = useMemo(() => {
+    let filtered = rows;
+    
+    // Process external filters passed from AccountsManager top-level state
+    if (externalCategory !== "ALL") {
+      filtered = filtered.filter((r: Transaction) => r.category === externalCategory);
+    }
+    if (externalStatus !== "ALL") {
+      filtered = filtered.filter((r: Transaction) => r.accounting_status === externalStatus);
+    }
+    if (externalType !== "ALL") {
+      filtered = filtered.filter((r: Transaction) => deriveTransactionType(r.category) === externalType);
+    }
+
+    if (!showAllTime) {
+      const currentBsMonth = toBsMonthLabel(new Date().toISOString()).key;
+      filtered = filtered.filter((r: Transaction) => toBsMonthLabel(r.transaction_date).key === currentBsMonth);
+    }
+    return filtered.slice().sort((a: any, b: any) => (a.transaction_date < b.transaction_date ? 1 : -1));
+  }, [rows, externalCategory, externalStatus, externalType, showAllTime]);
 
   function handleEdit(tx: Transaction) {
     setEditingId(tx.id);
@@ -987,6 +1185,15 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
       is_accounting: tx.is_accounting
     });
     formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function handleDelete(txId: string) {
+    if(!confirm("Are you sure you want to delete this transaction?")) return;
+    const { error } = await supabase.from("gyanhub_accounting").delete().eq("id", txId);
+    if (error) alert("Error deleting: " + error.message);
+    else {
+      setRows((r: Transaction[]) => r.filter(x => x.id !== txId));
+    }
   }
 
   function cancelEdit() {
@@ -1007,7 +1214,7 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
   async function handleSubmit() {
     const err = validateTransaction(draft);
     if (err) return setError(err);
-    
+
     setError(null);
     setIsSubmitting(true);
 
@@ -1037,7 +1244,7 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
         setError(updateError.message);
       } else {
         const updatedRow = { ...data, amount: Number(data.amount) } as Transaction;
-        setRows((r) => r.map((prev) => prev.id === editingId ? updatedRow : prev));
+        setRows((r: Transaction[]) => r.map((prev) => prev.id === editingId ? updatedRow : prev));
         cancelEdit();
       }
     } else {
@@ -1050,11 +1257,11 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
       if (insertError) {
         setError(insertError.message);
       } else {
-        setRows((r) => [{ ...data, amount: Number(data.amount) } as Transaction, ...r]);
+        setRows((r: Transaction[]) => [{ ...data, amount: Number(data.amount) } as Transaction, ...r]);
         setDraft({ ...emptyDraft, transaction_date: draft.transaction_date });
       }
     }
-    
+
     setIsSubmitting(false);
   }
 
@@ -1069,12 +1276,12 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
             </button>
           )}
         </div>
-        
+
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Date</span>
             <input type="date" value={draft.transaction_date} onChange={(e) => setDraft((d) => ({ ...d, transaction_date: e.target.value }))} className="font-mono text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40" />
           </label>
-          
+
           <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Category</span>
             <select value={draft.category} onChange={(e) => setDraft(d => ({ ...d, category: e.target.value as AccountingCategory, sub_type: "", syllabus_id: CATEGORY_RULES[e.target.value as AccountingCategory].requiresSyllabus ? d.syllabus_id : "", batch_name: CATEGORY_RULES[e.target.value as AccountingCategory].requiresBatch ? d.batch_name : "" }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
               {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_RULES[c].label}</option>)}
@@ -1091,7 +1298,7 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
             <label className="flex flex-col gap-1.5 text-xs font-bold"><span className="uppercase tracking-wide text-[#857D6E]">Course</span>
               <select value={draft.syllabus_id} onChange={(e) => setDraft((d) => ({ ...d, syllabus_id: e.target.value }))} className="text-sm border border-[#E6E0D2] rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-[#B8862E]/40">
                 <option value="">Select a Course...</option>
-                {syllabi.map((s) => (
+                {syllabi.map((s: Syllabus) => (
                   <option key={s.id} value={s.id}>{s.name || `Course #${s.id}`}</option>
                 ))}
               </select>
@@ -1155,64 +1362,82 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
       <div className="bg-white border border-[#E6E0D2] rounded-xl overflow-hidden shadow-sm flex flex-col h-fit">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-[#E6E0D2] bg-[#FAF8F3]">
           <h3 className="font-serif font-bold text-lg text-[#14161F]">Recent Transactions</h3>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value as AccountingCategory | "ALL")} className="text-xs font-bold border border-[#E6E0D2] rounded-md px-2 py-1.5 bg-white focus:outline-none w-full sm:w-auto">
-            <option value="ALL">All categories</option>
-            {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_RULES[c].label}</option>)}
-          </select>
+          <div className="flex flex-wrap items-center gap-4">
+             <label className="flex items-center gap-2 text-xs font-bold text-[#4A4638] cursor-pointer">
+                <input type="checkbox" checked={showAllTime} onChange={e => setShowAllTime(e.target.checked)} className="accent-[#B8862E] w-4 h-4" />
+                Show All Time
+             </label>
+             {/* Dynamic Filter Controls */}
+             <select value={externalType} onChange={(e) => setExternalType(e.target.value as TransactionType | "ALL")} className="text-xs font-bold border border-[#E6E0D2] rounded-md px-2 py-1.5 bg-white focus:outline-none sm:w-auto">
+               <option value="ALL">All Types</option>
+               <option value="INCOME">Income</option>
+               <option value="EXPENSE">Expense</option>
+               <option value="INVESTMENT">Investment</option>
+               <option value="WITHDRAWAL">Withdrawal</option>
+             </select>
+             <select value={externalStatus} onChange={(e) => setExternalStatus(e.target.value as AccountingStatus | "ALL")} className="text-xs font-bold border border-[#E6E0D2] rounded-md px-2 py-1.5 bg-white focus:outline-none sm:w-auto">
+               <option value="ALL">All Status</option>
+               <option value="CURRENT">Current</option>
+               <option value="OUTSTANDING">Outstanding</option>
+               <option value="PREPAID">Prepaid</option>
+             </select>
+             <select value={externalCategory} onChange={(e) => setExternalCategory(e.target.value as AccountingCategory | "ALL")} className="text-xs font-bold border border-[#E6E0D2] rounded-md px-2 py-1.5 bg-white focus:outline-none w-full sm:w-auto">
+               <option value="ALL">All categories</option>
+               {CATEGORY_ORDER.map((c) => <option key={c} value={c}>{CATEGORY_RULES[c].label}</option>)}
+             </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto max-h-[700px] w-full">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-[#EFEBE1] z-10 whitespace-nowrap">
-              <tr className="text-[10px] font-bold uppercase tracking-wider text-[#857D6E]">
-                <th className="text-left px-5 py-3">Date</th>
-                <th className="text-left px-4 py-3">Category</th>
-                <th className="text-left px-4 py-3">Course/Batch</th>
-                <th className="text-right px-5 py-3">Amount</th>
-                <th className="text-right px-4 py-3 w-10"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#E6E0D2] whitespace-nowrap md:whitespace-normal">
-              {visibleRows.map((r) => {
+          <div className="flex flex-col gap-2 p-4">
+             {visibleRows.map((r: Transaction) => {
                 const type = deriveTransactionType(r.category);
                 const isOutflow = type === "EXPENSE" || type === "WITHDRAWAL";
-                
+                const rowStyle = !r.is_accounting ? "ring-1 ring-[#B23B3B] border-[#EAC2BC]" : "border-[#E6E0D2] hover:shadow-md";
+
                 let courseName = "";
                 if (r.syllabus_id) {
-                  const s = syllabi.find(s => s.id === r.syllabus_id);
+                  const s = syllabi.find((s: Syllabus) => s.id === r.syllabus_id);
                   courseName = s ? s.name : `Course #${r.syllabus_id}`;
                 }
+                const bsInfo = toBsMonthLabel(r.transaction_date);
 
                 return (
-                  <tr key={r.id} className="hover:bg-[#FAF8F3] transition-colors group">
-                    <td className="px-5 py-3 font-mono text-xs font-bold text-[#857D6E] whitespace-nowrap align-top">{r.transaction_date}</td>
-                    <td className="px-4 py-3 align-top min-w-[120px]">
-                      <div className="font-bold text-[#14161F] text-xs flex flex-wrap gap-1">
-                        {CATEGORY_RULES[r.category].label}
-                        {!r.is_accounting && <span className="text-[9px] bg-[#EFEBE1] text-[#857D6E] px-1 py-0.5 rounded">NON-P&L</span>}
+                   <div key={r.id} className={`group bg-white border rounded-xl p-4 flex flex-col md:flex-row md:items-center gap-4 transition-all ${rowStyle} border-l-4 ${isOutflow ? 'border-l-[#B23B3B]' : 'border-l-[#1E8F6F]'}`}>
+                      <div className="w-full md:w-32 shrink-0">
+                         <p className="font-bold text-[#14161F] text-sm">{bsInfo.label}</p>
+                         <p className="font-mono text-[10px] text-[#857D6E]">{r.transaction_date}</p>
                       </div>
-                      <div className="text-[10px] font-medium text-[#857D6E] mt-0.5 max-w-[200px] truncate md:whitespace-normal md:break-words">{r.description}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs font-bold text-[#857D6E] align-top">
-                      {courseName ? <div>{courseName}</div> : null}
-                      {r.batch_name ? <div className="font-medium">{r.batch_name}</div> : (r.sub_type ? <div className="font-medium">{r.sub_type}</div> : "—")}
-                    </td>
-                    <td className={`px-5 py-3 text-right font-mono font-bold align-top ${isOutflow ? "text-[#B23B3B]" : "text-[#1E8F6F]"}`}>
-                      {isOutflow ? "−" : "+"}{money(r.amount)}
-                    </td>
-                    <td className="px-3 py-3 text-right align-top">
-                      <button onClick={() => handleEdit(r)} className="p-1.5 text-[#B4AF9F] hover:bg-[#EFEBE1] hover:text-[#14161F] rounded transition-colors opacity-100 lg:opacity-0 group-hover:opacity-100" title="Edit Entry">
-                        <Pencil size={14} />
-                      </button>
-                    </td>
-                  </tr>
+                      <div className="flex-1 flex flex-col gap-1">
+                         <div className="flex flex-wrap gap-2 items-center">
+                            <span className="font-bold text-[#14161F] text-sm">{CATEGORY_RULES[r.category].label}</span>
+                            {(r.category === 'COURSE_INCOME' || r.category === 'TUTOR_PAYMENT') && r.sub_type && (
+                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${r.sub_type === 'ONLINE' ? 'bg-[#0E7C7B]/10 text-[#0E7C7B]' : r.sub_type === 'PHYSICAL' ? 'bg-[#B8543D]/10 text-[#B8543D]' : 'bg-[#B8862E]/10 text-[#B8862E]'}`}>{r.sub_type}</span>
+                            )}
+                            {!r.is_accounting && <span className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-2 py-0.5 rounded-md">NOT ADDED TO ACCOUNTS</span>}
+                         </div>
+                         <p className="text-xs font-bold text-[#857D6E]">
+                            {courseName && <span>{courseName} </span>}
+                            {r.batch_name && <span>({r.batch_name})</span>}
+                         </p>
+                         {r.description && <p className="text-[11px] font-medium text-[#4A4638] mt-1 line-clamp-2 md:line-clamp-1 group-hover:line-clamp-none transition-all">{r.description}</p>}
+                      </div>
+                      <div className="flex md:flex-col justify-between md:justify-center items-center md:items-end gap-2 shrink-0">
+                         <p className={`font-mono font-bold text-base md:text-lg ${isOutflow ? "text-[#B23B3B]" : "text-[#1E8F6F]"}`}>
+                           {isOutflow ? "−" : "+"}{money(r.amount)}
+                         </p>
+                         <div className="flex gap-1 opacity-100 lg:opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleEdit(r)} className="p-1.5 text-[#B4AF9F] hover:bg-[#EFEBE1] hover:text-[#14161F] rounded" title="Edit"><Pencil size={14} /></button>
+                            <button onClick={() => handleDelete(r.id)} className="p-1.5 text-[#B23B3B] hover:bg-[#F3DAD6] rounded" title="Delete"><Trash2 size={14} /></button>
+                         </div>
+                      </div>
+                   </div>
                 );
-              })}
-              {visibleRows.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-sm font-medium text-[#857D6E]">No transactions found.</td></tr>
-              )}
-            </tbody>
-          </table>
+             })}
+             {visibleRows.length === 0 && (
+                <div className="p-8 text-center text-sm font-medium text-[#857D6E]">No transactions found.</div>
+             )}
+          </div>
         </div>
       </div>
     </div>
@@ -1220,26 +1445,121 @@ function LedgerSection({ rows, setRows, syllabi, supabase }: { rows: Transaction
 }
 
 function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof useAnalytics>, onClose: () => void }) {
-  const [activeTab, setActiveTab] = useState(1);
+  const [activeTab, setActiveTab] = useState(0);
 
   const REPORT_LIST = [
-    { id: 1, title: "Operating Expense Ratio", question: "Are we spending efficiently?" },
-    { id: 2, title: "Collection Health", question: "Are we collecting our income?" },
-    { id: 3, title: "Profit per Expense Rupee", question: "How efficiently do we spend?" },
-    { id: 4, title: "Course Profit Contribution", question: "Which courses drive profit?" },
-    { id: 5, title: "Profit Concentration", question: "Are we dependent on a few courses?" },
-    { id: 6, title: "Break-Even Revenue", question: "How much must we earn to cover costs?" },
-    { id: 7, title: "Expense-to-Revenue Trend", question: "Is efficiency improving?" },
-    { id: 8, title: "Monthly Profit Growth", question: "Is profitability growing?" },
-    { id: 9, title: "Cash Safety / Runway", question: "How long can we operate?" },
-    { id: 10, title: "Outstanding Liability Risk", question: "Can outstanding money cover what we owe?" },
+    { id: 0, title: "Tutor Payment Sheet", question: "What have we paid tutors, and what's still owed?" },
+    { id: 1, title: "Owner Withdrawals", question: "What have Nischal and Dipesh withdrawn, and when?" },
+    { id: 2, title: "Operating Expense Ratio", question: "Are we spending efficiently?" },
+    { id: 3, title: "Collection Health", question: "Are we collecting our income?" },
+    { id: 4, title: "Profit per Expense Rupee", question: "How efficiently do we spend?" },
+    { id: 5, title: "Course Profit Contribution", question: "Which courses drive profit?" },
+    { id: 6, title: "Profit Concentration", question: "Are we dependent on a few courses?" },
+    { id: 7, title: "Break-Even Revenue", question: "How much must we earn to cover costs?" },
+    { id: 8, title: "Expense-to-Revenue Trend", question: "Is efficiency improving?" },
+    { id: 9, title: "Monthly Profit Growth", question: "Is profitability growing?" },
+    { id: 10, title: "Cash Safety / Runway", question: "How long can we operate?" },
+    { id: 11, title: "Outstanding Liability Risk", question: "Can outstanding money cover what we owe?" },
   ];
 
   const renderReportContent = () => {
     const r = analytics.reports;
 
     switch (activeTab) {
-      case 1:
+      case 0: {
+        const tutorBatches = new Map();
+        analytics.rows.filter(x => x.category === "TUTOR_PAYMENT").forEach(tx => {
+           if(!tx.syllabus_id || !tx.batch_name) return;
+           const courseName = analytics.courseStats.find(c => String(c.id) === String(tx.syllabus_id))?.name || `Course #${tx.syllabus_id}`;
+           const key = `${tx.syllabus_id}-${tx.batch_name}`;
+           if(!tutorBatches.has(key)) tutorBatches.set(key, { courseName, batch: tx.batch_name, totalPaid: 0, outstanding: 0, lastDate: tx.transaction_date, remarks: [] });
+           
+           const b = tutorBatches.get(key);
+           if(tx.accounting_status === 'OUTSTANDING') b.outstanding += tx.amount;
+           else b.totalPaid += tx.amount;
+           
+           if(tx.transaction_date > b.lastDate) b.lastDate = tx.transaction_date;
+           if(tx.description) b.remarks.push(tx.description);
+        });
+        
+        const rows = Array.from(tutorBatches.values()).sort((a,b) => b.outstanding - a.outstanding);
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Tutor Payment Sheet</h3>
+            <p className="text-sm font-medium text-[#857D6E]">What have we paid tutors, and what's still owed?</p>
+            <div className="bg-white rounded-xl border border-[#E6E0D2] overflow-x-auto shadow-sm">
+              <table className="w-full text-sm whitespace-nowrap">
+                <thead className="bg-[#FAF8F3]">
+                  <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-[#857D6E]">
+                    <th className="px-4 py-3">Course / Batch</th>
+                    <th className="px-4 py-3 text-right">Total Paid</th>
+                    <th className="px-4 py-3 text-right">Outstanding</th>
+                    <th className="px-4 py-3 text-center">Last Tx Date</th>
+                    <th className="px-4 py-3">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E0D2]">
+                  {rows.map((row, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3 font-bold truncate max-w-[150px]"><p className="text-xs">{row.courseName}</p><p className="text-sm text-[#0E7C7B]">{row.batch}</p></td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-[#1E8F6F]">{money(row.totalPaid)}</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold">
+                        {row.outstanding > 0 ? <span className="bg-[#F3DAD6] text-[#B23B3B] px-2 py-1 rounded-full text-xs border border-[#EAC2BC]">{money(row.outstanding)}</span> : money(0)}
+                      </td>
+                      <td className="px-4 py-3 text-center font-mono text-xs">{toBsMonthLabel(row.lastDate).label}</td>
+                      <td className="px-4 py-3 text-xs text-[#857D6E] truncate max-w-[200px]" title={Array.from(new Set(row.remarks)).join(" | ")}>{Array.from(new Set(row.remarks)).join(" | ")}</td>
+                    </tr>
+                  ))}
+                  {rows.length === 0 && <tr><td colSpan={5} className="px-4 py-6 text-center font-medium text-[#857D6E]">No tutor payment data.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+      case 1: {
+        const withs = analytics.rows.filter(x => x.category === "OWNER_WITHDRAWAL").sort((a,b) => (a.transaction_date < b.transaction_date ? 1 : -1));
+        return (
+          <div className="space-y-4">
+            <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Owner Withdrawals</h3>
+            <p className="text-sm font-medium text-[#857D6E]">What have Nischal and Dipesh withdrawn, and when?</p>
+            <div className="flex gap-4 mb-4">
+              <div className="bg-[#FAF8F3] px-4 py-2 border border-[#E6E0D2] rounded-lg">
+                <p className="text-[10px] font-bold text-[#857D6E] uppercase">Nischal Withdrawn</p>
+                <p className="text-lg font-mono font-bold text-[#B23B3B]">{money(analytics.nischal.with)}</p>
+              </div>
+              <div className="bg-[#FAF8F3] px-4 py-2 border border-[#E6E0D2] rounded-lg">
+                <p className="text-[10px] font-bold text-[#857D6E] uppercase">Dipesh Withdrawn</p>
+                <p className="text-lg font-mono font-bold text-[#B23B3B]">{money(analytics.dipesh.with)}</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-xl border border-[#E6E0D2] overflow-x-auto shadow-sm">
+              <table className="w-full text-sm whitespace-nowrap">
+                <thead className="bg-[#FAF8F3]">
+                  <tr className="text-left text-[11px] font-bold uppercase tracking-wider text-[#857D6E]">
+                    <th className="px-4 py-3">Owner</th>
+                    <th className="px-4 py-3">Date</th>
+                    <th className="px-4 py-3 text-right">Amount</th>
+                    <th className="px-4 py-3">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#E6E0D2]">
+                  {withs.map((w, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3 font-bold">{w.sub_type}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{toBsMonthLabel(w.transaction_date).label} ({w.transaction_date})</td>
+                      <td className="px-4 py-3 text-right font-mono font-bold text-[#B23B3B]">{money(w.amount)}</td>
+                      <td className="px-4 py-3 text-xs text-[#857D6E] truncate max-w-[200px]">{w.description}</td>
+                    </tr>
+                  ))}
+                  {withs.length === 0 && <tr><td colSpan={4} className="px-4 py-6 text-center font-medium text-[#857D6E]">No withdrawals found.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      }
+      case 2:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Operating Expense Ratio</h3>
@@ -1253,7 +1573,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 2:
+      case 3:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Collection Health</h3>
@@ -1272,7 +1592,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 3:
+      case 4:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Expense Efficiency</h3>
@@ -1284,7 +1604,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 4:
+      case 5:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Course Profit Contribution</h3>
@@ -1314,7 +1634,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 5:
+      case 6:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Profit Concentration</h3>
@@ -1331,7 +1651,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 6:
+      case 7:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Break-Even Revenue</h3>
@@ -1355,7 +1675,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 7:
+      case 8:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Expense-to-Revenue Trend</h3>
@@ -1389,7 +1709,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 8:
+      case 9:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Monthly Profit Growth</h3>
@@ -1427,7 +1747,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 9:
+      case 10:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Cash Safety & Runway</h3>
@@ -1454,7 +1774,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             </div>
           </div>
         );
-      case 10:
+      case 11:
         return (
           <div className="space-y-4">
             <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Outstanding Liability Risk</h3>
@@ -1470,7 +1790,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
                   <div className="text-2xl md:text-3xl font-mono font-bold text-[#B23B3B]">{money(analytics.outPayable)}</div>
                 </div>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-wide text-[#857D6E] mb-1">Receivable-to-Payable Ratio</p>
@@ -1504,7 +1824,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
             <X size={20} />
           </button>
         </div>
-        
+
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden min-h-[400px]">
           {/* Sidebar - horizontally scrollable on mobile */}
           <div className="w-full md:w-1/3 border-b md:border-b-0 md:border-r border-[#E6E0D2] bg-[#FAF8F3] shrink-0 flex md:flex-col overflow-x-auto md:overflow-x-visible md:overflow-y-auto snap-x md:snap-none hide-scrollbar">
@@ -1520,7 +1840,7 @@ function ReportsModal({ analytics, onClose }: { analytics: ReturnType<typeof use
               </button>
             ))}
           </div>
-          
+
           {/* Content Area */}
           <div className="w-full md:w-2/3 bg-white overflow-y-auto p-4 md:p-8 relative">
             {renderReportContent()}
@@ -1545,7 +1865,7 @@ export default function AdminDashboard() {
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [activeTab, setActiveTab] = useState("Accounts");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  
+
   const [chatOpen, setChatOpen] = useState(false);
   const [activeUser, setActiveUser] = useState<string | null>(null);
 
@@ -1640,7 +1960,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="fixed inset-0 z-[9999] bg-[#F6F3EC] text-[#14161F] font-sans flex flex-col md:flex-row overflow-hidden">
-      
+
       {/* Mobile Top Header */}
       <div className="md:hidden flex items-center justify-between bg-[#14161F] text-white p-4 shrink-0 shadow-md relative z-40">
         <div className="flex items-center gap-3">
@@ -2598,7 +2918,11 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
   const [editLocked, setEditLocked] = useState<number>(0);
   const [editPaid, setEditPaid] = useState<number>(0);
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editWa, setEditWa] = useState("");
   const [isAddingBooking, setIsAddingBooking] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [newBooking, setNewBooking] = useState({ name: '', email: '', wa: '', locked_price: 0, paid_amount: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
@@ -2627,33 +2951,55 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     setEditingPayment(enr); 
     setEditLocked(enr.locked_price || 0);
     setEditPaid(enr.paid_amount || 0); 
+    setEditName(enr.full_name || "");
+    setEditEmail(enr.email || "");
+    setEditWa(enr.whatsapp_number || "");
   };
 
   const savePayment = async () => {
     if (!editingPayment) return;
     const newPending = 0;
+    setIsSubmittingBooking(true);
+
+    const { error: enrUpdateErr } = await supabase.from('enrollments_v2').update({
+      full_name: editName,
+      email: editEmail,
+      whatsapp_number: editWa
+    }).eq('id', editingPayment.id);
+
+    if (enrUpdateErr) {
+       alert("Failed to update enrollment contact info: " + enrUpdateErr.message);
+       setIsSubmittingBooking(false);
+       return;
+    }
 
     if (!editingPayment.order_id) {
       const course = courses.find((c: any) => c.id === editingPayment.course_id);
-      const { data: newOrder, error: insErr } = await supabase.from('orders_v2').insert([{
-        enrollment_id: editingPayment.id, full_name: editingPayment.full_name, email: editingPayment.email,
-        whatsapp_number: editingPayment.whatsapp_number, order_type: 'Online Course',
+      const { error: insErr } = await supabase.from('orders_v2').insert([{
+        enrollment_id: editingPayment.id, full_name: editName, email: editEmail,
+        whatsapp_number: editWa, order_type: 'Online Course',
         order_name: editingPayment.course_name || (course?.title || 'Course Enrollment'),
         paid_amount: editPaid, pending_amount: newPending, locked_price: editLocked,
         status: editPaid >= editLocked ? 'verified' : 'pending'
-      }]).select().single();
-      if (insErr) { alert("Failed to auto-create missing order: " + insErr.message); return; }
-      refresh(); setEditingPayment(null); return;
+      }]);
+      if (insErr) { alert("Failed to auto-create missing order: " + insErr.message); setIsSubmittingBooking(false); return; }
+    } else {
+      const { error } = await supabase.from('orders_v2').update({ 
+        full_name: editName,
+        email: editEmail,
+        whatsapp_number: editWa,
+        paid_amount: editPaid, 
+        pending_amount: newPending, 
+        locked_price: editLocked, 
+        updated_at: new Date().toISOString() 
+      }).eq('id', editingPayment.order_id);
+
+      if (error) { alert("Failed to update payment: " + error.message); setIsSubmittingBooking(false); return; }
     }
     
-    const { error } = await supabase.from('orders_v2').update({ 
-      paid_amount: editPaid, 
-      pending_amount: newPending, 
-      locked_price: editLocked, 
-      updated_at: new Date().toISOString() 
-    }).eq('id', editingPayment.order_id);
-    
-    if (error) alert("Failed to update payment: " + error.message); else { refresh(); setEditingPayment(null); }
+    refresh(); 
+    setEditingPayment(null);
+    setIsSubmittingBooking(false);
   };
 
   const openAddBookingModal = () => {
@@ -2666,24 +3012,32 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   const saveManualBooking = async () => {
     if (!selectedCourse) return;
     if (!newBooking.name || !newBooking.email || !newBooking.wa) { alert("Please fill all contact details!"); return; }
+    if (isSubmittingBooking) return;
+    
+    setIsSubmittingBooking(true);
     let resolvedBatchId = null;
     if (selectedBatch !== 'unassigned' && selectedBatch !== null) {
       const matchedBatch = batches.find((b: any) => b.course_id === selectedCourse.id && b.batch_no === selectedBatch);
       if (matchedBatch) resolvedBatchId = matchedBatch.id;
     }
-    if (!resolvedBatchId) { alert("Error: You must be inside a specific valid batch to add a booking."); return; }
+    if (!resolvedBatchId) { alert("Error: You must be inside a specific valid batch to add a booking."); setIsSubmittingBooking(false); return; }
+    
     const enrPayload = { batch_id: resolvedBatchId, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa, is_confirmed: true };
     const { data: enrData, error: enrErr } = await supabase.from('enrollments_v2').insert([enrPayload]).select().single();
-    if (enrErr) { alert("Error adding enrollment: " + enrErr.message); return; }
-    
+    if (enrErr) { alert("Error adding enrollment: " + enrErr.message); setIsSubmittingBooking(false); return; }
+
     const ordPayload = {
       enrollment_id: enrData.id, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa,
       order_type: 'Online Course', order_name: selectedCourse.title, paid_amount: newBooking.paid_amount, 
       pending_amount: 0, locked_price: newBooking.locked_price, status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
     };
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
-    if (ordErr) alert("Enrollment added, but auto-order creation failed: " + ordErr.message);
+    if (ordErr) {
+       alert(`Enrollment added, but auto-order creation failed: ${ordErr.message}. Please check manually.`);
+    }
+    
     setIsAddingBooking(false);
+    setIsSubmittingBooking(false);
     setNewBooking({ name: '', email: '', wa: '', locked_price: 0, paid_amount: 0 });
     refresh();
   };
@@ -2783,7 +3137,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
           </div>
           <button onClick={openAddBookingModal} className="w-full md:w-auto justify-center px-5 py-3 bg-[#0E7C7B] text-white rounded-xl text-sm font-bold hover:opacity-90 transition-colors flex items-center gap-2 shadow-sm whitespace-nowrap"><Plus size={16} /> Add Booking</button>
         </div>
-        
+
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center w-full">
           <div className="w-full sm:flex-1 sm:min-w-[250px]"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, email, or phone..." /></div>
           <select className="w-full sm:w-auto bg-white border border-[#E6E0D2] rounded-xl px-4 py-3 text-sm font-bold text-[#14161F] outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
@@ -2797,111 +3151,119 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center bg-[#FAF8F3] p-4 rounded-2xl border border-[#E6E0D2] mb-4 gap-4 w-full">
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
             <span className="text-xs md:text-sm font-bold text-[#4A4638] bg-white px-3 py-1.5 rounded-lg border border-[#E6E0D2] shadow-sm whitespace-nowrap">Showing {courseEnrollments.length}</span>
-            <span className="text-xs md:text-sm font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded-lg border border-[#0E7C7B]/20 shadow-sm whitespace-nowrap">Predicted: <span className="font-black">Rs. {predictedVolume}</span></span>
-            <span className="text-xs md:text-sm font-bold text-[#1E8F6F] bg-[#DCEEE6] px-3 py-1.5 rounded-lg border border-[#C3E3D5] shadow-sm whitespace-nowrap">Collected: <span className="font-black">Rs. {collectedVolume}</span></span>
-            <span className="text-xs md:text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Pending: <span className="font-black">Rs. {pendingVolume}</span></span>
+            <span className="text-xs md:text-sm font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1.5 rounded-lg border border-[#0E7C7B]/20 shadow-sm whitespace-nowrap">Predicted: <span className="font-black">Rs. {predictedVolume.toLocaleString()}</span></span>
+            <span className="text-xs md:text-sm font-bold text-[#1E8F6F] bg-[#DCEEE6] px-3 py-1.5 rounded-lg border border-[#C3E3D5] shadow-sm whitespace-nowrap">Collected: <span className="font-black">Rs. {collectedVolume.toLocaleString()}</span></span>
+            <span className="text-xs md:text-sm font-bold text-[#B23B3B] bg-[#F3DAD6] px-3 py-1.5 rounded-lg border border-[#EAC2BC] shadow-sm whitespace-nowrap">Pending: <span className="font-black">Rs. {pendingVolume.toLocaleString()}</span></span>
         </div>
         <button onClick={handleCopyCSV} className="w-full lg:w-auto justify-center flex items-center gap-2 bg-[#14161F] text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-[#22242F] transition-colors shadow-sm whitespace-nowrap shrink-0"><Copy size={14} /> Copy CSV List</button>
       </div>
 
       <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
-        <div className="overflow-y-auto max-h-[600px] w-full">
-          <table className="w-full text-left border-collapse table-auto text-xs min-w-[900px]">
-            <thead>
-              <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[#4A4638] uppercase font-bold tracking-wider sticky top-0 z-10">
-                <th className="p-3 border-r border-[#E6E0D2]">Full Name</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Email</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Contact Number</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Locked Fee</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Paid Amount</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Remaining Amount</th>
-                <th className="p-3 border-r border-[#E6E0D2] text-center">Confirmed</th>
-                <th className="p-3 text-center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedEnrollments.map((enr: any) => {
-                const lockedFee = enr.locked_price || 0;
-                const paidAmt = enr.paid_amount || 0;
-                const pendingAmt = lockedFee - paidAmt;
-                
-                return (
-                  <tr key={enr.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
-                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#14161F] cursor-pointer hover:text-[#0E7C7B] hover:underline truncate max-w-[150px]" onClick={(e) => { e.stopPropagation(); enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.'); }}>{enr.full_name}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638] truncate max-w-[150px]">{enr.email}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">{enr.whatsapp_number}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638]">Rs. {lockedFee}</td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold">Rs. {paidAmt}</td>
-                    <td className={`p-3 border-r border-[#E6E0D2] font-bold ${pendingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>
-                      Rs. {pendingAmt}
-                    </td>
-                    <td className="p-3 border-r border-[#E6E0D2] text-center">
-                      <input type="checkbox" checked={!!enr.confirmed} onChange={() => toggleConfirmation(enr.id, !!enr.confirmed)} className="w-5 h-5 cursor-pointer accent-[#1E8F6F] rounded" />
-                    </td>
-                    <td className="p-3 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button onClick={() => openPaymentEdit(enr)} className="text-[10px] font-bold bg-[#FAF8F3] border border-[#E6E0D2] px-3 py-1.5 rounded hover:bg-[#EFEBE1] transition-colors flex items-center gap-1"><Edit2 size={12} />Edit</button>
-                        <button onClick={() => deleteEnrollment(enr.id)} className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-3 py-1.5 rounded hover:opacity-80 transition-colors flex items-center gap-1"><Trash2 size={12} />Delete</button>
+        <table className="w-full text-left border-collapse min-w-[900px]">
+          <thead>
+            <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
+              <th className="p-4">Student Info</th>
+              <th className="p-4">Course Info</th>
+              <th className="p-4">Financials</th>
+              <th className="p-4 text-center">Status</th>
+              <th className="p-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-[#E6E0D2]">
+            {paginatedEnrollments.map((enr: any) => {
+              return (
+                <tr key={enr.id} className="hover:bg-[#FAF8F3] transition-colors">
+                  <td className="p-4">
+                    <p className="font-bold text-[#14161F] text-sm cursor-pointer hover:text-[#0E7C7B] hover:underline w-fit" onClick={() => enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.')}>{enr.full_name}</p>
+                    <p className="text-[10px] md:text-xs font-bold text-[#857D6E] mt-0.5">{enr.email}</p>
+                    <p className="text-[10px] md:text-xs font-bold text-[#857D6E]">{enr.whatsapp_number}</p>
+                  </td>
+                  <td className="p-4">
+                    <p className="font-bold text-sm text-[#4A4638] truncate max-w-[200px]">{enr.course_name || selectedCourse.title}</p>
+                    <p className="text-[10px] font-bold text-[#B4AF9F] uppercase tracking-widest mt-1">Batch {enr.batch_no || 'Unassigned'}</p>
+                  </td>
+                  <td className="p-4">
+                      <div className="flex flex-col gap-1 text-xs">
+                        <div className="flex justify-between items-center w-36"><span className="text-[#857D6E] font-bold">Locked Price:</span> <span className="font-mono font-bold">Rs.{enr.locked_price || 0}</span></div>
+                        <div className="flex justify-between items-center w-36"><span className="text-[#857D6E] font-bold">Paid Amount:</span> <span className="font-mono font-bold text-[#1E8F6F]">Rs.{enr.paid_amount || 0}</span></div>
+                        <div className="flex justify-between items-center w-36 border-t border-[#E6E0D2] pt-1"><span className="text-[#857D6E] font-bold">Pending:</span> <span className="font-mono font-bold text-[#B23B3B]">Rs.{Math.max(0, (enr.locked_price || 0) - (enr.paid_amount || 0))}</span></div>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {paginatedEnrollments.length === 0 && <tr><td colSpan={8} className="p-8 text-center font-bold text-[#857D6E]">No matching enrollments found.</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        {courseEnrollments.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-[#E6E0D2] bg-[#FAF8F3] shrink-0 gap-4">
-            <span className="text-xs font-bold text-[#4A4638]">Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, courseEnrollments.length)} of {courseEnrollments.length} entries</span>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded border border-[#E6E0D2] text-xs font-bold bg-white text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Previous</button>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-4 py-2 rounded border border-[#E6E0D2] text-xs font-bold bg-white text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Next</button>
-            </div>
-          </div>
-        )}
+                  </td>
+                  <td className="p-4 text-center">
+                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
+                      <ToggleSwitch checked={enr.confirmed} onChange={() => toggleConfirmation(enr.id, enr.confirmed)} label={enr.confirmed ? 'Confirmed' : 'Pending'} />
+                    </div>
+                  </td>
+                  <td className="p-4 text-right">
+                      <div className="flex justify-end items-center gap-2">
+                        <button onClick={() => openPaymentEdit(enr)} className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors" title="Edit Contact/Financials"><Edit2 size={15} /></button>
+                        <button onClick={() => deleteEnrollment(enr.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:bg-[#EAC2BC] transition-colors" title="Delete Enrollment"><Trash2 size={15} /></button>
+                      </div>
+                  </td>
+                </tr>
+              )
+            })}
+            {paginatedEnrollments.length === 0 && <tr><td colSpan={5} className="p-8 text-center font-bold text-[#857D6E]">No enrollments found matching your criteria.</td></tr>}
+          </tbody>
+        </table>
       </div>
 
-      {isAddingBooking && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setIsAddingBooking(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setIsAddingBooking(false)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-xl md:text-2xl font-serif font-bold mb-1">Add Booking</h3>
-            <p className="text-[10px] md:text-xs font-medium text-[#857D6E] mb-6">Create enrollment manually.</p>
-            <div className="space-y-4">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Full Name</label><input type="text" value={newBooking.name} onChange={(e) => setNewBooking({ ...newBooking, name: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" placeholder="John Doe" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email Address</label><input type="email" value={newBooking.email} onChange={(e) => setNewBooking({ ...newBooking, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" placeholder="john@example.com" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">WhatsApp Number</label><input type="text" value={newBooking.wa} onChange={(e) => setNewBooking({ ...newBooking, wa: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" placeholder="98XXXXXXXX" /></div>
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-[#E6E0D2]">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Price</label><input type="number" value={newBooking.locked_price} onChange={(e) => setNewBooking({ ...newBooking, locked_price: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount</label><input type="number" value={newBooking.paid_amount} onChange={(e) => setNewBooking({ ...newBooking, paid_amount: Number(e.target.value) })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-bold text-[#1E8F6F] text-sm" /></div>
-              </div>
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 border border-[#E6E0D2] rounded-xl shadow-sm">
+          <p className="text-xs font-bold text-[#857D6E]">Page {currentPage} of {totalPages}</p>
+          <div className="flex gap-2">
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-[#FAF8F3] hover:bg-[#EFEBE1] border border-[#E6E0D2] rounded-lg text-xs font-bold disabled:opacity-50 transition-colors text-[#14161F]">Previous</button>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-[#FAF8F3] hover:bg-[#EFEBE1] border border-[#E6E0D2] rounded-lg text-xs font-bold disabled:opacity-50 transition-colors text-[#14161F]">Next</button>
+          </div>
+        </div>
+      )}
+
+      {/* Payment / Contact Edit Modal */}
+      {editingPayment && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setEditingPayment(null)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
+            <div className="p-5 md:p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-2 md:mt-4">
+              <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Edit Details</h3>
+              <p className="text-xs font-bold text-[#857D6E] truncate mt-1">Student: {editingPayment.full_name}</p>
             </div>
-            <div className="mt-8 flex justify-end gap-3">
-              <button onClick={() => setIsAddingBooking(false)} className="px-4 md:px-5 py-2.5 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
-              <button onClick={saveManualBooking} className="px-5 md:px-6 py-2.5 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg hover:opacity-90 transition-colors text-sm">Add</button>
+            <div className="p-5 md:p-6 space-y-4">
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Full Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editName} onChange={e => setEditName(e.target.value)} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Email</label><input type="email" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editEmail} onChange={e => setEditEmail(e.target.value)} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp Number</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={editWa} onChange={e => setEditWa(e.target.value)} /></div>
+              <hr className="border-[#E6E0D2]" />
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Locked Price (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm font-mono" value={editLocked} onChange={e => setEditLocked(Number(e.target.value))} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Paid Amount (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#1E8F6F] text-sm font-mono" value={editPaid} onChange={e => setEditPaid(Number(e.target.value))} /></div>
+            </div>
+            <div className="p-4 md:p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] flex justify-end gap-3 shrink-0">
+              <button onClick={() => setEditingPayment(null)} disabled={isSubmittingBooking} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] text-sm">Cancel</button>
+              <button onClick={savePayment} disabled={isSubmittingBooking} className={`px-6 py-2 rounded-xl font-bold bg-[#14161F] text-white shadow-lg transition-colors text-sm ${isSubmittingBooking ? 'opacity-70' : 'hover:bg-[#22242F]'}`}>{isSubmittingBooking ? 'Saving...' : 'Save Updates'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {editingPayment && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setEditingPayment(null)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-lg md:text-xl font-serif font-bold mb-1 pr-6">Edit Payment Details</h3>
-            <p className="text-[10px] md:text-xs font-bold text-[#857D6E] mb-6 truncate">{editingPayment.full_name}</p>
-            <div className="space-y-4">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Locked Fee (Rs)</label><input type="number" value={editLocked} onChange={(e) => setEditLocked(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#8A6416] font-black text-[#8A6416] text-sm" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Paid Amount (Rs)</label><input type="number" value={editPaid} onChange={(e) => setEditPaid(Number(e.target.value))} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#1E8F6F] font-black text-[#1E8F6F] text-sm" /></div>
-              <div className="p-3 bg-[#EFEBE1] rounded-xl flex justify-between items-center border border-[#E6E0D2]">
-                <label className="block text-[10px] font-bold text-[#857D6E] uppercase">Remaining Amount</label>
-                <span className={`font-black text-sm ${editLocked - editPaid > 0 ? 'text-[#B23B3B]' : 'text-[#1E8F6F]'}`}>Rs. {Math.max(0, editLocked - editPaid)}</span>
+      {/* Add Booking Modal */}
+      {isAddingBooking && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setIsAddingBooking(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full relative overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <button onClick={() => setIsAddingBooking(false)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
+            <div className="p-5 md:p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-2 md:mt-4">
+              <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Add Booking</h3>
+              <p className="text-xs font-bold text-[#857D6E] truncate mt-1">{selectedCourse?.title} (Batch {selectedBatch})</p>
+            </div>
+            <div className="p-5 md:p-6 space-y-4 overflow-y-auto no-scrollbar">
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Full Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.name} onChange={e => setNewBooking({ ...newBooking, name: e.target.value })} placeholder="Student Name" /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Email</label><input type="email" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.email} onChange={e => setNewBooking({ ...newBooking, email: e.target.value })} placeholder="student@example.com" /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.wa} onChange={e => setNewBooking({ ...newBooking, wa: e.target.value })} placeholder="+977..." /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Locked Price</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm font-mono" value={newBooking.locked_price} onChange={e => setNewBooking({ ...newBooking, locked_price: Number(e.target.value) })} /></div>
+                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Paid Amount</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#1E8F6F] text-sm font-mono" value={newBooking.paid_amount} onChange={e => setNewBooking({ ...newBooking, paid_amount: Number(e.target.value) })} /></div>
               </div>
             </div>
-            <div className="mt-6 flex justify-end gap-3">
-              <button onClick={() => setEditingPayment(null)} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
-              <button onClick={savePayment} className="px-5 md:px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg hover:opacity-90 transition-colors text-sm">Save</button>
+            <div className="p-4 md:p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] flex justify-end gap-3 shrink-0">
+              <button onClick={() => setIsAddingBooking(false)} disabled={isSubmittingBooking} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] text-sm">Cancel</button>
+              <button onClick={saveManualBooking} disabled={isSubmittingBooking} className={`px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg transition-colors text-sm ${isSubmittingBooking ? 'opacity-70' : 'hover:bg-[#0A5F5E]'}`}>{isSubmittingBooking ? 'Adding...' : 'Add Booking'}</button>
             </div>
           </div>
         </div>
@@ -3393,89 +3755,64 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 /* ============================================================================
    CERTIFICATES
 ============================================================================ */
-function CertificatesManager({ data, syllabi, refresh }: any) {
+function CertificatesManager({ data, syllabi, refresh, onOpenChat }: any) {
   const supabase = useSupabase();
   const [searchQuery, setSearchQuery] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
-  const [newCert, setNewCert] = useState({ name: '', email: '', syllabus_id: '', issue_date: new Date().toISOString().split('T')[0] });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const filtered = data.filter((c: any) => {
+    const q = searchQuery.toLowerCase();
+    return (c.name && c.name.toLowerCase().includes(q)) || 
+           (c.email && c.email.toLowerCase().includes(q)) || 
+           (c.certificate_code && c.certificate_code.toLowerCase().includes(q));
+  });
 
-  const filtered = data.filter((c: any) =>
-    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (c.certificate_code || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const generateCode = () => 'GH' + Math.random().toString(36).substr(2, 6).toUpperCase();
-
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    const syllabus = syllabi.find((s: any) => s.id.toString() === newCert.syllabus_id);
-    const payload = {
-      name: newCert.name,
-      email: newCert.email,
-      syllabus_id: syllabus ? syllabus.id : null,
-      syllabus_name: syllabus ? syllabus.name : 'Unknown Course',
-      issue_date: newCert.issue_date,
-      certificate_code: generateCode(),
-      certificate_image: 'placeholder.png'
-    };
-
-    const { error } = await supabase.from('certificates').insert([payload]);
-    if (error) alert("Error creating certificate: " + error.message);
-    else {
-      setShowAdd(false);
-      setNewCert({ name: '', email: '', syllabus_id: '', issue_date: new Date().toISOString().split('T')[0] });
-      refresh();
-    }
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm("Are you sure you want to revoke this certificate?")) {
-      const { error } = await supabase.from('certificates').update({ deleted: true }).eq('id', id);
-      if (error) alert(error.message); else refresh();
-    }
+  const deleteCert = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this certificate?")) return;
+    const { error } = await supabase.from('certificates').update({ deleted: true }).eq('id', id);
+    if (error) alert("Failed to delete certificate: " + error.message);
+    else refresh();
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
-      <SectionHeader eyebrow="Credentials" title="Certificates" subtitle="Issue and manage verified digital certificates." action={
-        <button onClick={() => setShowAdd(true)} className="w-full sm:w-auto justify-center bg-[#14161F] text-white px-5 py-3 rounded-xl font-bold flex items-center gap-2 shadow-lg hover:bg-[#22242F] transition-all">
-          <Award size={17} /> Issue Certificate
-        </button>
-      } />
+      <SectionHeader eyebrow="Credentials" title="Certificates Directory" subtitle="Manage and verify issued student certificates." />
       
-      <div className="w-full sm:w-1/2 md:w-1/3">
-        <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, email, or code..." />
+      <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center w-full">
+        <div className="w-full sm:flex-1 sm:min-w-[300px]"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by student name, email, or certificate code..." /></div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-[#E6E0D2] overflow-x-auto w-full">
-        <table className="w-full text-left border-collapse min-w-[700px]">
+      <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
+        <table className="w-full text-left border-collapse min-w-[800px]">
           <thead>
             <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
               <th className="p-4">Student</th>
-              <th className="p-4">Course</th>
-              <th className="p-4">Issue Date</th>
-              <th className="p-4">Verification Code</th>
+              <th className="p-4">Course / Syllabus</th>
+              <th className="p-4">Certificate ID</th>
+              <th className="p-4 text-center">Issue Date</th>
               <th className="p-4 text-right">Actions</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-[#E6E0D2]">
             {filtered.map((cert: any) => (
-              <tr key={cert.id} className="border-b border-[#EFEBE1] hover:bg-[#FAF8F3]">
+              <tr key={cert.id} className="hover:bg-[#FAF8F3] transition-colors">
                 <td className="p-4">
-                  <p className="font-bold text-[#14161F]">{cert.name}</p>
-                  <p className="text-[10px] font-bold text-[#857D6E] truncate max-w-[200px]">{cert.email}</p>
+                  <p className="font-bold text-[#14161F] text-sm cursor-pointer hover:text-[#0E7C7B] hover:underline w-fit" onClick={() => cert.user_id ? onOpenChat(cert.user_id) : alert('No user account linked.')}>{cert.name}</p>
+                  <p className="text-[10px] md:text-xs font-bold text-[#857D6E] mt-0.5">{cert.email}</p>
                 </td>
-                <td className="p-4 font-bold text-[#4A4638] text-xs">{cert.syllabus_name}</td>
-                <td className="p-4 font-mono text-xs font-bold text-[#857D6E]">{new Date(cert.issue_date).toLocaleDateString()}</td>
-                <td className="p-4 font-mono text-xs font-bold text-[#0E7C7B] bg-[#0E7C7B]/10 px-3 py-1 rounded-lg inline-block mt-2">{cert.certificate_code}</td>
+                <td className="p-4">
+                  <p className="font-bold text-sm text-[#4A4638] truncate max-w-[250px]">{cert.syllabus_name}</p>
+                </td>
+                <td className="p-4">
+                  <span className="font-mono text-xs font-bold bg-[#EFEBE1] px-2 py-1 rounded text-[#4A4638]">{cert.certificate_code}</span>
+                </td>
+                <td className="p-4 text-center">
+                  <p className="text-xs font-bold text-[#857D6E]">{new Date(cert.issue_date).toLocaleDateString()}</p>
+                </td>
                 <td className="p-4 text-right">
-                  <button onClick={() => handleDelete(cert.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:opacity-80 transition-colors" title="Revoke">
-                    <Ban size={15} />
-                  </button>
+                    <div className="flex justify-end items-center gap-2">
+                      <a href={cert.certificate_image} target="_blank" rel="noreferrer" className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors inline-flex" title="View Certificate"><ExternalLink size={15} /></a>
+                      <button onClick={() => deleteCert(cert.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:bg-[#EAC2BC] transition-colors" title="Revoke/Delete"><Trash2 size={15} /></button>
+                    </div>
                 </td>
               </tr>
             ))}
@@ -3483,32 +3820,6 @@ function CertificatesManager({ data, syllabi, refresh }: any) {
           </tbody>
         </table>
       </div>
-
-      {showAdd && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 max-w-sm w-full relative" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowAdd(false)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F]"><X /></button>
-            <h3 className="text-xl md:text-2xl font-serif font-bold mb-1">Issue Certificate</h3>
-            <p className="text-[10px] md:text-xs font-medium text-[#857D6E] mb-6">Record a new official certificate.</p>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Student Name</label><input required type="text" value={newCert.name} onChange={(e) => setNewCert({ ...newCert, name: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Email</label><input required type="email" value={newCert.email} onChange={(e) => setNewCert({ ...newCert, email: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" /></div>
-              <div>
-                <label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Course</label>
-                <select required value={newCert.syllabus_id} onChange={(e) => setNewCert({ ...newCert, syllabus_id: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm">
-                  <option value="">Select a course...</option>
-                  {syllabi.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1">Issue Date</label><input required type="date" value={newCert.issue_date} onChange={(e) => setNewCert({ ...newCert, issue_date: e.target.value })} className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" /></div>
-              <div className="mt-8 flex justify-end gap-3 pt-4 border-t border-[#E6E0D2]">
-                <button type="button" onClick={() => setShowAdd(false)} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
-                <button type="submit" disabled={isSubmitting} className="px-6 py-2.5 rounded-xl font-bold bg-[#14161F] text-white shadow-lg hover:bg-[#22242F] transition-colors text-sm disabled:opacity-50">Issue</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 }
@@ -3520,77 +3831,105 @@ function ChatModal({ userId, onClose, profilesMap }: { userId: string, onClose: 
   const supabase = useSupabase();
   const [messages, setMessages] = useState<any[]>([]);
   const [reply, setReply] = useState("");
+  const [loading, setLoading] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchChat = async () => {
-      const { data } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
-      if (data) setMessages(data);
-      await supabase.from('messages').update({ is_read: true }).eq('user_id', userId).eq('sender_role', 'user').eq('is_read', false);
+      const { data, error } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
+      if (!error && data) {
+        setMessages(data);
+        // Mark as read
+        const unreadIds = data.filter((m: any) => m.sender_role === 'user' && !m.is_read).map((m: any) => m.id);
+        if (unreadIds.length > 0) {
+          await supabase.from('messages').update({ is_read: true }).in('id', unreadIds);
+        }
+      }
+      setLoading(false);
+      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
     };
-    fetchChat();
 
+    fetchChat();
     const channel = supabase.channel(`chat_${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
-        setMessages((prev) => [...prev, payload.new]);
-        if (payload.new.sender_role === 'user') supabase.from('messages').update({ is_read: true }).eq('id', payload.new.id);
+        setMessages(prev => [...prev, payload.new]);
+        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
       }).subscribe();
-
+      
     return () => { supabase.removeChannel(channel); };
   }, [userId, supabase]);
 
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
-
-  const handleSend = async (e: React.FormEvent) => {
+  const sendReply = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reply.trim()) return;
-    const msg = reply.trim();
+    const msg = reply;
     setReply("");
+    
+    // Optimistic update
+    const tempMsg = { id: Date.now().toString(), user_id: userId, sender_role: 'admin', content: msg, created_at: new Date().toISOString(), is_read: true };
+    setMessages(prev => [...prev, tempMsg]);
+    setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+
     const { error } = await supabase.from('messages').insert([{ user_id: userId, sender_role: 'admin', content: msg, is_read: true }]);
-    if (error) alert("Failed to send message: " + error.message);
+    if (error) {
+      alert("Failed to send message: " + error.message);
+      setMessages(prev => prev.filter(m => m.id !== tempMsg.id)); // Revert optimistic
+    }
   };
 
-  const name = profilesMap?.full_name || "User Chat";
-  
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-[#14161F]/60 p-2 sm:p-4 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col h-[85vh] sm:h-[80vh] border border-[#E6E0D2]" onClick={e => e.stopPropagation()}>
-        <div className="p-4 sm:p-5 border-b border-[#E6E0D2] flex justify-between items-center bg-[#FAF8F3] rounded-t-2xl shrink-0">
+    <div className="fixed inset-0 z-[200] flex justify-end bg-[#14161F]/40 backdrop-blur-sm" onClick={onClose}>
+      <motion.div 
+        initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
+        className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col border-l border-[#E6E0D2]" 
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-5 border-b border-[#E6E0D2] bg-[#FAF8F3] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-[#EFEBE1] flex items-center justify-center font-bold text-[#857D6E] overflow-hidden shadow-sm">
-              {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" alt="" /> : name.charAt(0)}
-            </div>
-            <div>
-              <h3 className="font-bold text-[#14161F] text-sm sm:text-base">{name}</h3>
-              <p className="text-[10px] sm:text-xs font-bold text-[#0E7C7B] uppercase tracking-widest">Live Support</p>
-            </div>
+             <div className="w-10 h-10 rounded-full bg-[#EFEBE1] flex items-center justify-center font-bold text-[#857D6E] overflow-hidden">
+                {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" alt="" /> : (profilesMap?.full_name?.charAt(0) || "U")}
+             </div>
+             <div>
+               <h3 className="font-bold text-[#14161F] text-sm">{profilesMap?.full_name || "Unknown User"}</h3>
+               <p className="text-[10px] font-bold uppercase tracking-widest text-[#B4AF9F]">Student Chat</p>
+             </div>
           </div>
-          <button onClick={onClose} className="p-2 text-[#B4AF9F] hover:bg-[#EFEBE1] rounded-full transition-colors"><X size={20} /></button>
+          <button onClick={onClose} className="p-2 bg-white rounded-full text-[#B4AF9F] hover:text-[#14161F] border border-[#E6E0D2] shadow-sm"><X size={16}/></button>
         </div>
-        
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-white bg-opacity-50" style={{ backgroundImage: "radial-gradient(#E6E0D2 1px, transparent 1px)", backgroundSize: "20px 20px" }}>
-          {messages.map((msg, i) => {
-            const isAdmin = msg.sender_role === 'admin';
-            const showTime = i === 0 || new Date(msg.created_at).getTime() - new Date(messages[i-1].created_at).getTime() > 300000;
-            return (
-              <div key={msg.id} className="flex flex-col">
-                {showTime && <span className="text-[9px] sm:text-[10px] font-bold text-[#B4AF9F] text-center my-2 uppercase tracking-widest">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
-                <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-2.5 text-sm font-medium shadow-sm ${isAdmin ? 'bg-[#14161F] text-white rounded-br-sm self-end' : 'bg-white border border-[#E6E0D2] text-[#14161F] rounded-bl-sm self-start'}`}>
-                  {msg.content}
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#F6F3EC]" ref={scrollRef}>
+          {loading ? (
+             <div className="flex justify-center items-center h-full text-[#B8862E]"><Loader2 className="animate-spin" /></div>
+          ) : messages.length === 0 ? (
+             <div className="text-center text-sm font-bold text-[#B4AF9F] mt-10">No messages yet.</div>
+          ) : (
+            messages.map((msg, idx) => {
+              const isAdmin = msg.sender_role === 'admin';
+              return (
+                <div key={msg.id || idx} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
+                  <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${isAdmin ? 'bg-[#14161F] text-white rounded-br-none' : 'bg-white text-[#14161F] rounded-bl-none border border-[#E6E0D2]'}`}>
+                    {msg.content}
+                  </div>
+                  <span className="text-[9px] font-bold text-[#B4AF9F] mt-1 px-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-              </div>
-            );
-          })}
-          {messages.length === 0 && <div className="h-full flex items-center justify-center text-sm font-bold text-[#B4AF9F] italic">No messages yet. Start the conversation.</div>}
+              )
+            })
+          )}
         </div>
-        
-        <form onSubmit={handleSend} className="p-3 sm:p-4 border-t border-[#E6E0D2] bg-[#FAF8F3] rounded-b-2xl flex gap-2 shrink-0">
-          <input type="text" value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Type your reply..." className="flex-1 bg-white border border-[#E6E0D2] rounded-xl px-4 py-3 text-sm font-medium text-[#14161F] outline-none focus:border-[#B8862E] focus:ring-1 focus:ring-[#B8862E] transition-all shadow-sm" />
-          <button type="submit" disabled={!reply.trim()} className="bg-[#14161F] text-white p-3 rounded-xl hover:bg-[#22242F] disabled:opacity-50 transition-colors shadow-sm flex items-center justify-center w-12 h-12 shrink-0"><Send size={18} /></button>
+
+        <form onSubmit={sendReply} className="p-4 bg-white border-t border-[#E6E0D2] flex gap-2 shrink-0">
+          <input 
+            type="text" 
+            value={reply} 
+            onChange={e => setReply(e.target.value)} 
+            placeholder="Type your message..." 
+            className="flex-1 bg-[#FAF8F3] border border-[#E6E0D2] focus:border-[#B8862E] rounded-xl px-4 py-2.5 text-sm font-bold outline-none text-[#14161F]"
+          />
+          <button type="submit" disabled={!reply.trim()} className="bg-[#0E7C7B] text-white p-3 rounded-xl hover:bg-[#0A5F5E] disabled:opacity-50 transition-colors shadow-sm">
+            <Send size={18} />
+          </button>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 }
