@@ -50,13 +50,11 @@ export async function GET() {
       return NextResponse.json(
         {
           error: "Failed to fetch physical courses.",
-          details: error.message,
         },
         { status: 500 }
       );
     }
 
-    // Convert numeric values returned by Supabase to numbers
     const formattedData = (data ?? []).map((course) => ({
       ...course,
       price: Number(course.price),
@@ -73,7 +71,6 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "Unexpected server error.",
-        details: err instanceof Error ? err.message : String(err),
       },
       { status: 500 }
     );

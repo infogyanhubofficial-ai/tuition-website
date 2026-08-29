@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
-  LayoutDashboard, LogOut, Plus, Users, X, Edit2, Check, MapPin, Clock,
-  Trash2, GraduationCap, ExternalLink, Monitor, Send, Lock, MessageCircle,
-  AlertCircle, Layers, ShoppingCart, CalendarDays, Award, ChevronDown, Search,
-  EyeOff, Eye, Loader2, MessageSquare, ArrowLeft, Upload, Copy, CheckSquare,
-  Phone, Building2, CalendarClock, StickyNote, GripVertical, Ban, Globe2,
-  TrendingUp, PieChart, CalendarRange, Archive, TrendingDown, Wallet, Landmark,
-  PiggyBank, AlertTriangle, Activity, Target, Pencil, FileBarChart, Calendar, BookOpen, Menu
+  Activity, AlertCircle, AlertTriangle, Archive, ArrowLeft, Award, Ban,
+  BookOpen, Building2, Calendar, CalendarClock, CalendarDays, CalendarRange,
+  Check, CheckSquare, ChevronDown, Clock, Copy, Edit2, ExternalLink, Eye,
+  EyeOff, FileBarChart, FileText, Globe2, GraduationCap, GripVertical, Landmark,
+  Layers, LayoutDashboard, Loader2, Lock, LogOut, MapPin, Menu, MessageCircle,
+  MessageSquare, Monitor, Pencil, Phone, PieChart, PiggyBank, Plus, Search,
+  Send, ShoppingCart, CheckCircle2, XCircle, RefreshCw, MessageSquareText, Mail, ThumbsUp, ThumbsDown, UserIcon, ChevronUp, Star, StickyNote, Target, Trash2, TrendingDown,
+  TrendingUp, Upload, Users, Wallet, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
@@ -1956,6 +1957,7 @@ export default function AdminDashboard() {
     { key: "Batch Management", label: "Batch Management", icon: <Layers size={18} /> },
     { key: "Bookings", label: "Bookings & Leads", icon: <CalendarDays size={18} /> },
     { key: "Certificates", label: "Certificates", icon: <Award size={18} /> },
+    { key: "Reviews", label: "Reviews", icon: <Star size={18} /> },
   ];
 
   return (
@@ -2012,6 +2014,7 @@ export default function AdminDashboard() {
           {activeTab === "Batch Management" && <BatchManager key="batch" data={courses} batches={batches} physicalCourses={physicalCourses} refresh={() => { refreshCoursesAndBatches(); refreshPhysical(); }} />}
           {activeTab === "Bookings" && <BookingsManager key="book" courses={courses} enrollments={enrollments} batches={batches} syllabi={syllabi} physicalLeads={physicalLeads} physicalCourses={physicalCourses} orders={orders} refresh={() => { refreshOrdersAndEnr(); refreshPhysical(); refreshCoursesAndBatches(); }} onOpenChat={openChat} />}
           {activeTab === "Certificates" && <CertificatesManager key="cert" data={certificates} syllabi={syllabi} refresh={refreshCertificates} onOpenChat={openChat} />}
+          {activeTab === "Reviews" && <ReviewsManager key="reviews" supabase={supabase} />}
         </AnimatePresence>
 
         <AnimatePresence>
@@ -2909,13 +2912,17 @@ function BookingsManager({ courses, enrollments, batches, syllabi, physicalCours
   );
 }
 
-function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, refresh, onOpenChat }: any) {
+
+export function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, refresh, onOpenChat }: any) {
   const supabase = useSupabase();
-  const [selectedCourse, setSelectedCourse] = useState<OnlineCourse | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
+  
+  // 1. Unified Search and Filter matching PhysicalLeadsView
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
-  const [editingPayment, setEditingPayment] = useState<Enrollment | null>(null);
+  const [confirmedFilter, setConfirmedFilter] = useState<'all' | 'pending' | 'confirmed' | 'confirmed_due'>('all');
+  
+  const [editingPayment, setEditingPayment] = useState<any>(null);
   const [editLocked, setEditLocked] = useState<number>(0);
   const [editPaid, setEditPaid] = useState<number>(0);
   const [editName, setEditName] = useState("");
@@ -2927,7 +2934,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
-  useEffect(() => { setCurrentPage(1); }, [selectedCourse, selectedBatch, searchQuery, statusFilter]);
+  useEffect(() => { setCurrentPage(1); }, [selectedCourse, selectedBatch, searchQuery, confirmedFilter]);
 
   const toggleConfirmation = async (enrollmentId: string, currentStatus: boolean) => {
     try {
@@ -2947,7 +2954,18 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     }
   };
 
-  const openPaymentEdit = (enr: Enrollment) => { 
+  // 2. Added handler for inline notes saving
+  const handleNotesUpdate = async (orderId: string, newNotes: string) => {
+    if (!orderId) return;
+    try {
+      const { error } = await supabase.from('orders_v2').update({ notes: newNotes }).eq('id', orderId);
+      if (error) alert("Failed to save notes: " + error.message);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openPaymentEdit = (enr: any) => { 
     setEditingPayment(enr); 
     setEditLocked(enr.locked_price || 0);
     setEditPaid(enr.paid_amount || 0); 
@@ -3029,7 +3047,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     const ordPayload = {
       enrollment_id: enrData.id, full_name: newBooking.name, email: newBooking.email, whatsapp_number: newBooking.wa,
       order_type: 'Online Course', order_name: selectedCourse.title, paid_amount: newBooking.paid_amount, 
-      pending_amount: 0, locked_price: newBooking.locked_price, status: newBooking.paid_amount >= newBooking.locked_price ? 'verified' : 'pending'
+      pending_amount: 0, locked_price: newBooking.locked_price, status: 'verified'
     };
     const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
     if (ordErr) {
@@ -3077,7 +3095,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
         <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
           <button onClick={() => setSelectedCourse(null)} className="self-start p-2 md:p-3 bg-white border border-[#E6E0D2] rounded-xl hover:bg-[#FAF8F3] transition-colors shadow-sm shrink-0"><ArrowLeft size={19} className="text-[#4A4638]" /></button>
           <div className="min-w-0">
-            <h2 className="text-xl md:text-2xl font-serif font-bold text-[#14161F] truncate">{selectedCourse.title}</h2>
+            <h2 className="text-xl md:text-2xl font-serif font-bold text-[#14161F] truncate cursor-pointer hover:text-[#0E7C7B]" onClick={() => { setSelectedBatch(null); setSelectedCourse(null); }}>{selectedCourse.title}</h2>
             <p className="text-xs md:text-sm font-medium text-[#857D6E]">Select a batch to view its enrollments</p>
           </div>
         </div>
@@ -3113,12 +3131,14 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
     return true;
   });
 
-  if (statusFilter === 'confirmed') courseEnrollments = courseEnrollments.filter((e: any) => e.confirmed);
-  if (statusFilter === 'pending') courseEnrollments = courseEnrollments.filter((e: any) => !e.confirmed);
+  // Adapted to identical structure of physical view logic
+  if (confirmedFilter === 'confirmed') courseEnrollments = courseEnrollments.filter((e: any) => e.confirmed || e.is_confirmed);
+  if (confirmedFilter === 'pending') courseEnrollments = courseEnrollments.filter((e: any) => !e.confirmed && !e.is_confirmed);
+  if (confirmedFilter === 'confirmed_due') courseEnrollments = courseEnrollments.filter((e: any) => (e.confirmed || e.is_confirmed) && (e.locked_price - (e.paid_amount || 0)) > 0);
 
-  const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.confirmed ? (e.locked_price || 0) : 0), 0);
+  const predictedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + ((e.confirmed || e.is_confirmed) ? (e.locked_price || 0) : 0), 0);
   const collectedVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.paid_amount || 0), 0);
-  const pendingVolume = courseEnrollments.reduce((sum: number, e: any) => sum + (e.confirmed ? ((e.locked_price || 0) - (e.paid_amount || 0)) : 0), 0);
+  const pendingVolume = courseEnrollments.reduce((sum: number, e: any) => sum + ((e.confirmed || e.is_confirmed) ? ((e.locked_price || 0) - (e.paid_amount || 0)) : 0), 0);
 
   const totalPages = Math.ceil(courseEnrollments.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
@@ -3131,7 +3151,7 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
           <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
             <button onClick={() => setSelectedBatch(null)} className="p-2 md:p-3 bg-white border border-[#E6E0D2] rounded-xl hover:bg-[#FAF8F3] transition-colors shadow-sm shrink-0"><ArrowLeft size={19} className="text-[#4A4638]" /></button>
             <div className="min-w-0">
-              <h2 className="text-xl md:text-2xl font-serif font-bold text-[#14161F] truncate">{selectedCourse.title}</h2>
+              <h2 className="text-xl md:text-2xl font-serif font-bold text-[#14161F] truncate cursor-pointer hover:text-[#0E7C7B]" onClick={() => { setSelectedBatch(null); setSelectedCourse(null); }}>{selectedCourse.title}</h2>
               <p className="text-xs md:text-sm font-medium text-[#857D6E] truncate">{selectedBatch === 'unassigned' ? 'Unassigned Enrollments' : `Batch ${selectedBatch} Enrollments`}</p>
             </div>
           </div>
@@ -3140,10 +3160,11 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
 
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center w-full">
           <div className="w-full sm:flex-1 sm:min-w-[250px]"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by name, email, or phone..." /></div>
-          <select className="w-full sm:w-auto bg-white border border-[#E6E0D2] rounded-xl px-4 py-3 text-sm font-bold text-[#14161F] outline-none shadow-sm cursor-pointer" value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}>
+          <select className="w-full sm:w-auto bg-white border border-[#E6E0D2] rounded-xl px-4 py-3 text-sm font-bold text-[#14161F] outline-none shadow-sm cursor-pointer" value={confirmedFilter} onChange={e => setConfirmedFilter(e.target.value as any)}>
             <option value="all">Status: All</option>
             <option value="pending">Status: Pending</option>
             <option value="confirmed">Status: Confirmed</option>
+            <option value="confirmed_due">Status: Confirmed (Due Payment)</option>
           </select>
         </div>
       </div>
@@ -3159,66 +3180,90 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
       </div>
 
       <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
-        <table className="w-full text-left border-collapse min-w-[900px]">
-          <thead>
-            <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
-              <th className="p-4">Student Info</th>
-              <th className="p-4">Course Info</th>
-              <th className="p-4">Financials</th>
-              <th className="p-4 text-center">Status</th>
-              <th className="p-4 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#E6E0D2]">
-            {paginatedEnrollments.map((enr: any) => {
-              return (
-                <tr key={enr.id} className="hover:bg-[#FAF8F3] transition-colors">
-                  <td className="p-4">
-                    <p className="font-bold text-[#14161F] text-sm cursor-pointer hover:text-[#0E7C7B] hover:underline w-fit" onClick={() => enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.')}>{enr.full_name}</p>
-                    <p className="text-[10px] md:text-xs font-bold text-[#857D6E] mt-0.5">{enr.email}</p>
-                    <p className="text-[10px] md:text-xs font-bold text-[#857D6E]">{enr.whatsapp_number}</p>
-                  </td>
-                  <td className="p-4">
-                    <p className="font-bold text-sm text-[#4A4638] truncate max-w-[200px]">{enr.course_name || selectedCourse.title}</p>
-                    <p className="text-[10px] font-bold text-[#B4AF9F] uppercase tracking-widest mt-1">Batch {enr.batch_no || 'Unassigned'}</p>
-                  </td>
-                  <td className="p-4">
-                      <div className="flex flex-col gap-1 text-xs">
-                        <div className="flex justify-between items-center w-36"><span className="text-[#857D6E] font-bold">Locked Price:</span> <span className="font-mono font-bold">Rs.{enr.locked_price || 0}</span></div>
-                        <div className="flex justify-between items-center w-36"><span className="text-[#857D6E] font-bold">Paid Amount:</span> <span className="font-mono font-bold text-[#1E8F6F]">Rs.{enr.paid_amount || 0}</span></div>
-                        <div className="flex justify-between items-center w-36 border-t border-[#E6E0D2] pt-1"><span className="text-[#857D6E] font-bold">Pending:</span> <span className="font-mono font-bold text-[#B23B3B]">Rs.{Math.max(0, (enr.locked_price || 0) - (enr.paid_amount || 0))}</span></div>
+        <div className="overflow-y-auto max-h-[600px] w-full">
+          <table className="w-full text-left border-collapse table-auto text-xs min-w-[1100px]">
+            <thead>
+              <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[#4A4638] uppercase font-bold tracking-wider sticky top-0 z-10">
+                <th className="p-3 border-r border-[#E6E0D2] w-48">Student Details</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-40">Contact Info</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Locked Fee</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Paid Amount</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Remaining</th>
+                <th className="p-3 border-r border-[#E6E0D2] text-center w-24">Confirmed</th>
+                <th className="p-3 border-r border-[#E6E0D2] min-w-[150px]">Notes</th>
+                <th className="p-3 text-center w-36">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedEnrollments.map((enr: any) => {
+                const lockedFee = enr.locked_price || 0;
+                const paidAmt = enr.paid_amount || 0;
+                const pendingAmt = Math.max(0, lockedFee - paidAmt);
+                const isConf = !!(enr.confirmed || enr.is_confirmed);
+                
+                return (
+                  <tr key={enr.id} className="border-b border-[#EFEBE1] hover:bg-[#FBF6EA] transition-colors">
+                    <td className="p-3 border-r border-[#E6E0D2] align-top">
+                      <p className="font-bold text-[#14161F] truncate max-w-[150px] cursor-pointer hover:text-[#0E7C7B] hover:underline" onClick={() => enr.user_id ? onOpenChat(enr.user_id) : alert('No linked user account.')}>{enr.full_name}</p>
+                      <p className="text-[10px] text-[#857D6E] font-bold mt-1">Course: {enr.course_name || selectedCourse.title}</p>
+                      <p className="text-[10px] text-[#B4AF9F] font-bold">Batch: {enr.batch_no || 'Unassigned'}</p>
+                    </td>
+                    <td className="p-3 border-r border-[#E6E0D2] align-top">
+                      <p className="font-bold text-[#4A4638]">{enr.whatsapp_number || 'N/A'}</p>
+                      <p className="text-[10px] font-bold text-[#857D6E] truncate max-w-[150px] mt-1">{enr.email || 'N/A'}</p>
+                    </td>
+                    <td className="p-3 border-r border-[#E6E0D2] font-bold text-[#4A4638] align-top">
+                      Rs. {lockedFee}
+                    </td>
+                    <td className="p-3 border-r border-[#E6E0D2] text-[#1E8F6F] font-bold align-top">
+                      Rs. {paidAmt}
+                    </td>
+                    <td className={`p-3 border-r border-[#E6E0D2] font-bold align-top ${pendingAmt > 0 ? 'text-[#B23B3B]' : 'text-[#4A4638]'}`}>
+                      Rs. {pendingAmt}
+                    </td>
+                    <td className="p-3 border-r border-[#E6E0D2] text-center align-top pt-4">
+                      <input type="checkbox" checked={isConf} onChange={() => toggleConfirmation(enr.id, isConf)} className="w-5 h-5 cursor-pointer accent-[#0E7C7B] rounded" />
+                    </td>
+                    {/* Notes Box Added */}
+                    <td className="p-3 border-r border-[#E6E0D2] align-top">
+                      <textarea 
+                        className="w-full bg-[#FAF8F3] p-2 rounded outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] text-[10px] font-medium text-[#4A4638] resize-y min-h-[60px]"
+                        placeholder={enr.order_id ? "Add notes..." : "Order needed for notes"}
+                        defaultValue={enr.notes || ""}
+                        disabled={!enr.order_id}
+                        onBlur={(e) => handleNotesUpdate(enr.order_id, e.target.value)}
+                      />
+                    </td>
+                    <td className="p-3 text-center align-top">
+                      <div className="flex flex-col gap-2">
+                        {enr.order_id && (
+                          <a href={`/invoice/${enr.order_id}`} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold bg-[#E6E0D2] border border-[#D8D2C2] px-3 py-1.5 rounded hover:bg-[#D8D2C2] transition-colors flex items-center justify-center gap-1 text-[#14161F]">
+                            <FileText size={12} /> Generate Bill
+                          </a>
+                        )}
+                        <button onClick={() => openPaymentEdit(enr)} className="text-[10px] font-bold bg-[#FAF8F3] border border-[#E6E0D2] px-3 py-1.5 rounded hover:bg-[#EFEBE1] transition-colors flex items-center justify-center gap-1"><Edit2 size={12} />Edit</button>
+                        <button onClick={() => deleteEnrollment(enr.id)} className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-3 py-1.5 rounded hover:opacity-80 transition-colors flex items-center justify-center gap-1"><Trash2 size={12} />Delete</button>
                       </div>
-                  </td>
-                  <td className="p-4 text-center">
-                    <div className="flex justify-center" onClick={(e) => e.stopPropagation()}>
-                      <ToggleSwitch checked={enr.confirmed} onChange={() => toggleConfirmation(enr.id, enr.confirmed)} label={enr.confirmed ? 'Confirmed' : 'Pending'} />
-                    </div>
-                  </td>
-                  <td className="p-4 text-right">
-                      <div className="flex justify-end items-center gap-2">
-                        <button onClick={() => openPaymentEdit(enr)} className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors" title="Edit Contact/Financials"><Edit2 size={15} /></button>
-                        <button onClick={() => deleteEnrollment(enr.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:bg-[#EAC2BC] transition-colors" title="Delete Enrollment"><Trash2 size={15} /></button>
-                      </div>
-                  </td>
-                </tr>
-              )
-            })}
-            {paginatedEnrollments.length === 0 && <tr><td colSpan={5} className="p-8 text-center font-bold text-[#857D6E]">No enrollments found matching your criteria.</td></tr>}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                );
+              })}
+              {paginatedEnrollments.length === 0 && <tr><td colSpan={8} className="p-8 text-center font-bold text-[#857D6E]">No matching enrollments found.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        
+        {courseEnrollments.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-[#E6E0D2] bg-[#FAF8F3] shrink-0 gap-4">
+            <span className="text-xs font-bold text-[#4A4638]">Showing {startIndex + 1} to {Math.min(startIndex + ITEMS_PER_PAGE, courseEnrollments.length)} of {courseEnrollments.length} entries</span>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 rounded border border-[#E6E0D2] text-xs font-bold bg-white text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Previous</button>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages || totalPages === 0} className="px-4 py-2 rounded border border-[#E6E0D2] text-xs font-bold bg-white text-[#4A4638] disabled:opacity-50 hover:bg-[#EFEBE1] transition-colors">Next</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white p-4 border border-[#E6E0D2] rounded-xl shadow-sm">
-          <p className="text-xs font-bold text-[#857D6E]">Page {currentPage} of {totalPages}</p>
-          <div className="flex gap-2">
-            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-4 py-2 bg-[#FAF8F3] hover:bg-[#EFEBE1] border border-[#E6E0D2] rounded-lg text-xs font-bold disabled:opacity-50 transition-colors text-[#14161F]">Previous</button>
-            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-4 py-2 bg-[#FAF8F3] hover:bg-[#EFEBE1] border border-[#E6E0D2] rounded-lg text-xs font-bold disabled:opacity-50 transition-colors text-[#14161F]">Next</button>
-          </div>
-        </div>
-      )}
-
-      {/* Payment / Contact Edit Modal */}
       {editingPayment && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setEditingPayment(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -3243,27 +3288,25 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
         </div>
       )}
 
-      {/* Add Booking Modal */}
       {isAddingBooking && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#14161F]/60 p-4 backdrop-blur-sm" onClick={() => setIsAddingBooking(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full relative overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full relative overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
             <button onClick={() => setIsAddingBooking(false)} className="absolute top-4 right-4 md:top-6 md:right-6 text-[#B4AF9F] hover:text-[#14161F] z-10"><X /></button>
             <div className="p-5 md:p-6 border-b border-[#E6E0D2] bg-[#FAF8F3] mt-2 md:mt-4">
-              <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Add Booking</h3>
-              <p className="text-xs font-bold text-[#857D6E] truncate mt-1">{selectedCourse?.title} (Batch {selectedBatch})</p>
+              <h3 className="text-xl md:text-2xl font-serif font-bold text-[#14161F]">Add Manual Booking</h3>
+              <p className="text-xs font-bold text-[#857D6E] truncate mt-1">Course: {selectedCourse?.title}</p>
             </div>
-            <div className="p-5 md:p-6 space-y-4 overflow-y-auto no-scrollbar">
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Full Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.name} onChange={e => setNewBooking({ ...newBooking, name: e.target.value })} placeholder="Student Name" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Email</label><input type="email" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.email} onChange={e => setNewBooking({ ...newBooking, email: e.target.value })} placeholder="student@example.com" /></div>
-              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm" value={newBooking.wa} onChange={e => setNewBooking({ ...newBooking, wa: e.target.value })} placeholder="+977..." /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Locked Price</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#14161F] text-sm font-mono" value={newBooking.locked_price} onChange={e => setNewBooking({ ...newBooking, locked_price: Number(e.target.value) })} /></div>
-                <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Paid Amount</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#0E7C7B] font-bold text-[#1E8F6F] text-sm font-mono" value={newBooking.paid_amount} onChange={e => setNewBooking({ ...newBooking, paid_amount: Number(e.target.value) })} /></div>
-              </div>
+            <div className="p-5 md:p-6 space-y-4">
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Full Name</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={newBooking.name} onChange={e => setNewBooking(prev => ({ ...prev, name: e.target.value }))} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Email</label><input type="email" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={newBooking.email} onChange={e => setNewBooking(prev => ({ ...prev, email: e.target.value }))} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">WhatsApp Number</label><input type="text" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm" value={newBooking.wa} onChange={e => setNewBooking(prev => ({ ...prev, wa: e.target.value }))} /></div>
+              <hr className="border-[#E6E0D2]" />
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Locked Price (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#14161F] text-sm font-mono" value={newBooking.locked_price} onChange={e => setNewBooking(prev => ({ ...prev, locked_price: Number(e.target.value) }))} /></div>
+              <div><label className="block text-[10px] font-bold text-[#857D6E] uppercase mb-1 ml-1">Initial Paid Amount (Rs)</label><input type="number" className="w-full bg-[#FAF8F3] p-3 rounded-xl outline-none border border-[#E6E0D2] focus:border-[#B8862E] font-bold text-[#1E8F6F] text-sm font-mono" value={newBooking.paid_amount} onChange={e => setNewBooking(prev => ({ ...prev, paid_amount: Number(e.target.value) }))} /></div>
             </div>
             <div className="p-4 md:p-6 border-t border-[#E6E0D2] bg-[#FAF8F3] flex justify-end gap-3 shrink-0">
               <button onClick={() => setIsAddingBooking(false)} disabled={isSubmittingBooking} className="px-4 py-2 font-bold text-[#857D6E] hover:text-[#14161F] text-sm">Cancel</button>
-              <button onClick={saveManualBooking} disabled={isSubmittingBooking} className={`px-6 py-2 rounded-xl font-bold bg-[#0E7C7B] text-white shadow-lg transition-colors text-sm ${isSubmittingBooking ? 'opacity-70' : 'hover:bg-[#0A5F5E]'}`}>{isSubmittingBooking ? 'Adding...' : 'Add Booking'}</button>
+              <button onClick={saveManualBooking} disabled={isSubmittingBooking} className={`px-6 py-2 rounded-xl font-bold bg-[#14161F] text-white shadow-lg transition-colors text-sm ${isSubmittingBooking ? 'opacity-70' : 'hover:bg-[#22242F]'}`}>{isSubmittingBooking ? 'Saving...' : 'Add Booking'}</button>
             </div>
           </div>
         </div>
@@ -3272,31 +3315,32 @@ function OnlineBookingsView({ courses, enrollments, batches, syllabi, orders, re
   );
 }
 
-function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physicalCourses: PhysicalCourse[]; data: PhysicalLead[]; orders: Order[]; refresh: () => void }) {
+export function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physicalCourses: any[]; data: any[]; orders: any[]; refresh: () => void }) {
   const supabase = useSupabase();
-  const [selectedCourse, setSelectedCourse] = useState<PhysicalCourse | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState<any>(null);
   const [selectedBatch, setSelectedBatch] = useState<number | 'unassigned' | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [confirmedFilter, setConfirmedFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
-  const [editingLead, setEditingLead] = useState<PhysicalLead | null>(null);
+  const [confirmedFilter, setConfirmedFilter] = useState<'all' | 'pending' | 'confirmed' | 'confirmed_due'>('all');
+  const [editingLead, setEditingLead] = useState<any>(null);
   const [editForm, setEditForm] = useState({
     full_name: '', phone: '', email: '', office_location: '', remarks: '', counselor_notes: '',
-    status: 'new' as PhysicalLead['status'], assigned_to: '', follow_up_date: '', batch_no: undefined as number | undefined, start_date: '',
+    status: 'new' as any, assigned_to: '', follow_up_date: '', batch_no: undefined as number | undefined, start_date: '',
   });
   const [editLocked, setEditLocked] = useState<number>(0);
   const [editPaid, setEditPaid] = useState<number>(0);
   const [isAddingLead, setIsAddingLead] = useState(false);
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
   const [newLead, setNewLead] = useState({ full_name: '', phone: '', email: '', locked_price: 0, paid_amount: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 20;
 
   useEffect(() => { setCurrentPage(1); }, [selectedCourse, selectedBatch, searchQuery, confirmedFilter]);
 
-  const leadsWithOrders: PhysicalLead[] = useMemo(() => {
+  const leadsWithOrders: any[] = useMemo(() => {
     const physicalOrders = orders.filter(o => !!o.leads_id);
     return data.map(lead => {
       const matches = physicalOrders.filter(o => o.leads_id === lead.id);
-      if (matches.length === 0) return { ...lead, order_id: null };
+      if (matches.length === 0) return { ...lead, order_id: null, notes: '' };
       if (matches.length > 1) {
         console.warn(`[PhysicalLeadsView] Multiple orders found for lead ${lead.id}; using the most recent one.`);
       }
@@ -3308,6 +3352,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
         locked_price: newest.locked_price ?? 0,
         paid_amount: newest.paid_amount ?? 0,
         pending_amount: newest.pending_amount ?? 0,
+        notes: newest.notes ?? '',
         remaining_amount: newest.remaining_amount ?? Math.max(0, (newest.locked_price ?? 0) - (newest.paid_amount ?? 0) - (newest.pending_amount ?? 0)),
         order_status: newest.status,
         payment_screenshots: newest.payment_screenshots || [],
@@ -3333,7 +3378,18 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
     }
   };
 
-  const openEditLead = (lead: PhysicalLead) => {
+  // Handler for inline notes saving
+  const handleNotesUpdate = async (orderId: string, newNotes: string) => {
+    if (!orderId) return;
+    try {
+      const { error } = await supabase.from('orders_v2').update({ notes: newNotes }).eq('id', orderId);
+      if (error) alert("Failed to save notes: " + error.message);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const openEditLead = (lead: any) => {
     setEditingLead(lead);
     setEditForm({
       full_name: lead.full_name || '', phone: lead.phone || '', email: lead.email || '',
@@ -3390,7 +3446,12 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
   const saveManualLead = async () => {
     if (!selectedCourse) return;
     if (!newLead.full_name || !newLead.phone) { alert("Name and Phone are required."); return; }
-    const targetBatch = selectedCourse.batch_no;
+    if (isSubmittingLead) return;
+    
+    setIsSubmittingLead(true);
+    
+    const targetBatch = selectedBatch !== 'unassigned' && selectedBatch !== null ? selectedBatch : null;
+
     const payload = {
       course_id: selectedCourse.id,
       course_code: selectedCourse.course_code || '',
@@ -3400,9 +3461,11 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
       phone: newLead.phone,
       email: newLead.email || null,
       office_location: selectedCourse.location || 'Kathmandu',
-      course_price: selectedCourse.discount_price || selectedCourse.price,
+      course_price: selectedCourse.price,
+      discount_price: newLead.locked_price, 
+      booking_amount: newLead.paid_amount,  
       source: 'Walk-in',
-      status: 'new',
+      status: 'booked', 
       batch_no: targetBatch,
       current_education: null,
       institution_name: null,
@@ -3410,29 +3473,28 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
       counselor_notes: null,
       assigned_to: null,
       follow_up_date: null,
-      is_confirmed: false
+      is_confirmed: true 
     };
     
     const { data: leadData, error: leadErr } = await supabase.from('physical_leads').insert([payload]).select().single();
-    if (leadErr) { alert("Failed to add lead: " + leadErr.message); return; }
+    
+    if (leadErr) { 
+      alert("Failed to add lead: " + leadErr.message); 
+      setIsSubmittingLead(false); 
+      return; 
+    }
 
-    const ordPayload = {
-      leads_id: leadData.id,
-      full_name: newLead.full_name,
-      email: newLead.email || '',
-      whatsapp_number: newLead.phone,
-      order_type: 'Physical Class',
-      order_name: selectedCourse.title,
-      paid_amount: newLead.paid_amount,
-      pending_amount: 0,
-      locked_price: newLead.locked_price,
-      status: newLead.paid_amount >= newLead.locked_price ? 'verified' : 'pending'
-    };
-
-    const { error: ordErr } = await supabase.from('orders_v2').insert([ordPayload]);
-    if (ordErr) alert("Lead added, but order creation failed: " + ordErr.message);
+    if (leadData) {
+      await supabase.from('orders_v2').update({ 
+        status: 'verified',
+        paid_amount: newLead.paid_amount,
+        locked_price: newLead.locked_price,
+        pending_amount: 0
+      }).eq('leads_id', leadData.id);
+    }
 
     setIsAddingLead(false);
+    setIsSubmittingLead(false);
     setNewLead({ full_name: '', phone: '', email: '', locked_price: 0, paid_amount: 0 });
     refresh();
   };
@@ -3445,8 +3507,11 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
     } else if (selectedBatch !== null) {
       if (l.batch_no !== selectedBatch) return false;
     }
+    
     if (confirmedFilter === 'confirmed' && !l.is_confirmed) return false;
     if (confirmedFilter === 'pending' && l.is_confirmed) return false;
+    if (confirmedFilter === 'confirmed_due' && (!l.is_confirmed || (l.remaining_amount || 0) <= 0)) return false;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
@@ -3515,7 +3580,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
     return (
       <div className="space-y-6 w-full">
         <div className="flex flex-col md:flex-row md:items-center gap-3 md:gap-4">
-          <button onClick={() => setSelectedBatch(null)} className="self-start p-2 md:p-3 bg-white border border-[#E6E0D2] rounded-xl hover:bg-[#FAF8F3] transition-colors shadow-sm shrink-0">
+          <button onClick={() => setSelectedCourse(null)} className="self-start p-2 md:p-3 bg-white border border-[#E6E0D2] rounded-xl hover:bg-[#FAF8F3] transition-colors shadow-sm shrink-0">
             <ArrowLeft size={19} className="text-[#4A4638]" />
           </button>
           <div className="min-w-0">
@@ -3527,7 +3592,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
           {availableBatches.map(b => {
             const batchCount = leadsWithOrders.filter(l => (l.course_id === selectedCourse.id || l.course_code === selectedCourse.course_code) && l.batch_no === b).length;
             return (
-              <div key={b} onClick={() => setSelectedBatch(b as number)} className="flex items-center justify-between p-5 md:p-6 bg-white border border-[#E6E0D2] rounded-2xl hover:border-[#B8543D] hover:shadow-md cursor-pointer transition-all">
+              <div key={b as number} onClick={() => setSelectedBatch(b as number)} className="flex items-center justify-between p-5 md:p-6 bg-white border border-[#E6E0D2] rounded-2xl hover:border-[#B8543D] hover:shadow-md cursor-pointer transition-all">
                 <div className="flex items-center gap-3 md:gap-4">
                   <div className="w-12 h-12 md:w-14 md:h-14 bg-[#B8543D]/10 text-[#B8543D] rounded-xl flex items-center justify-center font-bold text-xl md:text-2xl">{b}</div>
                   <h3 className="font-bold text-[#14161F] text-lg md:text-xl">Batch {b}</h3>
@@ -3593,6 +3658,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
             <option value="all">Status: All</option>
             <option value="pending">Status: Pending</option>
             <option value="confirmed">Status: Confirmed</option>
+            <option value="confirmed_due">Status: Confirmed (Due Payment)</option>
           </select>
         </div>
       </div>
@@ -3616,17 +3682,18 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 
       <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
         <div className="overflow-y-auto max-h-[600px] w-full">
-          <table className="w-full text-left border-collapse table-auto text-xs min-w-[1000px]">
+          <table className="w-full text-left border-collapse table-auto text-xs min-w-[1100px]">
             <thead>
               <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[#4A4638] uppercase font-bold tracking-wider sticky top-0 z-10">
-                <th className="p-3 border-r border-[#E6E0D2]">Lead Details</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Contact Info</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Status & Notes</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Locked Fee</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Paid Amount</th>
-                <th className="p-3 border-r border-[#E6E0D2]">Remaining</th>
-                <th className="p-3 border-r border-[#E6E0D2] text-center">Confirmed</th>
-                <th className="p-3 text-center">Actions</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-48">Lead Details</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-40">Contact Info</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-32">Status & Notes</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Locked Fee</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Paid Amount</th>
+                <th className="p-3 border-r border-[#E6E0D2] w-28">Remaining</th>
+                <th className="p-3 border-r border-[#E6E0D2] text-center w-24">Confirmed</th>
+                <th className="p-3 border-r border-[#E6E0D2] min-w-[150px]">Notes</th>
+                <th className="p-3 text-center w-36">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -3658,8 +3725,23 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
                     <td className="p-3 border-r border-[#E6E0D2] text-center align-top pt-4">
                       <input type="checkbox" checked={!!lead.is_confirmed} onChange={() => toggleConfirmation(lead.id, !!lead.is_confirmed)} className="w-5 h-5 cursor-pointer accent-[#B8543D] rounded" />
                     </td>
+                    {/* Notes Box Added */}
+                    <td className="p-3 border-r border-[#E6E0D2] align-top">
+                      <textarea 
+                        className="w-full bg-[#FAF8F3] p-2 rounded outline-none border border-[#E6E0D2] focus:border-[#B8543D] text-[10px] font-medium text-[#4A4638] resize-y min-h-[60px]"
+                        placeholder={lead.order_id ? "Add notes..." : "Order needed for notes"}
+                        defaultValue={lead.notes}
+                        disabled={!lead.order_id}
+                        onBlur={(e) => handleNotesUpdate(lead.order_id, e.target.value)}
+                      />
+                    </td>
                     <td className="p-3 text-center align-top">
                       <div className="flex flex-col gap-2">
+                        {lead.order_id && (
+                          <a href={`/invoice/${lead.order_id}`} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold bg-[#E6E0D2] border border-[#D8D2C2] px-3 py-1.5 rounded hover:bg-[#D8D2C2] transition-colors flex items-center justify-center gap-1 text-[#14161F]">
+                            <FileText size={12} /> Generate Bill
+                          </a>
+                        )}
                         <button onClick={() => openEditLead(lead)} className="text-[10px] font-bold bg-[#FAF8F3] border border-[#E6E0D2] px-3 py-1.5 rounded hover:bg-[#EFEBE1] transition-colors flex items-center justify-center gap-1"><Edit2 size={12} />Edit</button>
                         <button onClick={() => deleteLead(lead.id)} className="text-[10px] font-bold bg-[#F3DAD6] text-[#B23B3B] border border-[#EAC2BC] px-3 py-1.5 rounded hover:opacity-80 transition-colors flex items-center justify-center gap-1"><Trash2 size={12} />Delete</button>
                       </div>
@@ -3667,7 +3749,7 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
                   </tr>
                 );
               })}
-              {paginatedLeads.length === 0 && <tr><td colSpan={8} className="p-8 text-center font-bold text-[#857D6E]">No matching leads found.</td></tr>}
+              {paginatedLeads.length === 0 && <tr><td colSpan={9} className="p-8 text-center font-bold text-[#857D6E]">No matching leads found.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3698,8 +3780,8 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
               </div>
             </div>
             <div className="mt-8 flex justify-end gap-3">
-              <button onClick={() => setIsAddingLead(false)} className="px-4 md:px-5 py-2.5 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
-              <button onClick={saveManualLead} className="px-5 md:px-6 py-2.5 rounded-xl font-bold bg-[#B8543D] text-white shadow-lg hover:opacity-90 transition-colors text-sm">Add Lead</button>
+              <button onClick={() => setIsAddingLead(false)} disabled={isSubmittingLead} className="px-4 md:px-5 py-2.5 font-bold text-[#857D6E] hover:text-[#14161F] transition-colors text-sm">Cancel</button>
+              <button onClick={saveManualLead} disabled={isSubmittingLead} className={`px-5 md:px-6 py-2.5 rounded-xl font-bold bg-[#B8543D] text-white shadow-lg transition-colors text-sm ${isSubmittingLead ? 'opacity-70' : 'hover:opacity-90'}`}>{isSubmittingLead ? 'Adding...' : 'Add Lead'}</button>
             </div>
           </div>
         </div>
@@ -3755,71 +3837,548 @@ function PhysicalLeadsView({ physicalCourses, data, orders, refresh }: { physica
 /* ============================================================================
    CERTIFICATES
 ============================================================================ */
-function CertificatesManager({ data, syllabi, refresh, onOpenChat }: any) {
-  const supabase = useSupabase();
-  const [searchQuery, setSearchQuery] = useState("");
-  
-  const filtered = data.filter((c: any) => {
-    const q = searchQuery.toLowerCase();
-    return (c.name && c.name.toLowerCase().includes(q)) || 
-           (c.email && c.email.toLowerCase().includes(q)) || 
-           (c.certificate_code && c.certificate_code.toLowerCase().includes(q));
-  });
-
-  const deleteCert = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this certificate?")) return;
-    const { error } = await supabase.from('certificates').update({ deleted: true }).eq('id', id);
-    if (error) alert("Failed to delete certificate: " + error.message);
-    else refresh();
-  };
+function CertificatesManager({ data, syllabi, refresh }: any) {
+  const [search, setSearch] = useState("");
+  const filtered = data.filter((c: any) => 
+    c.name?.toLowerCase().includes(search.toLowerCase()) || 
+    c.certificate_code?.toLowerCase().includes(search.toLowerCase()) ||
+    c.email?.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
-      <SectionHeader eyebrow="Credentials" title="Certificates Directory" subtitle="Manage and verify issued student certificates." />
+      <SectionHeader eyebrow="Credentials" title="Certificate Manager" subtitle="View and manage generated certificates." />
+      <div className="flex w-full"><SearchBar value={search} onChange={setSearch} placeholder="Search by name, email, or code..." /></div>
       
-      <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-start sm:items-center w-full">
-        <div className="w-full sm:flex-1 sm:min-w-[300px]"><SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Search by student name, email, or certificate code..." /></div>
-      </div>
-
       <div className="bg-white border border-[#E6E0D2] shadow-sm overflow-x-auto w-full flex flex-col rounded-xl">
-        <table className="w-full text-left border-collapse min-w-[800px]">
+        <table className="w-full text-left border-collapse min-w-[700px]">
           <thead>
             <tr className="bg-[#FAF8F3] border-b border-[#E6E0D2] text-[10px] font-bold text-[#857D6E] uppercase tracking-widest">
               <th className="p-4">Student</th>
-              <th className="p-4">Course / Syllabus</th>
-              <th className="p-4">Certificate ID</th>
-              <th className="p-4 text-center">Issue Date</th>
-              <th className="p-4 text-right">Actions</th>
+              <th className="p-4">Course</th>
+              <th className="p-4">Certificate Data</th>
+              <th className="p-4 text-right">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#E6E0D2]">
             {filtered.map((cert: any) => (
               <tr key={cert.id} className="hover:bg-[#FAF8F3] transition-colors">
                 <td className="p-4">
-                  <p className="font-bold text-[#14161F] text-sm cursor-pointer hover:text-[#0E7C7B] hover:underline w-fit" onClick={() => cert.user_id ? onOpenChat(cert.user_id) : alert('No user account linked.')}>{cert.name}</p>
-                  <p className="text-[10px] md:text-xs font-bold text-[#857D6E] mt-0.5">{cert.email}</p>
+                  <p className="font-bold text-[#14161F] text-sm">{cert.name}</p>
+                  <p className="text-xs font-bold text-[#857D6E]">{cert.email}</p>
                 </td>
                 <td className="p-4">
-                  <p className="font-bold text-sm text-[#4A4638] truncate max-w-[250px]">{cert.syllabus_name}</p>
+                  <p className="font-bold text-[#4A4638] text-sm">{cert.syllabus_name}</p>
                 </td>
                 <td className="p-4">
-                  <span className="font-mono text-xs font-bold bg-[#EFEBE1] px-2 py-1 rounded text-[#4A4638]">{cert.certificate_code}</span>
-                </td>
-                <td className="p-4 text-center">
-                  <p className="text-xs font-bold text-[#857D6E]">{new Date(cert.issue_date).toLocaleDateString()}</p>
+                  <p className="text-xs font-mono font-bold text-[#0E7C7B]">Code: {cert.certificate_code}</p>
+                  <p className="text-[10px] font-bold text-[#857D6E] mt-1">Issued: {new Date(cert.issue_date).toLocaleDateString()}</p>
                 </td>
                 <td className="p-4 text-right">
-                    <div className="flex justify-end items-center gap-2">
-                      <a href={cert.certificate_image} target="_blank" rel="noreferrer" className="p-2 text-[#0E7C7B] bg-[#0E7C7B]/10 rounded-lg hover:bg-[#0E7C7B]/20 transition-colors inline-flex" title="View Certificate"><ExternalLink size={15} /></a>
-                      <button onClick={() => deleteCert(cert.id)} className="p-2 text-[#B23B3B] bg-[#F3DAD6] rounded-lg hover:bg-[#EAC2BC] transition-colors" title="Revoke/Delete"><Trash2 size={15} /></button>
-                    </div>
+                  <a href={cert.certificate_image} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#0E7C7B]/10 text-[#0E7C7B] text-xs font-bold rounded-lg hover:bg-[#0E7C7B]/20 transition-colors">
+                    <ExternalLink size={14} /> View
+                  </a>
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={5} className="p-8 text-center font-bold text-[#857D6E]">No certificates found.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={4} className="p-8 text-center font-bold text-[#857D6E]">No certificates found.</td></tr>}
           </tbody>
         </table>
       </div>
+    </motion.div>
+  );
+}
+
+/* ============================================================================
+/* ============================================================================
+   REVIEWS
+============================================================================ */
+
+const REVIEW_TOKENS = {
+  ink: "#14161F",
+  paper: "#FAF8F3",
+  classroomBlue: "#0E7C7B",
+  chalkOrange: "#B8862E",
+  signYellow: "#C08A28",
+};
+
+type ReviewStatus = "pending" | "approved" | "rejected";
+type WouldRecommend = "Yes" | "Maybe" | "No";
+
+interface JoinedRef {
+  id: number;
+  name: string;
+}
+
+interface ProfileLite {
+  avatar_url: string | null;
+  full_name: string | null;
+}
+
+interface Review {
+  id: string;
+  created_at: string;
+  name: string | null;
+  email: string | null;
+  overall_rating: number | null;
+  tutor_rating: number | null;
+  content_rating: number | null;
+  skill_improvement_rating: number | null;
+  materials_rating: number | null;
+  liked_most: string | null;
+  improvements_suggested: string | null;
+  testimonial: string | null;
+  would_recommend: string | null;
+  status: ReviewStatus;
+  syllabus_id: number | null;
+  tutor_id: number | null;
+  syllabus: JoinedRef | null;
+  tutor: JoinedRef | null;
+}
+
+const STATUS_STYLES: Record<ReviewStatus, { bg: string; text: string; icon: React.ReactNode }> = {
+  pending: { bg: "bg-[#F5E7C8]", text: "text-[#8A6416]", icon: <Clock size={12} /> },
+  approved: { bg: "bg-[#DCEEE6]", text: "text-[#1E8F6F]", icon: <CheckCircle2 size={12} /> },
+  rejected: { bg: "bg-[#F3DAD6]", text: "text-[#B23B3B]", icon: <XCircle size={12} /> },
+};
+
+// --- HELPER FUNCTIONS ---
+const formatReviewDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return `${d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })} · ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}`;
+};
+
+const courseLabel = (r: Pick<Review, "syllabus" | "syllabus_id">) => r.syllabus?.name || (r.syllabus_id ? `Syllabus #${r.syllabus_id}` : "No course linked");
+const tutorLabel = (r: Pick<Review, "tutor" | "tutor_id">) => r.tutor?.name || (r.tutor_id ? `Tutor #${r.tutor_id}` : null);
+
+const computeAverage = (r: Review) => {
+  const vals = [r.overall_rating, r.tutor_rating, r.content_rating, r.skill_improvement_rating, r.materials_rating].filter((v): v is number => typeof v === "number");
+  return vals.length === 0 ? null : vals.reduce((a, b) => a + b, 0) / vals.length;
+};
+
+const completeness = (r: Review) => {
+  const fields = [r.overall_rating, r.tutor_rating, r.content_rating, r.skill_improvement_rating, r.materials_rating, r.liked_most, r.improvements_suggested, r.testimonial];
+  return { filled: fields.filter(f => f !== null && f !== undefined && f !== "").length, total: fields.length };
+};
+
+// --- SUB-COMPONENTS ---
+function StarRow({ value, label }: { value: number | null; label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1">
+      <span className="text-xs font-bold text-[#857D6E]">{label}</span>
+      {value === null ? <span className="font-mono text-xs text-[#857D6E]/50">—</span> : (
+        <div className="flex items-center gap-0.5">
+          {[1, 2, 3, 4, 5].map(n => <Star key={n} size={13} className={n <= value ? "text-[#C08A28]" : "text-[#E6E0D2]"} fill={n <= value ? "currentColor" : "none"} />)}
+          <span className="ml-1 font-mono text-xs font-bold text-[#14161F]">{value}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StarPicker({ value, onChange, label, required }: { value: number | null; onChange: (v: number) => void; label: string; required?: boolean; }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1.5">
+      <span className="text-xs font-bold text-[#857D6E]">{label}{required && <span className="ml-0.5 text-[#B23B3B]">*</span>}</span>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map(n => (
+          <button key={n} type="button" onClick={() => onChange(n)} className="rounded p-0.5 transition hover:scale-110">
+            <Star size={18} className={value !== null && n <= value ? "text-[#C08A28]" : "text-[#E6E0D2]"} fill={value !== null && n <= value ? "currentColor" : "none"} />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
+  return (
+    <div className="rounded-xl border border-[#E6E0D2] bg-white px-4 py-4 shadow-sm" style={{ borderLeft: `4px solid ${accent ?? "#E6E0D2"}` }}>
+      <p className="font-bold text-[10px] uppercase tracking-wider text-[#857D6E]">{label}</p>
+      <p className="mt-1 text-2xl font-black text-[#14161F]">{value}</p>
+    </div>
+  );
+}
+
+function ReviewAvatar({ email, profile }: { email: string | null; profile: ProfileLite | undefined }) {
+  if (profile?.avatar_url) return <img src={profile.avatar_url} alt="Reviewer" referrerPolicy="no-referrer" className="h-9 w-9 shrink-0 rounded-full object-cover border border-[#E6E0D2]" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />;
+  return <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FAF8F3] border border-[#E6E0D2]"><UserIcon size={15} className="text-[#857D6E]" /></div>;
+}
+
+function ReviewFormModal({ supabase, mode, initialReview, syllabi, tutors, onClose, onSaved }: any) {
+  const [form, setForm] = useState(initialReview || { name: "", email: "", syllabus_id: "", tutor_id: "", overall_rating: null, tutor_rating: null, content_rating: null, skill_improvement_rating: null, materials_rating: null, liked_most: "", improvements_suggested: "", testimonial: "", would_recommend: "", status: "approved" });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const set = (key: string, value: any) => setForm((f: any) => ({ ...f, [key]: value }));
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const missing = [];
+    if (!form.syllabus_id) missing.push("course");
+    if (!form.overall_rating) missing.push("overall rating");
+    if (!form.would_recommend) missing.push("would recommend");
+    if (missing.length > 0) return setError(`Please fill in: ${missing.join(", ")}.`);
+
+    setSubmitting(true); setError(null);
+    
+    // EXCLUDE relations to prevent schema cache errors
+    const { syllabus, tutor, ...formValues } = form;
+    
+    const payload = { ...formValues, syllabus_id: Number(form.syllabus_id) || null, tutor_id: Number(form.tutor_id) || null };
+    
+    const { error: err } = mode === "edit" ? await supabase.from("reviews").update(payload).eq("id", initialReview.id) : await supabase.from("reviews").insert(payload);
+    setSubmitting(false);
+    
+    if (err) return setError(err.message);
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto bg-[#14161F]/60 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-2xl border border-[#E6E0D2] bg-white shadow-2xl relative max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between border-b border-[#E6E0D2] bg-[#FAF8F3] px-6 py-4 shrink-0 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0E7C7B]/10">
+              {mode === "edit" ? <Pencil size={18} className="text-[#0E7C7B]" /> : <Plus size={18} className="text-[#0E7C7B]" />}
+            </div>
+            <div>
+              <h2 className="font-serif text-xl font-bold text-[#14161F]">{mode === "edit" ? "Edit Review" : "Add a Review"}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#857D6E]">Manually input offline or imported reviews.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-full p-2 text-[#857D6E] hover:bg-white transition-colors"><X size={20} /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="overflow-y-auto p-6 space-y-6 flex-1">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Course <span className="text-[#B23B3B]">*</span></label>
+              <select value={form.syllabus_id || ""} onChange={(e) => set("syllabus_id", e.target.value)} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B]">
+                <option value="">Select a course…</option>
+                {syllabi.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Tutor</label>
+              <select value={form.tutor_id || ""} onChange={(e) => set("tutor_id", e.target.value)} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B]">
+                <option value="">No tutor / not applicable</option>
+                {tutors.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            {/* Added || "" fallback to prevent null prop errors on text inputs */}
+            <div><label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Student name</label><input type="text" value={form.name || ""} onChange={(e) => set("name", e.target.value)} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B]" /></div>
+            <div><label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Email</label><input type="email" value={form.email || ""} onChange={(e) => set("email", e.target.value)} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B]" /></div>
+          </div>
+
+          <div className="rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-4 py-4 space-y-1">
+            <p className="mb-2 font-bold text-[10px] uppercase tracking-wider text-[#857D6E] border-b border-[#E6E0D2] pb-2">Ratings Details</p>
+            <StarPicker label="Overall" required value={form.overall_rating} onChange={(v) => set("overall_rating", v)} />
+            <StarPicker label="Tutor" value={form.tutor_rating} onChange={(v) => set("tutor_rating", v)} />
+            <StarPicker label="Content" value={form.content_rating} onChange={(v) => set("content_rating", v)} />
+            <StarPicker label="Skill Improvement" value={form.skill_improvement_rating} onChange={(v) => set("skill_improvement_rating", v)} />
+            <StarPicker label="Materials" value={form.materials_rating} onChange={(v) => set("materials_rating", v)} />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-[10px] font-bold text-[#857D6E] uppercase">Would recommend <span className="text-[#B23B3B]">*</span></label>
+            <div className="flex gap-2">
+              {["Yes", "Maybe", "No"].map(opt => (
+                <button key={opt} type="button" onClick={() => set("would_recommend", opt)} className={`flex-1 rounded-xl border px-3 py-3 text-xs font-bold transition-colors ${form.would_recommend === opt ? "border-[#0E7C7B] bg-[#0E7C7B]/10 text-[#0E7C7B]" : "border-[#E6E0D2] bg-[#FAF8F3] text-[#857D6E] hover:border-[#14161F]"}`}>{opt}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {/* Added || "" fallback to textareas */}
+            <div><label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Liked most</label><textarea value={form.liked_most || ""} onChange={(e) => set("liked_most", e.target.value)} rows={2} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B] resize-none" /></div>
+            <div><label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Suggested improvements</label><textarea value={form.improvements_suggested || ""} onChange={(e) => set("improvements_suggested", e.target.value)} rows={2} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B] resize-none" /></div>
+            <div><label className="mb-1 block text-[10px] font-bold text-[#857D6E] uppercase">Testimonial</label><textarea value={form.testimonial || ""} onChange={(e) => set("testimonial", e.target.value)} rows={3} className="w-full rounded-xl border border-[#E6E0D2] bg-[#FAF8F3] px-3 py-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B] resize-none" /></div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-[10px] font-bold text-[#857D6E] uppercase">Status</label>
+            <div className="flex gap-2">
+              {["approved", "pending", "rejected"].map(s => (
+                <button key={s} type="button" onClick={() => set("status", s)} className={`flex-1 rounded-xl border px-3 py-3 text-xs font-bold capitalize transition-colors ${form.status === s ? "border-[#14161F] bg-[#14161F] text-white" : "border-[#E6E0D2] bg-[#FAF8F3] text-[#857D6E] hover:border-[#14161F]"}`}>{s}</button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="rounded-xl bg-[#F3DAD6] px-4 py-3 text-xs font-bold text-[#B23B3B] border border-[#EAC2BC]">{error}</p>}
+
+          <div className="flex justify-end gap-3 pt-6 pb-2 shrink-0">
+            <button type="button" onClick={onClose} className="rounded-xl px-5 py-2.5 text-sm font-bold text-[#857D6E] hover:text-[#14161F] transition-colors">Cancel</button>
+            <button type="submit" disabled={submitting} className="inline-flex items-center gap-2 rounded-xl bg-[#0E7C7B] px-6 py-2.5 text-sm font-bold text-white shadow-lg hover:opacity-90 disabled:opacity-50 transition-colors">
+              {submitting ? <RefreshCw size={16} className="animate-spin" /> : mode === "edit" ? <Pencil size={16} /> : <Plus size={16} />}
+              {mode === "edit" ? "Save Changes" : "Save Review"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// --- MAIN FUNCTION TO EXPORT/RENDER ---
+function ReviewsManager({ supabase }: any) {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const [allSyllabi, setAllSyllabi] = useState<JoinedRef[]>([]);
+  const [allTutors, setAllTutors] = useState<JoinedRef[]>([]);
+  const [profilesByEmail, setProfilesByEmail] = useState<Record<string, ProfileLite>>({});
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingReview, setEditingReview] = useState<Review | null>(null);
+
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<ReviewStatus | "all">("pending");
+  const [syllabusFilter, setSyllabusFilter] = useState<string>("all");
+  const [tutorFilter, setTutorFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<string>("newest");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  async function fetchReviews() {
+    setLoading(true); setError(null);
+    try {
+      const { data, error: err } = await supabase.from("reviews").select("*, syllabus:syllabi_v2(id,name), tutor:online_tutors(id,name)").order("created_at", { ascending: false });
+      if (err) throw err;
+      
+      const rows = (data as unknown as Review[]) ?? [];
+      setReviews(rows);
+
+      const emails = Array.from(new Set(rows.map(r => r.email).filter(Boolean) as string[]));
+      if (emails.length > 0) {
+        const { data: profileRows } = await supabase.from("profiles").select("email, avatar_url, full_name").in("email", emails);
+        if (profileRows) {
+          const map: Record<string, ProfileLite> = {};
+          profileRows.forEach((p: any) => { if (p.email) map[p.email.toLowerCase()] = { avatar_url: p.avatar_url, full_name: p.full_name }; });
+          setProfilesByEmail(map);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || "Couldn't load reviews.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchReviews();
+    Promise.all([
+      supabase.from("syllabi_v2").select("id,name").order("name"),
+      supabase.from("online_tutors").select("id,name").order("name"),
+    ]).then(([syllabiRes, tutorsRes]) => {
+      if (syllabiRes.data) setAllSyllabi(syllabiRes.data as JoinedRef[]);
+      if (tutorsRes.data) setAllTutors(tutorsRes.data as JoinedRef[]);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function updateStatus(id: string, status: ReviewStatus) {
+    setUpdatingId(id);
+    const previous = reviews;
+    setReviews(rs => rs.map(r => r.id === id ? { ...r, status } : r));
+    const { error: err } = await supabase.from("reviews").update({ status }).eq("id", id);
+    if (err) setReviews(previous);
+    setUpdatingId(null);
+  }
+
+  async function deleteReview(id: string) {
+    setDeletingId(id);
+    const previous = reviews;
+    setReviews(rs => rs.filter(r => r.id !== id));
+    const { error: err } = await supabase.from("reviews").delete().eq("id", id);
+    if (err) setReviews(previous);
+    else if (expandedId === id) setExpandedId(null);
+    setDeletingId(null); setConfirmDeleteId(null);
+  }
+
+  const filteredBase = useMemo(() => {
+    let list = reviews;
+    if (syllabusFilter !== "all") list = list.filter(r => String(r.syllabus_id) === syllabusFilter);
+    if (tutorFilter !== "all") list = list.filter(r => String(r.tutor_id) === tutorFilter);
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      list = list.filter(r => (r.name || "").toLowerCase().includes(q) || (r.email || "").toLowerCase().includes(q) || (r.testimonial || "").toLowerCase().includes(q) || (r.liked_most || "").toLowerCase().includes(q) || courseLabel(r).toLowerCase().includes(q));
+    }
+    return list;
+  }, [reviews, syllabusFilter, tutorFilter, query]);
+
+  const syllabusOptions = useMemo(() => Array.from(new Map(reviews.filter(r => r.syllabus_id).map(r => [String(r.syllabus_id), courseLabel(r)])).entries()).sort((a, b) => a[1].localeCompare(b[1])), [reviews]);
+  const tutorOptions = useMemo(() => Array.from(new Map(reviews.filter(r => r.tutor_id).map(r => [String(r.tutor_id), tutorLabel(r) || ""])).entries()).sort((a, b) => a[1].localeCompare(b[1])), [reviews]);
+
+  const stats = useMemo(() => {
+    const total = filteredBase.length;
+    const pending = filteredBase.filter(r => r.status === "pending").length;
+    const approved = filteredBase.filter(r => r.status === "approved").length;
+    const rejected = filteredBase.filter(r => r.status === "rejected").length;
+    const withOverall = filteredBase.filter(r => r.overall_rating !== null && r.status !== "rejected");
+    const avgOverall = withOverall.length > 0 ? (withOverall.reduce((sum, r) => sum + (r.overall_rating || 0), 0) / withOverall.length).toFixed(1) : "—";
+    const incomplete = filteredBase.filter(r => completeness(r).filled < completeness(r).total).length;
+    return { total, pending, approved, rejected, avgOverall, incomplete };
+  }, [filteredBase]);
+
+  const visible = useMemo(() => {
+    let list = statusFilter !== "all" ? filteredBase.filter(r => r.status === statusFilter) : filteredBase;
+    return list.sort((a, b) => {
+      if (sortBy === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      if (sortBy === "rating-desc") return (computeAverage(b) || 0) - (computeAverage(a) || 0);
+      if (sortBy === "rating-asc") return (computeAverage(a) || 0) - (computeAverage(b) || 0);
+      if (sortBy === "incomplete-first") return (completeness(a).filled / completeness(a).total) - (completeness(b).filled / completeness(b).total);
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime(); // newest
+    });
+  }, [filteredBase, statusFilter, sortBy]);
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 w-full">
+      
+      {/* Header matching dashboard aesthetic */}
+      <SectionHeader 
+        eyebrow="Platform Voice" 
+        title="Review Moderation" 
+        subtitle="Approve, reject, and monitor incoming student testimonials."
+        action={
+          <div className="flex gap-2">
+            <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-2 rounded-xl bg-[#14161F] px-5 py-2.5 text-sm font-bold text-white shadow hover:bg-[#22242F] transition-colors"><Plus size={16} /> Add Review</button>
+            <button onClick={fetchReviews} className="inline-flex items-center gap-2 rounded-xl border border-[#E6E0D2] bg-white px-4 py-2.5 text-sm font-bold text-[#857D6E] shadow-sm hover:bg-[#FAF8F3] transition-colors"><RefreshCw size={16} className={loading ? "animate-spin" : ""} /></button>
+          </div>
+        }
+      />
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 w-full">
+        <StatCard label="Total" value={stats.total} />
+        <StatCard label="Pending" value={stats.pending} accent="#C08A28" />
+        <StatCard label="Approved" value={stats.approved} accent="#1E8F6F" />
+        <StatCard label="Rejected" value={stats.rejected} accent="#B23B3B" />
+        <StatCard label="Avg Rating" value={stats.avgOverall} accent="#0E7C7B" />
+        <StatCard label="Incomplete" value={stats.incomplete} accent="#B8862E" />
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col xl:flex-row gap-4 w-full">
+        {/* Status Tabs */}
+        <div className="flex bg-white p-1.5 rounded-xl border border-[#E6E0D2] shadow-sm shrink-0 overflow-x-auto">
+          {(["all", "pending", "approved", "rejected"] as const).map(s => (
+            <button key={s} onClick={() => setStatusFilter(s)} className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors whitespace-nowrap ${statusFilter === s ? "bg-[#14161F] text-white" : "text-[#857D6E] hover:text-[#14161F]"}`}>
+              {s} {s !== "all" && <span className="ml-1 opacity-70">({s === "pending" ? stats.pending : s === "approved" ? stats.approved : stats.rejected})</span>}
+            </button>
+          ))}
+        </div>
+
+        {/* Search & Dropdowns */}
+        <div className="flex flex-1 flex-wrap gap-2 w-full">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#857D6E]" />
+            <input type="text" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search reviews..." className="w-full rounded-xl border border-[#E6E0D2] bg-white py-3 pl-9 pr-3 text-sm font-bold text-[#14161F] outline-none focus:border-[#0E7C7B] shadow-sm" />
+          </div>
+          <select value={syllabusFilter} onChange={e => setSyllabusFilter(e.target.value)} className="rounded-xl border border-[#E6E0D2] bg-white px-4 py-3 text-xs font-bold text-[#14161F] outline-none shadow-sm cursor-pointer"><option value="all">All Courses</option>{syllabusOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
+          <select value={tutorFilter} onChange={e => setTutorFilter(e.target.value)} className="rounded-xl border border-[#E6E0D2] bg-white px-4 py-3 text-xs font-bold text-[#14161F] outline-none shadow-sm cursor-pointer"><option value="all">All Tutors</option>{tutorOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="rounded-xl border border-[#E6E0D2] bg-white px-4 py-3 text-xs font-bold text-[#14161F] outline-none shadow-sm cursor-pointer">
+            <option value="newest">Newest First</option><option value="oldest">Oldest First</option><option value="rating-desc">Highest Rated</option><option value="rating-asc">Lowest Rated</option><option value="incomplete-first">Needs Detail</option>
+          </select>
+        </div>
+      </div>
+
+      {/* List */}
+      <div className="space-y-4 pb-8 w-full">
+        {loading ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-white border border-[#E6E0D2]" />) : error ? (
+          <div className="rounded-2xl border border-[#EAC2BC] bg-[#F3DAD6] p-6 text-center text-sm font-bold text-[#B23B3B] shadow-sm">{error}</div>
+        ) : visible.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-[#E6E0D2] bg-white py-16 flex flex-col items-center text-center text-[#857D6E]">
+            <MessageSquareText size={32} className="mb-4 text-[#D8D2C2]" />
+            <p className="font-bold text-[#14161F]">No reviews found</p>
+            <p className="text-sm mt-1">Try adjusting your search or filters.</p>
+          </div>
+        ) : (
+          visible.map(r => {
+            const avg = computeAverage(r); const comp = completeness(r); const isExpanded = expandedId === r.id; const hasText = r.testimonial || r.liked_most || r.improvements_suggested;
+            const statusStyle = STATUS_STYLES[r.status]; const tLabel = tutorLabel(r); const profile = r.email ? profilesByEmail[r.email.toLowerCase()] : undefined;
+
+            return (
+              <div key={r.id} className="overflow-hidden rounded-2xl border border-[#E6E0D2] bg-white shadow-sm hover:shadow-md transition-shadow">
+                <button onClick={() => setExpandedId(isExpanded ? null : r.id)} className="flex w-full flex-col gap-4 p-5 text-left md:flex-row md:items-center md:justify-between group">
+                  <div className="flex min-w-0 items-center gap-4">
+                    <ReviewAvatar email={r.email} profile={profile} />
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-[#14161F]">{r.name || profile?.full_name || <span className="italic text-[#857D6E]">Anonymous</span>}</p>
+                      <p className="flex flex-wrap items-center gap-2 text-[10px] font-bold text-[#857D6E] mt-1">
+                        {r.email && <span className="inline-flex items-center gap-1"><Mail size={12} /> {r.email}</span>}
+                        <span className="text-[#D8D2C2]">|</span>{formatReviewDate(r.created_at)}<span className="text-[#D8D2C2]">|</span>
+                        <span className="inline-flex items-center gap-1 text-[#0E7C7B] bg-[#0E7C7B]/10 px-2 py-0.5 rounded uppercase tracking-wider"><BookOpen size={10} /> {courseLabel(r)}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+                    <span className={`hidden font-mono text-[10px] font-bold sm:inline ${comp.filled < comp.total ? "text-[#B23B3B]" : "text-[#B4AF9F]"}`}>{comp.filled}/{comp.total} fields</span>
+                    <div className="flex items-center gap-1.5"><Star size={16} className="text-[#C08A28]" fill="currentColor" /><span className="font-mono text-base font-black text-[#14161F]">{avg !== null ? avg.toFixed(1) : "—"}</span></div>
+                    {r.would_recommend && <span>{r.would_recommend.toLowerCase() === "yes" ? <ThumbsUp size={16} className="text-[#1E8F6F]" /> : <ThumbsDown size={16} className="text-[#B23B3B]" />}</span>}
+                    <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-[10px] font-black uppercase tracking-widest ${statusStyle.bg} ${statusStyle.text}`}>{statusStyle.icon}{r.status}</span>
+                    <div className="w-8 h-8 rounded-full bg-[#FAF8F3] flex items-center justify-center text-[#857D6E] group-hover:bg-[#14161F] group-hover:text-white transition-colors">
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </div>
+                  </div>
+                </button>
+
+                {isExpanded && (
+                  <div className="border-t border-[#E6E0D2] bg-[#FAF8F3] p-5 md:p-6">
+                    <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                      <div className="bg-white p-5 rounded-2xl border border-[#E6E0D2]">
+                        <p className="mb-3 font-bold text-[10px] uppercase tracking-wider text-[#857D6E] border-b border-[#E6E0D2] pb-2">Rating Breakdown</p>
+                        <StarRow value={r.overall_rating} label="Overall Experience" /><StarRow value={r.tutor_rating} label="Tutor Performance" /><StarRow value={r.content_rating} label="Course Content" /><StarRow value={r.skill_improvement_rating} label="Skill Improvement" /><StarRow value={r.materials_rating} label="Materials Provided" />
+                        <div className="mt-5 rounded-xl bg-[#FAF8F3] p-4 border border-[#E6E0D2]">
+                          <p className="mb-2 font-bold text-[10px] uppercase tracking-wider text-[#857D6E]">Reference Entities</p>
+                          <p className="flex items-center gap-2 text-xs font-bold text-[#14161F] mb-1.5"><BookOpen size={14} className="text-[#0E7C7B]" />{courseLabel(r)}</p>
+                          <p className="flex items-center gap-2 text-xs font-bold text-[#14161F]"><GraduationCap size={14} className="text-[#0E7C7B]" />{tLabel ?? <span className="italic text-[#857D6E]">No tutor linked</span>}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <p className="font-bold text-[10px] uppercase tracking-wider text-[#857D6E] ml-1">Written Feedback</p>
+                        {!hasText && <p className="text-sm font-medium italic text-[#857D6E] bg-white p-5 rounded-2xl border border-[#E6E0D2]">No written feedback was submitted by the student.</p>}
+                        {r.testimonial && <div className="rounded-2xl bg-[#14161F] text-white p-5 shadow-lg"><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#B4AF9F]">Testimonial</p><p className="text-sm font-medium italic leading-relaxed">&ldquo;{r.testimonial}&rdquo;</p></div>}
+                        {r.liked_most && <div className="rounded-2xl bg-white border border-[#E6E0D2] p-5"><p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#1E8F6F]"><ThumbsUp size={12} /> Liked most</p><p className="text-sm font-medium text-[#4A4638]">{r.liked_most}</p></div>}
+                        {r.improvements_suggested && <div className="rounded-2xl bg-white border border-[#E6E0D2] p-5"><p className="mb-2 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#B8862E]"><MessageSquareText size={12} /> Suggested improvements</p><p className="text-sm font-medium text-[#4A4638]">{r.improvements_suggested}</p></div>}
+                      </div>
+                    </div>
+                    
+                    <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-[#E6E0D2] pt-5">
+                      <div className="flex flex-wrap gap-2">
+                        <button disabled={updatingId === r.id || r.status === "approved"} onClick={() => updateStatus(r.id, "approved")} className="inline-flex items-center gap-1.5 rounded-xl bg-[#1E8F6F] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-40 transition-opacity"><CheckCircle2 size={16} /> Approve</button>
+                        <button disabled={updatingId === r.id || r.status === "rejected"} onClick={() => updateStatus(r.id, "rejected")} className="inline-flex items-center gap-1.5 rounded-xl bg-[#B23B3B] px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-40 transition-opacity"><XCircle size={16} /> Reject</button>
+                        {r.status !== "pending" && <button disabled={updatingId === r.id} onClick={() => updateStatus(r.id, "pending")} className="inline-flex items-center gap-1.5 rounded-xl border border-[#E6E0D2] bg-white px-4 py-2.5 text-xs font-bold text-[#857D6E] shadow-sm hover:bg-[#FAF8F3] disabled:opacity-40 transition-colors"><Clock size={14} /> Reset</button>}
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setEditingReview(r)} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-[#E6E0D2] px-4 py-2.5 text-xs font-bold text-[#0E7C7B] shadow-sm hover:bg-[#FAF8F3] transition-colors"><Pencil size={14} /> Edit</button>
+                        {confirmDeleteId !== r.id ? (
+                          <button onClick={() => setConfirmDeleteId(r.id)} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-[#EAC2BC] px-4 py-2.5 text-xs font-bold text-[#B23B3B] shadow-sm hover:bg-[#F3DAD6] transition-colors"><Trash2 size={14} /> Delete</button>
+                        ) : (
+                          <span className="inline-flex items-center gap-3 rounded-xl border border-[#EAC2BC] bg-[#F3DAD6] px-4 py-2 text-xs font-bold text-[#B23B3B] shadow-sm">
+                            <AlertTriangle size={14} /> Delete permanently?
+                            <div className="flex gap-1 ml-2">
+                              <button disabled={deletingId === r.id} onClick={() => deleteReview(r.id)} className="rounded-lg bg-[#B23B3B] px-3 py-1 text-white hover:opacity-90 disabled:opacity-50">{deletingId === r.id ? "..." : "Yes"}</button>
+                              <button onClick={() => setConfirmDeleteId(null)} className="rounded-lg border border-[#EAC2BC] px-3 py-1 text-[#B23B3B] hover:bg-white">No</button>
+                            </div>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {showAddModal && <ReviewFormModal supabase={supabase} mode="add" syllabi={allSyllabi} tutors={allTutors} onClose={() => setShowAddModal(false)} onSaved={() => { setShowAddModal(false); fetchReviews(); }} />}
+      {editingReview && <ReviewFormModal supabase={supabase} mode="edit" initialReview={editingReview} syllabi={allSyllabi} tutors={allTutors} onClose={() => setEditingReview(null)} onSaved={() => { setEditingReview(null); fetchReviews(); }} />}
     </motion.div>
   );
 }
@@ -3829,106 +4388,88 @@ function CertificatesManager({ data, syllabi, refresh, onOpenChat }: any) {
 ============================================================================ */
 function ChatModal({ userId, onClose, profilesMap }: { userId: string, onClose: () => void, profilesMap: any }) {
   const supabase = useSupabase();
-  const [messages, setMessages] = useState<any[]>([]);
-  const [reply, setReply] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const fetchChat = async () => {
-      const { data, error } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
-      if (!error && data) {
-        setMessages(data);
-        // Mark as read
-        const unreadIds = data.filter((m: any) => m.sender_role === 'user' && !m.is_read).map((m: any) => m.id);
-        if (unreadIds.length > 0) {
-          await supabase.from('messages').update({ is_read: true }).in('id', unreadIds);
-        }
-      }
+      const { data } = await supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: true });
+      if (data) setMessages(data as Message[]);
+      await supabase.from('messages').update({ is_read: true }).eq('user_id', userId).eq('sender_role', 'user').eq('is_read', false);
       setLoading(false);
-      setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     };
-
     fetchChat();
+
     const channel = supabase.channel(`chat_${userId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `user_id=eq.${userId}` }, (payload) => {
-        setMessages(prev => [...prev, payload.new]);
-        setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
+        setMessages(prev => [...prev, payload.new as Message]);
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        if (payload.new.sender_role === 'user') {
+          supabase.from('messages').update({ is_read: true }).eq('id', payload.new.id).then();
+        }
       }).subscribe();
-      
     return () => { supabase.removeChannel(channel); };
   }, [userId, supabase]);
 
-  const sendReply = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!reply.trim()) return;
-    const msg = reply;
-    setReply("");
-    
-    // Optimistic update
-    const tempMsg = { id: Date.now().toString(), user_id: userId, sender_role: 'admin', content: msg, created_at: new Date().toISOString(), is_read: true };
-    setMessages(prev => [...prev, tempMsg]);
-    setTimeout(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, 100);
-
-    const { error } = await supabase.from('messages').insert([{ user_id: userId, sender_role: 'admin', content: msg, is_read: true }]);
-    if (error) {
-      alert("Failed to send message: " + error.message);
-      setMessages(prev => prev.filter(m => m.id !== tempMsg.id)); // Revert optimistic
-    }
+    if (!replyText.trim() || sending) return;
+    setSending(true);
+    const { error } = await supabase.from('messages').insert([{ user_id: userId, sender_role: 'admin', content: replyText.trim() }]);
+    if (error) alert('Failed to send: ' + error.message);
+    else setReplyText("");
+    setSending(false);
   };
 
+  const name = profilesMap?.full_name || "User";
+
   return (
-    <div className="fixed inset-0 z-[200] flex justify-end bg-[#14161F]/40 backdrop-blur-sm" onClick={onClose}>
-      <motion.div 
-        initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="bg-white w-full max-w-md h-full shadow-2xl flex flex-col border-l border-[#E6E0D2]" 
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between p-5 border-b border-[#E6E0D2] bg-[#FAF8F3] shrink-0">
+    <div className="fixed inset-0 z-[10000] flex justify-end bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="w-full max-w-md bg-[#F6F3EC] h-full flex flex-col shadow-2xl border-l border-[#E6E0D2]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 md:p-5 bg-white border-b border-[#E6E0D2] shrink-0">
           <div className="flex items-center gap-3">
-             <div className="w-10 h-10 rounded-full bg-[#EFEBE1] flex items-center justify-center font-bold text-[#857D6E] overflow-hidden">
-                {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" alt="" /> : (profilesMap?.full_name?.charAt(0) || "U")}
-             </div>
-             <div>
-               <h3 className="font-bold text-[#14161F] text-sm">{profilesMap?.full_name || "Unknown User"}</h3>
-               <p className="text-[10px] font-bold uppercase tracking-widest text-[#B4AF9F]">Student Chat</p>
-             </div>
+            <div className="w-10 h-10 rounded-full bg-[#EFEBE1] flex items-center justify-center font-bold text-[#857D6E] overflow-hidden shrink-0">
+              {profilesMap?.avatar_url ? <img src={profilesMap.avatar_url} className="w-full h-full object-cover" alt="" /> : name.charAt(0)}
+            </div>
+            <div>
+              <h3 className="font-bold text-[#14161F]">{name}</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#0E7C7B]">Active Chat</p>
+            </div>
           </div>
-          <button onClick={onClose} className="p-2 bg-white rounded-full text-[#B4AF9F] hover:text-[#14161F] border border-[#E6E0D2] shadow-sm"><X size={16}/></button>
+          <button onClick={onClose} className="p-2 text-[#857D6E] hover:text-[#14161F] hover:bg-[#FAF8F3] rounded-full transition-colors"><X size={20} /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-[#F6F3EC]" ref={scrollRef}>
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
           {loading ? (
-             <div className="flex justify-center items-center h-full text-[#B8862E]"><Loader2 className="animate-spin" /></div>
+            <div className="flex justify-center py-10"><Loader2 className="animate-spin text-[#B4AF9F]" size={24} /></div>
           ) : messages.length === 0 ? (
-             <div className="text-center text-sm font-bold text-[#B4AF9F] mt-10">No messages yet.</div>
+            <p className="text-center text-[#857D6E] font-bold text-sm py-10">No messages yet.</p>
           ) : (
-            messages.map((msg, idx) => {
+            messages.map((msg, i) => {
               const isAdmin = msg.sender_role === 'admin';
               return (
-                <div key={msg.id || idx} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}>
-                  <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-sm shadow-sm ${isAdmin ? 'bg-[#14161F] text-white rounded-br-none' : 'bg-white text-[#14161F] rounded-bl-none border border-[#E6E0D2]'}`}>
+                <div key={msg.id} className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'} gap-1 max-w-[85%] ${isAdmin ? 'ml-auto' : 'mr-auto'}`}>
+                  <div className={`px-4 py-2.5 rounded-2xl text-sm md:text-base ${isAdmin ? 'bg-[#14161F] text-white rounded-br-sm' : 'bg-white border border-[#E6E0D2] text-[#14161F] rounded-bl-sm shadow-sm'}`}>
                     {msg.content}
                   </div>
-                  <span className="text-[9px] font-bold text-[#B4AF9F] mt-1 px-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span className="text-[9px] md:text-[10px] font-bold text-[#B4AF9F] px-1">{new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
-              )
+              );
             })
           )}
+          <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={sendReply} className="p-4 bg-white border-t border-[#E6E0D2] flex gap-2 shrink-0">
-          <input 
-            type="text" 
-            value={reply} 
-            onChange={e => setReply(e.target.value)} 
-            placeholder="Type your message..." 
-            className="flex-1 bg-[#FAF8F3] border border-[#E6E0D2] focus:border-[#B8862E] rounded-xl px-4 py-2.5 text-sm font-bold outline-none text-[#14161F]"
-          />
-          <button type="submit" disabled={!reply.trim()} className="bg-[#0E7C7B] text-white p-3 rounded-xl hover:bg-[#0A5F5E] disabled:opacity-50 transition-colors shadow-sm">
-            <Send size={18} />
-          </button>
-        </form>
+        <div className="p-4 bg-white border-t border-[#E6E0D2] shrink-0">
+          <form onSubmit={handleSend} className="flex gap-2">
+            <input type="text" value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Type a message..." className="flex-1 bg-[#FAF8F3] border border-[#E6E0D2] rounded-full px-4 py-3 text-sm font-medium text-[#14161F] outline-none focus:border-[#B8862E]" />
+            <button type="submit" disabled={sending || !replyText.trim()} className="w-11 h-11 bg-[#14161F] text-white rounded-full flex items-center justify-center shadow-lg hover:bg-[#22242F] disabled:opacity-50 shrink-0 transition-all"><Send size={16} className="ml-1" /></button>
+          </form>
+        </div>
       </motion.div>
     </div>
   );

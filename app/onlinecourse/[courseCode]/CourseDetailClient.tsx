@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { 
   Calendar, Clock, BadgeCheck, ShieldCheck,
   User, SearchX, Sparkles, Zap, CheckCircle2, Users,
-  FileText, Star, Target, Briefcase, TrendingUp, MonitorPlay, BookOpen, Shield, Award, ChevronLeft
+  FileText, Star, Target, Briefcase, TrendingUp, MonitorPlay, BookOpen, Shield, Award, ChevronLeft, MessageSquareText, ThumbsUp, ChevronDown, ChevronUp
 } from "lucide-react";
 
 // --- Types ---
@@ -30,11 +30,35 @@ interface Course {
   tutor_name?: string;
   tutor_bio?: string;
   active_batch_id?: string;
+  syllabus_id?: number;
 }
 
 interface StudentAvatar {
   full_name?: string;
   avatar_url?: string;
+}
+
+interface Review {
+  id: string;
+  created_at: string;
+  name: string | null;
+  email: string | null;
+  overall_rating: number | null;
+  tutor_rating: number | null;
+  content_rating: number | null;
+  skill_improvement_rating: number | null;
+  materials_rating: number | null;
+  liked_most: string | null;
+  testimonial: string | null;
+  would_recommend: string | null;
+  avatar_url?: string | null;
+}
+
+interface CategoryAverages {
+  tutor: number;
+  content: number;
+  materials: number;
+  skills: number;
 }
 
 // --- Reusable Components ---
@@ -60,13 +84,33 @@ const EnrollButton = ({ onClick, children, className = "" }: any) => (
   </button>
 );
 
+const ReviewStars = ({ rating }: { rating: number }) => (
+  <div className="flex text-amber-400 text-xs md:text-sm gap-0.5">
+    {[1, 2, 3, 4, 5].map((star) => (
+      <Star key={star} className={`w-3.5 h-3.5 md:w-4 md:h-4 ${star <= rating ? 'fill-current text-amber-400' : 'text-slate-200'}`} />
+    ))}
+  </div>
+);
+
+// Progress bar for review sub-categories
+const SubRatingBar = ({ label, value }: { label: string, value: number }) => (
+  <div className="flex items-center justify-between text-sm w-full">
+    <span className="text-slate-600 font-bold w-1/3">{label}</span>
+    <div className="flex items-center gap-3 w-2/3 justify-end">
+      <div className="w-full max-w-[120px] h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div className="h-full bg-amber-400 rounded-full" style={{ width: `${(value / 5) * 100}%` }}></div>
+      </div>
+      <span className="font-extrabold text-slate-900 w-6 text-right">{value.toFixed(1)}</span>
+    </div>
+  </div>
+);
+
 export function CourseDetailClient({ params }: { params: Promise<any> }) {
   const resolvedParams = use(params);
   const router = useRouter();
   
   const urlCourseCode = resolvedParams.courseCode || resolvedParams.id; 
 
-  // Initialize Supabase client once to prevent lock stealing runtime error
   const [supabase] = useState(() => createClient());
 
   const [course, setCourse] = useState<Course | null>(null);
@@ -76,6 +120,13 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
   const [avatars, setAvatars] = useState<StudentAvatar[]>([]);
   const [avatarsLoading, setAvatarsLoading] = useState(true);
   
+  // Real dynamic data states
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [showAllReviews, setShowAllReviews] = useState(false);
+  const [averageRating, setAverageRating] = useState<string>("4.9");
+  const [catAverages, setCatAverages] = useState<CategoryAverages>({ tutor: 4.8, content: 4.8, materials: 4.8, skills: 4.8 });
+  const [certifiedStudentsCount, setCertifiedStudentsCount] = useState<number>(0);
+
   const [seats, setSeats] = useState(15); 
   const [offerTime, setOfferTime] = useState({ hours: 0, mins: 0, secs: 0 });
   const [courseCountdown, setCourseCountdown] = useState({ days: 0, hours: 0, mins: 0, secs: 0 });
@@ -190,7 +241,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
   useEffect(() => {
     if (!urlCourseCode) return;
 
-    async function fetchCourseAndSeats() {
+    async function fetchCourseAndDynamicData() {
       try {
         const res = await fetch(`/api/online_courses/${urlCourseCode}`);
         
@@ -207,34 +258,121 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
         const courseData = await res.json();
         setCourse(courseData);
 
-        // --- SEAT FETCHING LOGIC ---
+        if (courseData.syllabus_id) {
+          // 1. Fetch Approved Reviews WITH extra ratings
+          const { data: reviewsData } = await supabase
+            .from('reviews')
+            .select('id, created_at, name, email, overall_rating, tutor_rating, content_rating, materials_rating, skill_improvement_rating, liked_most, testimonial, would_recommend')
+            .eq('syllabus_id', courseData.syllabus_id)
+            .eq('status', 'approved');
+
+          if (reviewsData && reviewsData.length > 0) {
+             const allValidReviews = reviewsData as Review[];
+             
+             // Extract emails and fetch avatars
+             const emails = Array.from(new Set(allValidReviews.map(r => r.email).filter(Boolean) as string[]));
+             const profileMap: Record<string, string> = {};
+
+             if (emails.length > 0) {
+               const { data: profilesData } = await supabase
+                 .from('profiles')
+                 .select('email, avatar_url')
+                 .in('email', emails);
+
+               if (profilesData) {
+                 profilesData.forEach(p => {
+                   if (p.email && p.avatar_url) {
+                     profileMap[p.email.toLowerCase()] = p.avatar_url;
+                   }
+                 });
+               }
+             }
+
+             // Map avatars and filter valid displaying reviews
+             let enrichedReviews = allValidReviews
+                .filter(r => r.testimonial || r.liked_most) // Ensure there's text to show
+                .map(r => ({
+                   ...r,
+                   avatar_url: r.email ? profileMap[r.email.toLowerCase()] || null : null
+                }));
+
+             // Sort Logic: 1. Avatar 2. Highest Rated 3. Has Testimonial
+             enrichedReviews.sort((a, b) => {
+                const aHasAvatar = a.avatar_url ? 1 : 0;
+                const bHasAvatar = b.avatar_url ? 1 : 0;
+                if (aHasAvatar !== bHasAvatar) return bHasAvatar - aHasAvatar;
+
+                const aRating = a.overall_rating || 0;
+                const bRating = b.overall_rating || 0;
+                if (aRating !== bRating) return bRating - aRating;
+
+                const aHasTest = a.testimonial?.trim() ? 1 : 0;
+                const bHasTest = b.testimonial?.trim() ? 1 : 0;
+                return bHasTest - aHasTest;
+             });
+
+             setReviews(enrichedReviews);
+
+             // Calculate Global Averages
+             let tTotal = 0, cTotal = 0, mTotal = 0, sTotal = 0, oTotal = 0;
+             let tCount = 0, cCount = 0, mCount = 0, sCount = 0, oCount = 0;
+
+             allValidReviews.forEach(r => {
+                if (r.overall_rating) { oTotal += r.overall_rating; oCount++; }
+                if (r.tutor_rating) { tTotal += r.tutor_rating; tCount++; }
+                if (r.content_rating) { cTotal += r.content_rating; cCount++; }
+                if (r.materials_rating) { mTotal += r.materials_rating; mCount++; }
+                if (r.skill_improvement_rating) { sTotal += r.skill_improvement_rating; sCount++; }
+             });
+
+             const avgOverall = oCount > 0 ? (oTotal / oCount) : 5.0;
+             setAverageRating(avgOverall.toFixed(1));
+
+             setCatAverages({
+               tutor: tCount > 0 ? (tTotal / tCount) : avgOverall,
+               content: cCount > 0 ? (cTotal / cCount) : avgOverall,
+               materials: mCount > 0 ? (mTotal / mCount) : avgOverall,
+               skills: sCount > 0 ? (sTotal / sCount) : avgOverall,
+             });
+          }
+
+          // 2. Fetch Certificate Count
+          const sid = Number(courseData.syllabus_id);
+          let targetIds = [sid];
+          if ([6, 13, 16].includes(sid)) targetIds = [6, 13, 16];
+          else if ([1, 8, 7].includes(sid)) targetIds = [1, 8, 7];
+
+          const { count: certCount } = await supabase
+            .from('certificates')
+            .select('*', { count: 'exact', head: true })
+            .in('syllabus_id', targetIds)
+            .eq('deleted', false)
+            .eq('status', 'active');
+
+          if (certCount !== null) {
+            setCertifiedStudentsCount(certCount > 0 ? certCount : 0);
+          }
+        }
+
+        // 3. Fetch Real-time Seat Count
         try {
           if (courseData.active_batch_id) {
-            console.log("✅ Found active_batch_id:", courseData.active_batch_id);
-            
-            // Added .eq('is_confirmed', true) to strictly count verified payments/enrollments
             const { count, error: countError } = await supabase
               .from('enrollments_v2') 
               .select('id', { count: 'exact' }) 
               .eq('batch_id', courseData.active_batch_id)
               .eq('is_confirmed', true);
 
-            console.log("🔍 Supabase response -> Confirmed Count:", count, "Error:", countError);
-
             if (countError) {
-              console.error("❌ Supabase error fetching seats:", countError.message);
               setSeats(15); 
             } else if (count !== null) {
               const remaining = 15 - count;
-              console.log(`🧮 Math: 15 (Total) - ${count} (Confirmed Enrolled) = ${remaining} (Remaining)`);
               setSeats(remaining <= 5 ? 5 : remaining);
             }
           } else {
-            console.warn("⚠️ No active_batch_id returned from /api/online_courses API!");
             setSeats(15);
           }
         } catch (seatErr) {
-          console.error("❌ Try/Catch error fetching seats:", seatErr);
           setSeats(15);
         }
 
@@ -244,7 +382,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
         setLoading(false); 
       }
     }
-    fetchCourseAndSeats();
+    fetchCourseAndDynamicData();
   }, [urlCourseCode, supabase]);
 
   useEffect(() => {
@@ -281,6 +419,12 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
 
   const displayAvatars = avatars.slice(0, 4);
   const remainingAvatars = avatars.length > 4 ? avatars.length - 4 : 0;
+
+  const displayStudentCount = certifiedStudentsCount > 50 
+    ? `${certifiedStudentsCount}+` 
+    : (certifiedStudentsCount > 0 ? `${certifiedStudentsCount}` : "New");
+
+  const visibleReviews = showAllReviews ? reviews : reviews.slice(0, 4);
 
   const CertificateCard = () => (
     <div className="p-6 md:p-8 rounded-3xl md:rounded-[3rem] text-center flex flex-col items-center border border-slate-200 bg-white shadow-sm hover:shadow-xl transition-shadow duration-300">
@@ -401,7 +545,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
                     <Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/><Star className="w-3 h-3 md:w-4 md:h-4 fill-current"/>
                   </div>
                   <p className="text-slate-300 text-xs md:text-sm font-semibold tracking-tight">
-                      <span className="text-white font-extrabold">GyanHub:</span> 2500+ Students • 4.5+ Rating
+                      <span className="text-white font-extrabold">Course Insights:</span> {displayStudentCount} Students • {averageRating} Rating
                   </p>
                 </div>
             </div>
@@ -572,6 +716,86 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
                 </div>
             </section>
 
+            {/* NEW STUDENT REVIEWS SECTION */}
+            {reviews.length > 0 && (
+              <section className="scroll-mt-24">
+                  <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-8">
+                    <div className="h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-600 shrink-0">
+                      <MessageSquareText className="w-5 h-5 md:w-6 md:h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl md:text-4xl font-extrabold tracking-tight text-slate-900">Student Reviews</h2>
+                    </div>
+                  </div>
+
+                  {/* Summary Box */}
+                  <div className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm mb-8 flex flex-col md:flex-row gap-8 items-center">
+                    <div className="flex flex-col items-center justify-center border-b md:border-b-0 md:border-r border-slate-200 pb-6 md:pb-0 md:pr-8 shrink-0">
+                      <p className="text-4xl md:text-6xl font-black text-slate-900">{averageRating}</p>
+                      <div className="flex mt-2 mb-1">
+                        <ReviewStars rating={parseFloat(averageRating)} />
+                      </div>
+                      <p className="text-slate-500 font-semibold text-xs md:text-sm">Based on {reviews.length} reviews</p>
+                    </div>
+
+                    <div className="w-full flex-1 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                      <SubRatingBar label="Tutor" value={catAverages.tutor} />
+                      <SubRatingBar label="Content" value={catAverages.content} />
+                      <SubRatingBar label="Materials" value={catAverages.materials} />
+                      <SubRatingBar label="Skill Impr." value={catAverages.skills} />
+                    </div>
+                  </div>
+                  
+                  {/* Reviews List */}
+                  <div className="columns-1 sm:columns-2 gap-4 md:gap-6 space-y-4 md:space-y-6">
+                      {visibleReviews.map((review) => (
+                          <div key={review.id} className="break-inside-avoid bg-white p-5 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                              <div className="flex justify-between items-start mb-4">
+                                <ReviewStars rating={review.overall_rating || 5} />
+                                {review.would_recommend?.toLowerCase() === 'yes' && (
+                                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">
+                                    <ThumbsUp size={12} /> Recommended
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-slate-700 italic font-medium text-sm md:text-base mb-5 leading-relaxed grow">
+                                "{review.testimonial || review.liked_most}"
+                              </p>
+                              <div className="flex items-center gap-3 pt-4 border-t border-slate-100 mt-auto">
+                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden border border-slate-200 shrink-0">
+                                  {review.avatar_url ? (
+                                    <img src={review.avatar_url} alt={review.name || "Student"} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <User size={16} />
+                                  )}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-900 text-xs md:text-sm leading-tight">{review.name || "Anonymous Student"}</p>
+                                  <p className="text-slate-400 text-[10px] md:text-xs mt-0.5">{new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</p>
+                                </div>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+
+                  {/* Show All Toggle */}
+                  {reviews.length > 4 && (
+                    <div className="mt-8 flex justify-center">
+                      <button 
+                        onClick={() => setShowAllReviews(!showAllReviews)}
+                        className="inline-flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold py-3 px-6 rounded-xl transition-colors text-sm md:text-base"
+                      >
+                        {showAllReviews ? (
+                          <>Show Less Reviews <ChevronUp size={18} /></>
+                        ) : (
+                          <>Read All {reviews.length} Reviews <ChevronDown size={18} /></>
+                        )}
+                      </button>
+                    </div>
+                  )}
+              </section>
+            )}
+
             <section className="bg-orange-50/50 border border-orange-100 p-6 md:p-10 rounded-3xl md:rounded-[3rem]">
                 <div className="flex items-center gap-3 md:gap-4 mb-6 md:mb-8">
                   <div className="h-10 w-10 md:h-12 md:w-12 rounded-2xl bg-orange-500 flex items-center justify-center text-white shrink-0 shadow-md">
@@ -645,7 +869,7 @@ export function CourseDetailClient({ params }: { params: Promise<any> }) {
                    <div className="flex flex-col items-center gap-3 border-t border-slate-100 pt-5">
                       <div className="flex items-center gap-2 text-[11px] md:text-xs text-slate-600 font-bold bg-slate-50 px-4 py-2 rounded-full border border-slate-200 shadow-sm w-full justify-center">
                          <Users className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-500" />
-                         Trusted by 2000+ students
+                         Trusted by {displayStudentCount} students
                       </div>
                       <div className="flex items-center gap-2 text-[11px] md:text-xs text-slate-500 font-medium">
                          <ShieldCheck className="w-3.5 h-3.5 md:w-4 md:h-4 text-blue-500" />

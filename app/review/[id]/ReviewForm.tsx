@@ -66,14 +66,14 @@ export default function ReviewForm({ syllabusId, initialAuthUser }: ReviewFormPr
     if (mounted) localStorage.setItem(`draft_review_${syllabusId}`, JSON.stringify(formData));
   }, [formData, mounted, syllabusId]);
 
-  // Fetch Course Data
+  // Fetch Course Data (now also pulling the tutor's id, not just name)
   useEffect(() => {
     async function fetchCourseData() {
       if (!syllabusId) return;
       try {
         const { data, error } = await supabase
           .from('syllabi_v2')
-          .select(`name, course_code, cover_pic, online_tutors ( name )`)
+          .select(`name, course_code, cover_pic, online_tutors ( id, name )`)
           .eq('id', syllabusId)
           .single();
         if (error) throw error;
@@ -121,6 +121,7 @@ export default function ReviewForm({ syllabusId, initialAuthUser }: ReviewFormPr
     try {
       const { error } = await supabase.from('reviews').insert([{ 
         syllabus_id: parseInt(syllabusId), 
+        tutor_id: courseDetails?.online_tutors?.id ?? null,
         name: finalName || null, 
         email: finalEmail || null, 
         overall_rating: formData.overallRating || null, 
