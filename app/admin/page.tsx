@@ -191,7 +191,7 @@ function useAnalytics(rows: Transaction[], syllabi: Syllabus[]) {
   return useMemo(() => {
     const acct = rows.filter((r) => r.is_accounting);
 
-    const PNL_INCOME: AccountingCategory[] = ["COURSE_INCOME", "OTHER_INCOME", "OWNER_WITHDRAWAL"];
+    const PNL_INCOME: AccountingCategory[] = ["COURSE_INCOME", "OTHER_INCOME"];
     const PNL_EXPENSE: AccountingCategory[] = ["TUTOR_PAYMENT", "SALARY", "RENT", "OFFICE_EXPENSE", "MISCELLANEOUS", "MARKETING"];
 
     const totalIncome = acct.filter((r) => PNL_INCOME.includes(r.category)).reduce((s, r) => s + r.amount, 0);

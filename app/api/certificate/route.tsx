@@ -1,12 +1,28 @@
 import { ImageResponse } from "@vercel/og";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import QRCode from "qrcode";
+import sharp from "sharp";
 
 export const runtime = "nodejs";
 
 // ─── Canvas Dimensions (Exact ISO A4 Landscape @ 300 DPI) ────────────────────
+// We still RENDER at full 300 DPI so satori/resvg produces crisp vector text
+// and clean edges. We then downsize + recompress the *output* with sharp,
+// which is where almost all of the file-size savings come from. Rendering
+// at high-res first and compressing after gives noticeably better quality
+// than rendering directly at a lower resolution.
 const CERT_WIDTH = 3508;
 const CERT_HEIGHT = 2480;
+
+// ─── Output compression settings ────────────────────────────────────────────
+// Tune these if you want to trade size vs. quality further.
+const OUTPUT_MAX_WIDTH = 1800;     // ~154 DPI on A4 landscape — still crisp for print & screen
+const JPEG_QUALITY = 82;           // 78-85 is a good size/quality sweet spot for flat-color + text designs
+const OUTPUT_CONTENT_TYPE = "image/jpeg";
+const OUTPUT_EXTENSION = "jpg";
+
+// QR is only ever displayed at 260px in the template — no need to source it at 600px.
+const QR_SOURCE_WIDTH = 320;
 
 // ─── Design Token System ────────────────────────────────────────────────────
 const COLORS = {
@@ -339,7 +355,7 @@ async function buildTemplateData(
 
   const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
     margin: 1,
-    width: 600, // Higher resolution QR matrix for HD print
+    width: QR_SOURCE_WIDTH, // Sized to actual display size (260px) — no need for 600px source
     color: { dark: COLORS.navy, light: "#ffffff" },
   });
 
@@ -920,28 +936,47 @@ function CertificateTemplate(data: CertificateTemplateData) {
   );
 }
 
-// ─── Render & Upload ─────────────────────────────────────────────────────────
-async function renderCertificatePng(data: CertificateTemplateData) {
+// ─── Render, Downsize & Compress ─────────────────────────────────────────────
+// Renders at full 300 DPI for crisp text, then downsizes + recompresses as
+// JPEG. This is where the real file-size reduction happens — going from an
+// uncompressed-ish PNG at 3508x2480 down to a well-compressed JPEG at
+// OUTPUT_MAX_WIDTH typically cuts file size by 80-95% with no visible
+// quality loss, since the design has a solid background and no transparency.
+async function renderCertificateImage(data: CertificateTemplateData) {
   const image = new ImageResponse(CertificateTemplate(data), {
     width: CERT_WIDTH,
-    height: CERT_HEIGHT, 
+    height: CERT_HEIGHT,
   });
   const arrayBuffer = await image.arrayBuffer();
-  return new Uint8Array(arrayBuffer);
+  const rawPng = Buffer.from(arrayBuffer);
+
+  const compressed = await sharp(rawPng)
+    .resize({ width: OUTPUT_MAX_WIDTH, withoutEnlargement: true })
+    .flatten({ background: COLORS.pageBg }) // guarantees no stray alpha channel
+    .jpeg({
+      quality: JPEG_QUALITY,
+      mozjpeg: true,             // much better compression than the default encoder
+      chromaSubsampling: "4:2:0", // standard JPEG subsampling — smaller files, negligible
+                                  // visible difference for text on flat/near-flat color
+    })
+    .toBuffer();
+
+  return new Uint8Array(compressed);
 }
 
+// ─── Upload ───────────────────────────────────────────────────────────────────
 async function uploadCertificateImage(supabase: SupabaseClient, cert: CertificateRow) {
   const templateData = await buildTemplateData(supabase, cert);
-  const pngBytes = await renderCertificatePng(templateData);
+  const imageBytes = await renderCertificateImage(templateData);
 
   const fileName = `${sanitizeFileName(templateData.certCode)}-${sanitizeFileName(
     templateData.studentName
-  )}.png`;
+  )}.${OUTPUT_EXTENSION}`;
   const filePath = `generated/${fileName}`;
 
   const { error: uploadError } = await supabase.storage
     .from("certificates")
-    .upload(filePath, pngBytes, { contentType: "image/png", upsert: true });
+    .upload(filePath, imageBytes, { contentType: OUTPUT_CONTENT_TYPE, upsert: true });
 
   if (uploadError)
     throw new Error(
@@ -981,7 +1016,7 @@ export async function GET(req: Request) {
 
     const qrCodeDataUri = await QRCode.toDataURL(verificationUrl, {
       margin: 1,
-      width: 600, // Higher resolution QR matrix for HD print
+      width: QR_SOURCE_WIDTH,
       color: { dark: COLORS.navy, light: "#ffffff" },
     });
 
@@ -1010,9 +1045,14 @@ export async function GET(req: Request) {
       qrCodeDataUri,
     };
 
-    return new ImageResponse(CertificateTemplate(data), {
-      width: CERT_WIDTH,
-      height: CERT_HEIGHT, 
+    const imageBytes = await renderCertificateImage(data);
+
+    return new Response(imageBytes, {
+      status: 200,
+      headers: {
+        "Content-Type": OUTPUT_CONTENT_TYPE,
+        "Cache-Control": "public, max-age=3600",
+      },
     });
   } catch (error) {
     console.error("GET /api/certificate error:", error);
